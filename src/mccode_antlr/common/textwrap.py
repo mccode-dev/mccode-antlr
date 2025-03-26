@@ -207,7 +207,7 @@ class TextWrapper(BaseWrapper):
 
     @staticmethod
     def br() -> str:
-        return ''
+        return ' '
 
     @staticmethod
     def hide(content: str) -> str:
