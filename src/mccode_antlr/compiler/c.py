@@ -288,15 +288,25 @@ def run_compiled_instrument(binary: Path, target: CBinaryTarget, options: str, c
 
     command = []
     if target.type & CBinaryTarget.Type.mpi:
+        # is the available MPI OpenMPI, mpich, or something else?
+        res = run(['mpirun', '--version'], capture_output=True)
+        if res.returncode != 0:
+            raise RuntimeError(f"mpirun is not installed, MPI compilation failed")
+        is_open_mpi = 'Open MPI' in res.stdout.decode()
+
         # we execute mpirun
         command.append(config['mpi']['run'].as_str_expanded())
         # which takes optional flags
-        if target.count == 0:
+        if target.count == 0 and not is_open_mpi:
             print("Using system default number of mpirun processes")
         else:
+            # Even if zero, OpenMPI needs this to avoid interpreting options flags
+            # for the binary as if they were for it.
             command.extend(['-np', str(target.count)])
         if config['machinefile'].exists():
-            command.extend(['-machinefile', config['machinefile'].as_str_expanded()])
+            # --machinefile is only an OpenMPI option. mpich uses -f?
+            machinefile = config['machinefile'].as_str_expanded()
+            command.extend(['--machinefile' if is_open_mpi else '-f', machinefile])
         # and requires trickery if we want to restrict the GPU used
         if target.type & CBinaryTarget.Type.acc and 'Windows' != system():
             # Each worker should have the environment variable CUDA_VISIBLE_DEVICES defined as the value of
@@ -304,6 +314,9 @@ def run_compiled_instrument(binary: Path, target: CBinaryTarget, options: str, c
             # *on* the worker, which requires hijacking the executable that MPI runs
             command.append('acc_gpu_bind')
             raise NotImplementedError('CUDA GPU binding not yet implemented')
+        if is_open_mpi:
+            # mpich, at least, does not accept '--' between options and binary
+            command.extend(['--'])
 
     binary = binary.resolve()
     if not binary.exists():
