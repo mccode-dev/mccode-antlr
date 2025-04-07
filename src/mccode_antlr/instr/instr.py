@@ -282,6 +282,7 @@ class Instr:
             elif replace.lower().endswith('flags'):
                 # Punt, and just replace with the lowercase version of the keyword -- hopefully this was intended
                 flag = sub(f'@{replace}@', f'-l{replace.lower()[:-5]}', flag)
+                logger.warning(f'Guessing that @{replace}@ should be {flag}')
             else:
                 logger.warning(f'Unknown keyword @{replace}@ in dependency string')
         return flag

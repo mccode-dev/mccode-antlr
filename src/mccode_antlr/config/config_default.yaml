@@ -15,6 +15,6 @@ mcxtrace:
   prefix: mx
   project: 2
 mccode_pooch:
-  source: https://github.com/McStasMcXtrace/McCode
+  source: https://github.com/mccode-dev/McCode
   registry: https://github.com/g5t/mccode-pooch
   tag: latest

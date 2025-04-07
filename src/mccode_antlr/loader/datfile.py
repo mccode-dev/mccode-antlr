@@ -84,6 +84,15 @@ class DatFileCommon:
         data = combine_scan_data(self.data, other.data)
         return DatFileCommon(Path(), metadata, parameters, variables, data)
 
+    @property
+    def structured(self):
+        from numpy import frombuffer
+        d_types = [(v, self.data.dtype) for v in self.variables]
+        order = list(range(1, self.data.ndim)) + [0]
+        s = frombuffer(self.data.transpose(*order).tobytes(), dtype=d_types)
+        if len(order) > 1:
+            s = s.reshape([self.data.shape[x] for x in order[:-1]])
+        return s
 
 def dim_metadata(length, label_unit, lower_limit, upper_limit) -> dict:
     from numpy import linspace
