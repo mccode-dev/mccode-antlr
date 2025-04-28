@@ -116,12 +116,26 @@ def header_pre_runtime(
     {'#define MC_PORTABLE' if config.get('portable') else ''}
     
     #include <string.h>
+    #include <inttypes.h>
     
     typedef double MCNUM;
     typedef struct {{MCNUM x, y, z;}} Coords;
     typedef MCNUM Rotation[3][3];
     #define MCCODE_BASE_TYPES
     
+    /* available random number generators */
+    #define _RNG_ALG_MT         1
+    #define _RNG_ALG_KISS       2
+    /* selection of random number generator */
+    #ifndef RNG_ALG
+    #  define RNG_ALG  _RNG_ALG_KISS
+    #endif
+    #if RNG_ALG == _RNG_ALG_MT // MT 
+    #define randstate_t uint32_t
+    #elif RNG_ALG == _RNG_ALG_KISS  // KISS
+    #define randstate_t uint64_t
+    #endif
+
     #ifndef MC_NUSERVAR
     #define MC_NUSERVAR 10
     #endif
@@ -140,7 +154,7 @@ def header_pre_runtime(
       double _mctmp_a; /* temp a */
       double _mctmp_b; /* temp b */
       double _mctmp_c; /* temp c */
-      unsigned long randstate[7];
+      randstate_t randstate[7];
       double t, p;    /* time, event weight */
       long long _uid;  /* Unique event ID */
       long _index;     /* component index where to send this event */
