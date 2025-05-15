@@ -13,7 +13,8 @@ def mccode_script_parse(prog: str):
 
     parser.add_argument('-o', '--output-file', type=str, help='Output filename for C runtime file')
     parser.add_argument('-I', '--search-dir', action='append', type=resolvable, help='Extra component search directory')
-    parser.add_argument('-t', '--trace', action='store_true', help="Enable 'trace' mode for instrument display")
+    parser.add_argument('-t', '--trace', action='store_true', default=True, help="Enable 'trace' mode for instrument display")
+    parser.add_argument('--no-trace', action='store_true', help="Disable 'trace' mode for instrument display")
     parser.add_argument('-p', '--portable', action='store_true', help='No idea. Your guess is better than mine.')
     parser.add_argument('-v', '--version', action='store_true', help='Print the McCode version')
     parser.add_argument('--source', action='store_true', help='Embed the instrument source code in the executable')
@@ -50,7 +51,7 @@ def mccode(flavor: str, registry: Registry, generator: dict):
     args = mccode_script_parse(flavor)
 
     config = dict(default_main=(not args.no_main) if args.no_main is not None else True,
-                  enable_trace=args.trace if args.trace is not None else False,
+                  enable_trace=args.trace if not args.no_trace is True else False,
                   portable=args.portable if args.portable is not None else False,
                   include_runtime=(not args.no_runtime) if args.no_runtime is not None else True,
                   embed_instrument_file=args.source if args.source is not None else False,
