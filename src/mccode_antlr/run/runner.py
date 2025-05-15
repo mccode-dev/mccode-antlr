@@ -74,7 +74,7 @@ def sort_args(args: list[str]) -> list[str]:
 
 
 def mccode_run_script_parser(prog: str):
-    from argparse import ArgumentParser
+    from argparse import ArgumentParser, BooleanOptionalAction
     from pathlib import Path
 
     def resolvable(name: str):
@@ -88,10 +88,10 @@ def mccode_run_script_parser(prog: str):
     aa('-o', '--output-file', type=str, help='Output filename for C runtime binary', default=None)
     aa('-d', '--directory', type=str, help='Output directory for C runtime artifacts')
     aa('-I', '--search-dir', action='append', type=resolvable, help='Extra component search directory')
-    aa('-t', '--trace', action='store_true', help="Enable 'trace' mode for instrument display")
+    aa('-t', '--trace', action=BooleanOptionalAction, default=True, help="Enable 'trace' mode for instrument display")
     aa('-v', '--version', action='store_true', help='Print the McCode version')
-    aa('--source', action='store_true', help='Embed the instrument source code in the executable')
-    aa('--verbose', action='store_true', help='Verbose output')
+    aa('--source', action=BooleanOptionalAction, default=False, help='Embed the instrument source code in the executable')
+    aa('--verbose', action=BooleanOptionalAction, default=False, help='Verbose output')
 
     aa('-n', '--ncount', nargs=1, type=int, default=None, help='Number of neutrons to simulate')
     aa('-m', '--mesh', action='store_true', default=False, help='N-dimensional mesh scan')
@@ -237,9 +237,9 @@ def mccode_run_cmd(flavor: str, registry: Registry, generator: dict):
     if not isinstance(filename, Path):
         raise ValueError(f'{filename} should be a Path but is {type(filename)}')
     config = dict(
-        enable_trace=args.trace if args.trace is not None else False,
-        embed_instrument_file=args.source if args.source is not None else False,
-        verbose=args.verbose if args.verbose is not None else False,
+        enable_trace=args.trace,
+        embed_instrument_file=args.source,
+        verbose=args.verbose,
         output=args.output_file if args.output_file is not None else filename.with_suffix('.c')
     )
     target = dict(
