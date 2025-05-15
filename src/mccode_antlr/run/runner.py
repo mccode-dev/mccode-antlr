@@ -38,7 +38,7 @@ def mccode_runtime_dict_to_args_list(args: dict) -> list[str]:
         out.append(f'--ncount={args["ncount"]}')
     if 'dir' in args and args['dir'] is not None:
         out.append(f'--dir={args["dir"]}')
-    if 'trace' in args and args['trace'] and not args['no_trace']:
+    if 'trace' in args and args['trace']:
         out.append('--trace')
     if 'gravitation' in args and args['gravitation']:
         out.append('--gravitation')
@@ -89,7 +89,6 @@ def mccode_run_script_parser(prog: str):
     aa('-d', '--directory', type=str, help='Output directory for C runtime artifacts')
     aa('-I', '--search-dir', action='append', type=resolvable, help='Extra component search directory')
     aa('-t', '--trace', action='store_true', help="Enable 'trace' mode for instrument display")
-    aa('--no-trace', action='store_true', help="Disable 'trace' mode for instrument display")
     aa('-v', '--version', action='store_true', help='Print the McCode version')
     aa('--source', action='store_true', help='Embed the instrument source code in the executable')
     aa('--verbose', action='store_true', help='Verbose output')
@@ -134,7 +133,7 @@ def mccode_compile(instr, directory, generator, target: dict | None = None, conf
     from loguru import logger
 
     def_target = CBinaryTarget(mpi=False, acc=False, count=1, nexus=False)
-    def_config = dict(default_main=True, enable_trace=True, portable=False, include_runtime=True,
+    def_config = dict(default_main=True, enable_trace=False, portable=False, include_runtime=True,
                       embed_instrument_file=False, verbose=False)
     def_config.update(config or {})
     def_target.update(target or {})
@@ -252,7 +251,7 @@ def mccode_run_cmd(flavor: str, registry: Registry, generator: dict):
     runtime = dict(
         seed=args.seed[0] if args.seed is not None else None,
         ncount=args.ncount[0] if args.ncount is not None else None,
-        trace=args.trace if args.no_trace is not None else False,
+        trace=args.trace,
         gravitation=args.gravitation,
         bufsiz=args.bufsiz[0] if args.bufsiz is not None else None,
         format=args.format[0] if args.format is not None else None,
