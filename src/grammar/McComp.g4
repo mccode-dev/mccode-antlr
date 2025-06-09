@@ -5,7 +5,7 @@ import McCommon;
  component-specific function defintions (inserted at global scope, due to lack of namespaces in C),
  component-specific variable declarations (added to a component data structure),
  component-specific initialization (run once at the start of the runtime),
- particle trace-code which implments the interaction(s) with the component (run per particle),
+ particle trace-code which implements the interaction(s) with the component (run per particle),
  component-specific cleanup in two steps, performed as the runtime reaches its end state,
  a save-step to output any end-of-simulation information, and a final-step to deallocate the component struct
 */
@@ -52,7 +52,7 @@ component_definition
 
 component_trace
     : Trace unparsed_block                          #TraceBlock
-    | Trace Copy Identifier (Extend unparsed_block)? #TraceBlockCopy
+    | Trace multi_block #TraceBlockMulti
     ;
 
 component_parameter_set: component_define_parameters? component_set_parameters? component_out_parameters?;
@@ -75,9 +75,9 @@ component_parameter
 // Similar to `declare`, `uservars`, `initialise`, `save`, `finally_`, but only used in Comp(onent) definitions
 share
   : Share unparsed_block                           #ShareBlock
-  | Share Copy Identifier (Extend unparsed_block)?  #ShareBlockCopy
+  | Share multi_block #ShareBlockMulti
   ;
 display
   : McDisplay unparsed_block                           #DisplayBlock
-  | McDisplay Copy Identifier (Extend unparsed_block)? #DisplayBlockCopy
+  | McDisplay multi_block #DisplayBlockMulti
   ;

@@ -1,9 +1,12 @@
+from http.client import UnimplementedFileMode
+
 from loguru import logger
 
 from ..grammar import McCompParser as Parser, McCompVisitor
 from .comp import Comp
 from ..common import ComponentParameter, Expr, MetaData
 from ..common.visitor import add_common_visitors
+from ..grammar.McCompParser import McCompParser
 
 
 class CompVisitor(McCompVisitor):
@@ -45,18 +48,9 @@ class CompVisitor(McCompVisitor):
 
     def visitTraceBlock(self, ctx: Parser.TraceBlockContext):
         self.state.TRACE(self.visit(ctx.unparsed_block()))
-        
-    def visitTraceBlockCopy(self, ctx: Parser.TraceBlockCopyContext):
-        if len(self.state.trace):
-            logger.critical(f'The component {self.state.name} is a copied definition, complete with TRACE section')
-            logger.critical(f'Now `TRACE COPY {ctx.Identifier()}` would add to the existing copied TRACE')
-            logger.critical(f'This is almost certainly not the intended behaviour, so you get only the new copy.')
-            self.state.trace = ()
-        blocks = self.parent.get_component(str(ctx.Identifier())).trace
-        if ctx.Extend() is not None:
-            blocks = [x for x in blocks]
-            blocks.append(self.visit(ctx.unparsed_block()))
-        self.state.TRACE(*blocks)
+
+    def visitTraceBlockMulti(self, ctx: Parser.TraceBlockMultiContext):
+        self.state.TRACE(*self._multi_block(ctx.multi_block(), "trace"))
 
     def visitComponent_define_parameters(self, ctx: Parser.Component_define_parametersContext):
         for parameter in self.visit(ctx.component_parameters()):
@@ -141,42 +135,20 @@ class CompVisitor(McCompVisitor):
     def visitDeclareBlock(self, ctx: Parser.DeclareBlockContext):
         self.state.DECLARE(self.visit(ctx.unparsed_block()))
 
-    def visitDeclareBlockCopy(self, ctx: Parser.DeclareBlockCopyContext):
-        if len(self.state.declare):
-            logger.critical(f'The component {self.state.name} is a copied definition, complete with DECLARE section')
-            logger.critical(f'Now `DECLARE COPY {ctx.Identifier()}` would add to the existing copied DECLARE')
-            logger.critical(f'This is almost certainly not the intended behaviour, so you get only the new copy.')
-            self.state.declare = ()
-        blocks = self.parent.get_component(str(ctx.Identifier())).declare
-        if ctx.Extend() is not None:
-            blocks = [x for x in blocks]
-            blocks.append(self.visit(ctx.unparsed_block()))
-        self.state.DECLARE(*blocks)
+    def visitDeclareBlockMulti(self, ctx:McCompParser.DeclareBlockMultiContext):
+        self.state.DECLARE(*self._multi_block(ctx.multi_block(), "declare"))
 
     def visitShareBlock(self, ctx: Parser.ShareBlockContext):
         self.state.SHARE(self.visit(ctx.unparsed_block()))
 
-    def visitShareBlockCopy(self, ctx: Parser.ShareBlockCopyContext):
-        blocks = self.parent.get_component(str(ctx.Identifier())).share
-        if ctx.Extend() is not None:
-            blocks = [x for x in blocks]
-            blocks.append(self.visit(ctx.unparsed_block()))
-        self.state.SHARE(*blocks)
+    def visitShareBlockCopyMulti(self, ctx:McCompParser.ShareBlockMultiContext):
+        self.state.SHARE(*self._multi_block(ctx.multi_block(), "share"))
 
     def visitInitializeBlock(self, ctx: Parser.InitializeBlockContext):
         self.state.INITIALIZE(self.visit(ctx.unparsed_block()))
 
-    def visitInitializeBlockCopy(self, ctx: Parser.InitializeBlockCopyContext):
-        if len(self.state.initialize):
-            logger.critical(f'The component {self.state.name} is a copied definition, complete with INITIALIZE section')
-            logger.critical(f'Now `INITIALIZE COPY {ctx.Identifier()}` would add to the existing copied INITIALIZE')
-            logger.critical(f'This is almost certainly not the intended behaviour, so you get only the new copy.')
-            self.state.initialize = ()
-        blocks = self.parent.get_component(str(ctx.Identifier())).initialize
-        if ctx.Extend() is not None:
-            blocks = [x for x in blocks]
-            blocks.append(self.visit(ctx.unparsed_block()))
-        self.state.INITIALIZE(*blocks)
+    def visitInitializeBlockMulti(self, ctx:McCompParser.InitializeBlockMultiContext):
+        self.state.INITIALIZE(*self._multi_block(ctx.multi_block(), "initialize"))
 
     def visitUservars(self, ctx: Parser.UservarsContext):
         self.state.USERVARS(self.visit(ctx.unparsed_block()))
@@ -184,47 +156,20 @@ class CompVisitor(McCompVisitor):
     def visitSaveBlock(self, ctx: Parser.SaveBlockContext):
         self.state.SAVE(self.visit(ctx.unparsed_block()))
 
-    def visitSaveBlockCopy(self, ctx: Parser.SaveBlockCopyContext):
-        if len(self.state.save):
-            logger.critical(f'The component {self.state.name} is a copied definition, complete with SAVE section')
-            logger.critical(f'Now `SAVE COPY {ctx.Identifier()}` would add to the existing copied SAVE')
-            logger.critical(f'This is almost certainly not the intended behaviour, so you get only the new copy.')
-            self.state.save = ()
-        blocks = self.parent.get_component(str(ctx.Identifier())).save
-        if ctx.Extend() is not None:
-            blocks = [x for x in blocks]
-            blocks.append(self.visit(ctx.unparsed_block()))
-        self.state.SAVE(*blocks)
+    def visitSaveBlockMulti(self, ctx:McCompParser.SaveBlockMultiContext):
+        self.state.SAVE(*self._multi_block(ctx.multi_block(), "save"))
 
     def visitFinallyBlock(self, ctx: Parser.FinallyBlockContext):
         self.state.FINALLY(self.visit(ctx.unparsed_block()))
 
-    def visitFinallyBlockCopy(self, ctx: Parser.FinallyBlockCopyContext):
-        if len(self.state.final):
-            logger.critical(f'The component {self.state.name} is a copied definition, complete with FINALLY section')
-            logger.critical(f'Now `FINALLY COPY {ctx.Identifier()}` would add to the existing copied FINALLY')
-            logger.critical(f'This is almost certainly not the intended behaviour, so you get only the new copy.')
-            self.state.final = ()
-        blocks = self.parent.get_component(str(ctx.Identifier())).final
-        if ctx.Extend() is not None:
-            blocks = [x for x in blocks]
-            blocks.append(self.visit(ctx.unparsed_block()))
-        self.state.FINALLY(*blocks)
+    def visitFinallyBlockMulti(self, ctx:McCompParser.FinallyBlockMultiContext):
+        self.state.FINALLY(*self._multi_block(ctx.multi_block(), "final"))
 
     def visitDisplayBlock(self, ctx: Parser.DisplayBlockContext):
         self.state.DISPLAY(self.visit(ctx.unparsed_block()))
 
-    def visitDisplayBlockCopy(self, ctx: Parser.DisplayBlockCopyContext):
-        if len(self.state.display):
-            logger.critical(f'The component {self.state.name} is a copied definition, complete with DISPLAY section')
-            logger.critical(f'Now `DISPLAY COPY {ctx.Identifier()}` would add to the existing copied DISPLAY')
-            logger.critical(f'This is almost certainly not the intended behaviour, so you get only the new copy.')
-            self.state.display = ()
-        blocks = self.parent.get_component(str(ctx.Identifier())).display
-        if ctx.Extend() is not None:
-            blocks = [x for x in blocks]
-            blocks.append(self.visit(ctx.unparsed_block()))
-        self.state.DISPLAY(*blocks)
+    def visitDisplayBlockMulti(self, ctx:McCompParser.DisplayBlockMultiContext):
+        self.state.DISPLAY(*self._multi_block(ctx.multi_block(), "display"))
 
     def visitMetadata(self, ctx: Parser.MetadataContext):
         filename, line_number, metadata = self.visit(ctx.unparsed_block())
@@ -252,6 +197,22 @@ class CompVisitor(McCompVisitor):
     def visitExpressionMyself(self, ctx: Parser.ExpressionMyselfContext):
         # The even-worse expression use of MYSELF to refer to the current being-constructed component's name
         return Expr.str(self.instance.name)
+
+    def _multi_block(self, ctx: Parser.Multi_blockContext, part: str):
+        """Common visitor for {part} ((COPY identifier)|(EXTEND? unparsed_block))*
+
+        Ensures that the correct 'part' is pulled from named component definition(s)
+        and that the definitions and new unparsed blocks are inserted in their given
+        order.
+        """
+        blocks = dict()
+        for ident in ctx.Identifier():
+            comp = self.parent.get_component(str(ident))
+            blocks[ident.getSourceInterval()[0]] = getattr(comp, part)
+        for unparsed in ctx.unparsed_block():
+            blocks[unparsed.getSourceInterval()[0]] = (self.visit(unparsed),)
+        return [b for n in sorted(blocks.keys()) for b in blocks[n]]
+
 
 
 add_common_visitors(CompVisitor)

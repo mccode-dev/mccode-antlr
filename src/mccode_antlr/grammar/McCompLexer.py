@@ -1,4 +1,4 @@
-# Generated from /home/g/PycharmProjects/mccode-antlr/src/grammar/McComp.g4 by ANTLR 4.13.2
+# Generated from McComp.g4 by ANTLR 4.13.2
 from antlr4 import *
 from io import StringIO
 import sys
