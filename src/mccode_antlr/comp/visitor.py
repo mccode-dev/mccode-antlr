@@ -46,9 +46,6 @@ class CompVisitor(McCompVisitor):
         # Return the provided identifier or string literal, minus quotes
         self.state.category = str(ctx.StringLiteral())[1:-1] if ctx.Identifier() is None else str(ctx.Identifer())
 
-    def visitTraceBlock(self, ctx: Parser.TraceBlockContext):
-        self.state.TRACE(self.visit(ctx.unparsed_block()))
-
     def visitTraceBlockMulti(self, ctx: Parser.TraceBlockMultiContext):
         self.state.TRACE(*self._multi_block(ctx.multi_block(), "trace"))
 
@@ -132,20 +129,11 @@ class CompVisitor(McCompVisitor):
             # the flags are the literal string without its quotes:
             self.parent.add_c_flags(str(ctx.StringLiteral()).strip('"'))
 
-    def visitDeclareBlock(self, ctx: Parser.DeclareBlockContext):
-        self.state.DECLARE(self.visit(ctx.unparsed_block()))
-
     def visitDeclareBlockMulti(self, ctx:McCompParser.DeclareBlockMultiContext):
         self.state.DECLARE(*self._multi_block(ctx.multi_block(), "declare"))
 
-    def visitShareBlock(self, ctx: Parser.ShareBlockContext):
-        self.state.SHARE(self.visit(ctx.unparsed_block()))
-
-    def visitShareBlockCopyMulti(self, ctx:McCompParser.ShareBlockMultiContext):
+    def visitShareBlockMulti(self, ctx:McCompParser.ShareBlockMultiContext):
         self.state.SHARE(*self._multi_block(ctx.multi_block(), "share"))
-
-    def visitInitializeBlock(self, ctx: Parser.InitializeBlockContext):
-        self.state.INITIALIZE(self.visit(ctx.unparsed_block()))
 
     def visitInitializeBlockMulti(self, ctx:McCompParser.InitializeBlockMultiContext):
         self.state.INITIALIZE(*self._multi_block(ctx.multi_block(), "initialize"))
@@ -153,20 +141,11 @@ class CompVisitor(McCompVisitor):
     def visitUservars(self, ctx: Parser.UservarsContext):
         self.state.USERVARS(self.visit(ctx.unparsed_block()))
 
-    def visitSaveBlock(self, ctx: Parser.SaveBlockContext):
-        self.state.SAVE(self.visit(ctx.unparsed_block()))
-
     def visitSaveBlockMulti(self, ctx:McCompParser.SaveBlockMultiContext):
         self.state.SAVE(*self._multi_block(ctx.multi_block(), "save"))
 
-    def visitFinallyBlock(self, ctx: Parser.FinallyBlockContext):
-        self.state.FINALLY(self.visit(ctx.unparsed_block()))
-
     def visitFinallyBlockMulti(self, ctx:McCompParser.FinallyBlockMultiContext):
         self.state.FINALLY(*self._multi_block(ctx.multi_block(), "final"))
-
-    def visitDisplayBlock(self, ctx: Parser.DisplayBlockContext):
-        self.state.DISPLAY(self.visit(ctx.unparsed_block()))
 
     def visitDisplayBlockMulti(self, ctx:McCompParser.DisplayBlockMultiContext):
         self.state.DISPLAY(*self._multi_block(ctx.multi_block(), "display"))

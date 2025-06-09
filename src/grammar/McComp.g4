@@ -51,8 +51,7 @@ component_definition
     ;
 
 component_trace
-    : Trace unparsed_block                          #TraceBlock
-    | Trace multi_block #TraceBlockMulti
+    : Trace multi_block #TraceBlockMulti
     ;
 
 component_parameter_set: component_define_parameters? component_set_parameters? component_out_parameters?;
@@ -74,10 +73,8 @@ component_parameter
 
 // Similar to `declare`, `uservars`, `initialise`, `save`, `finally_`, but only used in Comp(onent) definitions
 share
-  : Share unparsed_block                           #ShareBlock
-  | Share multi_block #ShareBlockMulti
+  : Share multi_block #ShareBlockMulti
   ;
 display
-  : McDisplay unparsed_block                           #DisplayBlock
-  | McDisplay multi_block #DisplayBlockMulti
+  : McDisplay multi_block #DisplayBlockMulti
   ;

@@ -10,25 +10,17 @@ reference: Absolute | Relative (Absolute | component_ref);
 dependency: Dependency StringLiteral;
 
 declare
-  : Declare unparsed_block                           #DeclareBlock
-  | Declare Copy Identifier (Extend unparsed_block)? #DeclareBlockCopy
-  | Declare multi_block # DeclareBlockMulti
+  : Declare multi_block # DeclareBlockMulti
   ;
 uservars: UserVars unparsed_block;
 initialise  // Avoid a name clash with C++ Parser 'initialize' function
-  : Initialize unparsed_block                           #InitializeBlock
-  | Initialize Copy Identifier (Extend unparsed_block)? #InitializeBlockCopy
-  | Initialize multi_block # InitializeBlockMulti
+  : Initialize multi_block # InitializeBlockMulti
   ;
 save
-  : Save unparsed_block                            #SaveBlock
-  | Save Copy Identifier (Extend unparsed_block)?  #SaveBlockCopy
-  | Save multi_block # SaveBlockMulti
+  : Save multi_block # SaveBlockMulti
   ;
 finally_
-  : Finally unparsed_block                           #FinallyBlock
-  | Finally Copy Identifier (Extend unparsed_block)? #FinallyBlockCopy
-  | Finally multi_block # FinallyBlockMulti
+  : Finally multi_block # FinallyBlockMulti
   ;
 
 multi_block: ((Copy Identifier)|(Extend? unparsed_block))*;
