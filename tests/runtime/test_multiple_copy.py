@@ -27,7 +27,7 @@ FAKE_COMPONENTS = dict(
     """),
     both_parts=dedent("""DEFINE COMPONENT both_parts
     SETTING PARAMETERS (int n, int m)
-    TRACE COPY n_part COPY m_part
+    TRACE COPY(n_part) COPY(m_part)
     END
     """),
     crazy=dedent("""DEFINE COMPONENT crazy
@@ -35,11 +35,11 @@ FAKE_COMPONENTS = dict(
     TRACE %{
     printf("We can do anything\\n");
     %}
-    COPY n_part 
+    COPY(n_part) 
     EXTEND %{
     printf("Why!?\\n"); 
     %}
-    COPY m_part
+    COPY(m_part)
     EXTEND %{
     printf("Because we can!\\n"); 
     %}

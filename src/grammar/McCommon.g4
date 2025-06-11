@@ -23,7 +23,7 @@ finally_
   : Finally multi_block # FinallyBlockMulti
   ;
 
-multi_block: ((Copy Identifier)|(Extend? unparsed_block))*;
+multi_block: ((Copy '(' Identifier ')')|(Extend? unparsed_block))*;
 
 metadata: MetaData mime=(Identifier | StringLiteral) name=(Identifier | StringLiteral) unparsed_block;
 
