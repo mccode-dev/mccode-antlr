@@ -9,24 +9,14 @@ reference: Absolute | Relative (Absolute | component_ref);
 
 dependency: Dependency StringLiteral;
 
-declare
-  : Declare unparsed_block                           #DeclareBlock
-  | Declare Copy Identifier (Extend unparsed_block)? #DeclareBlockCopy
-  ;
-uservars: UserVars unparsed_block;
-initialise  // Avoid a name clash with C++ Parser 'initialize' function
-  : Initialize unparsed_block                           #InitializeBlock
-  | Initialize Copy Identifier (Extend unparsed_block)? #InitializeBlockCopy
-  ;
-save
-  : Save unparsed_block                            #SaveBlock
-  | Save Copy Identifier (Extend unparsed_block)?  #SaveBlockCopy
-  ;
-finally_
-  : Finally unparsed_block                           #FinallyBlock
-  | Finally Copy Identifier (Extend unparsed_block)? #FinallyBlockCopy
-  ;
+declare: Declare multi_block # DeclareBlockMulti;
+uservars: UserVars multi_block;
+// Avoid a name clash with C++ Parser 'initialize' function
+initialise: Initialize multi_block # InitializeBlockMulti;
+save: Save multi_block # SaveBlockMulti;
+finally_: Finally multi_block # FinallyBlockMulti;
 
+multi_block: ((Inherit Identifier)|(Extend? unparsed_block))*;
 
 metadata: MetaData mime=(Identifier | StringLiteral) name=(Identifier | StringLiteral) unparsed_block;
 
@@ -110,6 +100,7 @@ Next: 'NEXT' | 'Next' | 'next';
 Iterate: 'ITERATE' | 'Iterate' | 'iterate';
 Myself: 'MYSELF' | 'Myself' | 'myself';
 Copy: 'COPY' | 'Copy' | 'copy';
+Inherit: 'INHERIT' | 'Inherit' | 'inherit';
 Split : 'SPLIT' | 'Split' | 'split';
 Removable: 'REMOVABLE' | 'Removabel' | 'removable';
 Cpu: 'CPU' | 'cpu';

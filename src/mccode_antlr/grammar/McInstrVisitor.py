@@ -1,4 +1,4 @@
-# Generated from /home/g/PycharmProjects/mccode-antlr/src/grammar/McInstr.g4 by ANTLR 4.13.2
+# Generated from McInstr.g4 by ANTLR 4.13.2
 from antlr4 import *
 if "." in __name__:
     from .McInstrParser import McInstrParser
@@ -189,13 +189,8 @@ class McInstrVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
-    # Visit a parse tree produced by McInstrParser#DeclareBlock.
-    def visitDeclareBlock(self, ctx:McInstrParser.DeclareBlockContext):
-        return self.visitChildren(ctx)
-
-
-    # Visit a parse tree produced by McInstrParser#DeclareBlockCopy.
-    def visitDeclareBlockCopy(self, ctx:McInstrParser.DeclareBlockCopyContext):
+    # Visit a parse tree produced by McInstrParser#DeclareBlockMulti.
+    def visitDeclareBlockMulti(self, ctx:McInstrParser.DeclareBlockMultiContext):
         return self.visitChildren(ctx)
 
 
@@ -204,33 +199,23 @@ class McInstrVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
-    # Visit a parse tree produced by McInstrParser#InitializeBlock.
-    def visitInitializeBlock(self, ctx:McInstrParser.InitializeBlockContext):
+    # Visit a parse tree produced by McInstrParser#InitializeBlockMulti.
+    def visitInitializeBlockMulti(self, ctx:McInstrParser.InitializeBlockMultiContext):
         return self.visitChildren(ctx)
 
 
-    # Visit a parse tree produced by McInstrParser#InitializeBlockCopy.
-    def visitInitializeBlockCopy(self, ctx:McInstrParser.InitializeBlockCopyContext):
+    # Visit a parse tree produced by McInstrParser#SaveBlockMulti.
+    def visitSaveBlockMulti(self, ctx:McInstrParser.SaveBlockMultiContext):
         return self.visitChildren(ctx)
 
 
-    # Visit a parse tree produced by McInstrParser#SaveBlock.
-    def visitSaveBlock(self, ctx:McInstrParser.SaveBlockContext):
+    # Visit a parse tree produced by McInstrParser#FinallyBlockMulti.
+    def visitFinallyBlockMulti(self, ctx:McInstrParser.FinallyBlockMultiContext):
         return self.visitChildren(ctx)
 
 
-    # Visit a parse tree produced by McInstrParser#SaveBlockCopy.
-    def visitSaveBlockCopy(self, ctx:McInstrParser.SaveBlockCopyContext):
-        return self.visitChildren(ctx)
-
-
-    # Visit a parse tree produced by McInstrParser#FinallyBlock.
-    def visitFinallyBlock(self, ctx:McInstrParser.FinallyBlockContext):
-        return self.visitChildren(ctx)
-
-
-    # Visit a parse tree produced by McInstrParser#FinallyBlockCopy.
-    def visitFinallyBlockCopy(self, ctx:McInstrParser.FinallyBlockCopyContext):
+    # Visit a parse tree produced by McInstrParser#multi_block.
+    def visitMulti_block(self, ctx:McInstrParser.Multi_blockContext):
         return self.visitChildren(ctx)
 
 

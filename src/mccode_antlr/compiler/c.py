@@ -1,4 +1,6 @@
 """Handles compilation of C translated instruments into usable binaries"""
+from __future__ import annotations
+
 from enum import Flag, auto
 from typing import Union
 from pathlib import Path
@@ -178,6 +180,7 @@ def _compile_instrument(
         output: Union[str, Path] = None,
         replace: bool = False,
         dump_source: bool = False,
+        source_file: str | None = None,
         **kwargs
 ):
     """Do the actual compilation -- should not be called directly by users
@@ -208,8 +211,8 @@ def _compile_instrument(
         return output
 
     source = instrument_source(instrument, **kwargs)
-    if 'Windows' != system() and dump_source:
-        source_file = Path().joinpath(output.parts[-1]).with_suffix('.c')
+    if source_file or ('Windows' != system() and dump_source):
+        source_file = source_file or Path().joinpath(output.parts[-1]).with_suffix('.c')
         logger.info(f'Source written in {source_file}')
         with open(source_file, 'w') as cfile:
             cfile.write(source)
