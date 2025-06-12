@@ -50,9 +50,7 @@ component_definition
       component_trace? save? finally_? display? End                               #ComponentDefineCopy
     ;
 
-component_trace
-    : Trace multi_block #TraceBlockMulti
-    ;
+component_trace: Trace multi_block #TraceBlockMulti;
 
 component_parameter_set: component_define_parameters? component_set_parameters? component_out_parameters?;
 component_define_parameters: Definition Parameters component_parameters;
@@ -72,9 +70,5 @@ component_parameter
     ;
 
 // Similar to `declare`, `uservars`, `initialise`, `save`, `finally_`, but only used in Comp(onent) definitions
-share
-  : Share multi_block #ShareBlockMulti
-  ;
-display
-  : McDisplay multi_block #DisplayBlockMulti
-  ;
+share: Share multi_block #ShareBlockMulti;
+display: McDisplay multi_block #DisplayBlockMulti;

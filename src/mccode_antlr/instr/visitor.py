@@ -292,7 +292,7 @@ class InstrVisitor(McInstrVisitor):
         self.state.DECLARE(*self._multi_block(ctx.multi_block(), "declare"))
 
     def visitUservars(self, ctx: McInstrParser.UservarsContext):
-        self.state.USERVARS(self.visit(ctx.unparsed_block()))
+        self.state.USERVARS(*self._multi_block(ctx.multi_block(), "user"))
 
     def visitInitializeBlockMulti(self, ctx:McInstrParser.InitializeBlockMultiContext):
         self.state.INITIALIZE(*self._multi_block(ctx.multi_block(), "initialize"))
@@ -302,30 +302,6 @@ class InstrVisitor(McInstrVisitor):
 
     def visitFinalizeBlockMulti(self, ctx:McInstrParser.FinalizeBlockMultiContext):
         self.state.FINALLY(*self._multi_block(ctx.multi_block(), "final"))
-
-    def visitDeclareBlockCopy(self, ctx: McInstrParser.DeclareBlockCopyContext):
-        line_number = None if ctx.start is None else ctx.start.line
-        raise RuntimeError(f"{self.filename}: {line_number} -- DECLARE COPY only valid in comp files")
-        # copy_from = self.parent.get_instrument(str(ctx.Identifier()))
-        # self.state.DECLARE(copy_from.declare, self.visit(ctx.unparsed_block()))
-
-    def visitInitializeBlockCopy(self, ctx: McInstrParser.InitializeBlockCopyContext):
-        line_number = None if ctx.start is None else ctx.start.line
-        raise RuntimeError(f"{self.filename}: {line_number} -- INITIALIZE COPY only valid in comp files")
-        # copy_from = self.parent.get_instrument(str(ctx.Identifier()))
-        # self.state.INITIALIZE(copy_from.initialize, self.visit(ctx.unparsed_block()))
-
-    def visitSaveBlockCopy(self, ctx: McInstrParser.SaveBlockCopyContext):
-        line_number = None if ctx.start is None else ctx.start.line
-        raise RuntimeError(f"{self.filename}: {line_number} -- SAVE COPY only valid in comp files")
-        # copy_from = self.parent.get_instrument(str(ctx.Identifier()))
-        # self.state.SAVE(copy_from.save, self.visit(ctx.unparsed_block()))
-
-    def visitFinallyBlockCopy(self, ctx: McInstrParser.FinallyBlockCopyContext):
-        line_number = None if ctx.start is None else ctx.start.line
-        raise RuntimeError(f"{self.filename}: {line_number} -- FINALLY COPY only valid in comp files")
-        # copy_from = self.parent.get_instrument(str(ctx.Identifier()))
-        # self.state.FINALLY(copy_from.final, self.visit(ctx.unparsed_block()))
 
     def visitExtend(self, ctx: McInstrParser.ExtendContext):
         return self.visit(ctx.unparsed_block())

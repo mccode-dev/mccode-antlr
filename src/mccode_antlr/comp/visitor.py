@@ -139,7 +139,7 @@ class CompVisitor(McCompVisitor):
         self.state.INITIALIZE(*self._multi_block(ctx.multi_block(), "initialize"))
 
     def visitUservars(self, ctx: Parser.UservarsContext):
-        self.state.USERVARS(self.visit(ctx.unparsed_block()))
+        self.state.USERVARS(*self._multi_block(ctx.multi_block(), "user"))
 
     def visitSaveBlockMulti(self, ctx:McCompParser.SaveBlockMultiContext):
         self.state.SAVE(*self._multi_block(ctx.multi_block(), "save"))
