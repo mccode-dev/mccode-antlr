@@ -16,5 +16,5 @@ mcxtrace:
   project: 2
 mccode_pooch:
   source: https://github.com/mccode-dev/McCode
-  registry: https://github.com/g5t/mccode-pooch
+  registry: https://github.com/mccode-dev/mccode-pooch-registries
   tag: latest
