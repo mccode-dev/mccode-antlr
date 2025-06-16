@@ -46,9 +46,6 @@ class CompVisitor(McCompVisitor):
         # Return the provided identifier or string literal, minus quotes
         self.state.category = str(ctx.StringLiteral())[1:-1] if ctx.Identifier() is None else str(ctx.Identifer())
 
-    def visitTraceBlockMulti(self, ctx: Parser.TraceBlockMultiContext):
-        self.state.TRACE(*self._multi_block(ctx.multi_block(), "trace"))
-
     def visitComponent_define_parameters(self, ctx: Parser.Component_define_parametersContext):
         for parameter in self.visit(ctx.component_parameters()):
             self.state.add_define(parameter)
@@ -129,26 +126,29 @@ class CompVisitor(McCompVisitor):
             # the flags are the literal string without its quotes:
             self.parent.add_c_flags(str(ctx.StringLiteral()).strip('"'))
 
-    def visitDeclareBlockMulti(self, ctx:McCompParser.DeclareBlockMultiContext):
-        self.state.DECLARE(*self._multi_block(ctx.multi_block(), "declare"))
+    def visitComponent_trace(self, ctx: McCompParser.Component_traceContext):
+        self.state.TRACE(*self.multi_block("trace", ctx.multi_block()))
 
-    def visitShareBlockMulti(self, ctx:McCompParser.ShareBlockMultiContext):
-        self.state.SHARE(*self._multi_block(ctx.multi_block(), "share"))
+    def visitDeclare(self, ctx:McCompParser.DeclareContext):
+        self.state.DECLARE(*self.multi_block("declare", ctx.multi_block()))
 
-    def visitInitializeBlockMulti(self, ctx:McCompParser.InitializeBlockMultiContext):
-        self.state.INITIALIZE(*self._multi_block(ctx.multi_block(), "initialize"))
+    def visitShare(self, ctx:McCompParser.ShareContext):
+        self.state.SHARE(*self.multi_block("share", ctx.multi_block()))
+
+    def visitInitialise(self, ctx:McCompParser.InitialiseContext):
+        self.state.INITIALIZE(*self.multi_block("initialize", ctx.multi_block()))
 
     def visitUservars(self, ctx: Parser.UservarsContext):
-        self.state.USERVARS(*self._multi_block(ctx.multi_block(), "user"))
+        self.state.USERVARS(*self.multi_block("user", ctx.multi_block()))
 
-    def visitSaveBlockMulti(self, ctx:McCompParser.SaveBlockMultiContext):
-        self.state.SAVE(*self._multi_block(ctx.multi_block(), "save"))
+    def visitSave(self, ctx:McCompParser.SaveContext):
+        self.state.SAVE(*self.multi_block("save", ctx.multi_block()))
 
-    def visitFinallyBlockMulti(self, ctx:McCompParser.FinallyBlockMultiContext):
-        self.state.FINALLY(*self._multi_block(ctx.multi_block(), "final"))
+    def visitFinally(self, ctx:McCompParser.FinallyContext):
+        self.state.FINALLY(*self.multi_block("final", ctx.multi_block()))
 
-    def visitDisplayBlockMulti(self, ctx:McCompParser.DisplayBlockMultiContext):
-        self.state.DISPLAY(*self._multi_block(ctx.multi_block(), "display"))
+    def visitDisplay(self, ctx:McCompParser.DisplayContext):
+        self.state.DISPLAY(*self.multi_block("display", ctx.multi_block()))
 
     def visitMetadata(self, ctx: Parser.MetadataContext):
         filename, line_number, metadata = self.visit(ctx.unparsed_block())
@@ -177,8 +177,8 @@ class CompVisitor(McCompVisitor):
         # The even-worse expression use of MYSELF to refer to the current being-constructed component's name
         return Expr.str(self.instance.name)
 
-    def _multi_block(self, ctx: Parser.Multi_blockContext, part: str):
-        """Common visitor for {part} ((COPY identifier)|(EXTEND? unparsed_block))*
+    def multi_block(self, part: str, ctx: Parser.Multi_blockContext):
+        """Common visitor for {part} unparsed_block? ((INHERIT identifier)|(EXTEND unparsed_block))*
 
         Ensures that the correct 'part' is pulled from named component definition(s)
         and that the definitions and new unparsed blocks are inserted in their given

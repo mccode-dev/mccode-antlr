@@ -288,20 +288,20 @@ class InstrVisitor(McInstrVisitor):
         # store the flag without its surrounding quotes
         self.state.DEPENDENCY(str(ctx.StringLiteral())[1:-1])
 
-    def visitDeclareBlockMulti(self, ctx:McInstrParser.DeclareBlockMultiContext):
-        self.state.DECLARE(*self._multi_block(ctx.multi_block(), "declare"))
+    def visitDeclare(self, ctx:McInstrParser.DeclareContext):
+        self.state.DECLARE(*self.multi_block("declare", ctx.multi_block()))
 
     def visitUservars(self, ctx: McInstrParser.UservarsContext):
-        self.state.USERVARS(*self._multi_block(ctx.multi_block(), "user"))
+        self.state.USERVARS(*self.multi_block("user", ctx.multi_block()))
 
-    def visitInitializeBlockMulti(self, ctx:McInstrParser.InitializeBlockMultiContext):
-        self.state.INITIALIZE(*self._multi_block(ctx.multi_block(), "initialize"))
+    def visitInitialise(self, ctx:McInstrParser.InitialiseContext):
+        self.state.INITIALIZE(*self.multi_block("initialize", ctx.multi_block()))
 
-    def visitSaveBlockMulti(self, ctx:McInstrParser.SaveBlockMultiContext):
-        self.state.SAVE(*self._multi_block(ctx.multi_block(), "save"))
+    def visitSave(self, ctx:McInstrParser.SaveContext):
+        self.state.SAVE(*self.multi_block("save", ctx.multi_block()))
 
-    def visitFinalizeBlockMulti(self, ctx:McInstrParser.FinalizeBlockMultiContext):
-        self.state.FINALLY(*self._multi_block(ctx.multi_block(), "final"))
+    def visitFinalize(self, ctx:McInstrParser.FinalizeContext):
+        self.state.FINALLY(*self.multi_block("final", ctx.multi_block()))
 
     def visitExtend(self, ctx: McInstrParser.ExtendContext):
         return self.visit(ctx.unparsed_block())
@@ -356,8 +356,8 @@ class InstrVisitor(McInstrVisitor):
         # The even-worse expression use of MYSELF to refer to the current being-constructed component's name
         return Expr.str(self.current_instance.name)
 
-    def _multi_block(self, ctx: McInstrParser.Multi_blockContext, part: str):
-        """Common visitor for {part} ((COPY identifier)|(EXTEND? unparsed_block))*
+    def multi_block(self, part: str, ctx: McInstrParser.Multi_blockContext):
+        """Common visitor for {part} unparsed_block? ((INHERIT identifier)|(EXTEND unparsed_block))*
 
         Ensures that the correct 'part' is pulled from named component definition(s)
         and that the definitions and new unparsed blocks are inserted in their given

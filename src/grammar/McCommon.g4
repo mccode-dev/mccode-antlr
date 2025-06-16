@@ -9,14 +9,14 @@ reference: Absolute | Relative (Absolute | component_ref);
 
 dependency: Dependency StringLiteral;
 
-declare: Declare multi_block # DeclareBlockMulti;
+declare: Declare multi_block;
 uservars: UserVars multi_block;
 // Avoid a name clash with C++ Parser 'initialize' function
-initialise: Initialize multi_block # InitializeBlockMulti;
-save: Save multi_block # SaveBlockMulti;
-finally_: Finally multi_block # FinallyBlockMulti;
+initialise: Initialize multi_block;
+save: Save multi_block;
+finally_: Finally multi_block # Finally;
 
-multi_block: ((Inherit Identifier)|(Extend? unparsed_block))*;
+multi_block: unparsed_block? ((Inherit Identifier)|(Extend unparsed_block))*;
 
 metadata: MetaData mime=(Identifier | StringLiteral) name=(Identifier | StringLiteral) unparsed_block;
 

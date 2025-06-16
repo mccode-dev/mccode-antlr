@@ -189,8 +189,8 @@ class McInstrVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
-    # Visit a parse tree produced by McInstrParser#DeclareBlockMulti.
-    def visitDeclareBlockMulti(self, ctx:McInstrParser.DeclareBlockMultiContext):
+    # Visit a parse tree produced by McInstrParser#declare.
+    def visitDeclare(self, ctx:McInstrParser.DeclareContext):
         return self.visitChildren(ctx)
 
 
@@ -199,18 +199,18 @@ class McInstrVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
-    # Visit a parse tree produced by McInstrParser#InitializeBlockMulti.
-    def visitInitializeBlockMulti(self, ctx:McInstrParser.InitializeBlockMultiContext):
+    # Visit a parse tree produced by McInstrParser#initialise.
+    def visitInitialise(self, ctx:McInstrParser.InitialiseContext):
         return self.visitChildren(ctx)
 
 
-    # Visit a parse tree produced by McInstrParser#SaveBlockMulti.
-    def visitSaveBlockMulti(self, ctx:McInstrParser.SaveBlockMultiContext):
+    # Visit a parse tree produced by McInstrParser#save.
+    def visitSave(self, ctx:McInstrParser.SaveContext):
         return self.visitChildren(ctx)
 
 
-    # Visit a parse tree produced by McInstrParser#FinallyBlockMulti.
-    def visitFinallyBlockMulti(self, ctx:McInstrParser.FinallyBlockMultiContext):
+    # Visit a parse tree produced by McInstrParser#Finally.
+    def visitFinally(self, ctx:McInstrParser.FinallyContext):
         return self.visitChildren(ctx)
 
 
