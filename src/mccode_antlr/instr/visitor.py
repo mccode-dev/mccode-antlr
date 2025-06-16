@@ -288,44 +288,20 @@ class InstrVisitor(McInstrVisitor):
         # store the flag without its surrounding quotes
         self.state.DEPENDENCY(str(ctx.StringLiteral())[1:-1])
 
-    def visitDeclareBlock(self, ctx: McInstrParser.DeclareBlockContext):
-        self.state.DECLARE(self.visit(ctx.unparsed_block()))
+    def visitDeclare(self, ctx:McInstrParser.DeclareContext):
+        self.state.DECLARE(*self.multi_block("declare", ctx.multi_block()))
 
     def visitUservars(self, ctx: McInstrParser.UservarsContext):
-        self.state.USERVARS(self.visit(ctx.unparsed_block()))
+        self.state.USERVARS(*self.multi_block("user", ctx.multi_block()))
 
-    def visitInitializeBlock(self, ctx: McInstrParser.InitializeBlockContext):
-        self.state.INITIALIZE(self.visit(ctx.unparsed_block()))
+    def visitInitialise(self, ctx:McInstrParser.InitialiseContext):
+        self.state.INITIALIZE(*self.multi_block("initialize", ctx.multi_block()))
 
-    def visitSaveBlock(self, ctx: McInstrParser.SaveBlockContext):
-        self.state.SAVE(self.visit(ctx.unparsed_block()))
+    def visitSave(self, ctx:McInstrParser.SaveContext):
+        self.state.SAVE(*self.multi_block("save", ctx.multi_block()))
 
-    def visitFinallyBlock(self, ctx: McInstrParser.FinallyBlockContext):
-        self.state.FINALLY(self.visit(ctx.unparsed_block()))
-
-    def visitDeclareBlockCopy(self, ctx: McInstrParser.DeclareBlockCopyContext):
-        line_number = None if ctx.start is None else ctx.start.line
-        raise RuntimeError(f"{self.filename}: {line_number} -- DECLARE COPY only valid in comp files")
-        # copy_from = self.parent.get_instrument(str(ctx.Identifier()))
-        # self.state.DECLARE(copy_from.declare, self.visit(ctx.unparsed_block()))
-
-    def visitInitializeBlockCopy(self, ctx: McInstrParser.InitializeBlockCopyContext):
-        line_number = None if ctx.start is None else ctx.start.line
-        raise RuntimeError(f"{self.filename}: {line_number} -- INITIALIZE COPY only valid in comp files")
-        # copy_from = self.parent.get_instrument(str(ctx.Identifier()))
-        # self.state.INITIALIZE(copy_from.initialize, self.visit(ctx.unparsed_block()))
-
-    def visitSaveBlockCopy(self, ctx: McInstrParser.SaveBlockCopyContext):
-        line_number = None if ctx.start is None else ctx.start.line
-        raise RuntimeError(f"{self.filename}: {line_number} -- SAVE COPY only valid in comp files")
-        # copy_from = self.parent.get_instrument(str(ctx.Identifier()))
-        # self.state.SAVE(copy_from.save, self.visit(ctx.unparsed_block()))
-
-    def visitFinallyBlockCopy(self, ctx: McInstrParser.FinallyBlockCopyContext):
-        line_number = None if ctx.start is None else ctx.start.line
-        raise RuntimeError(f"{self.filename}: {line_number} -- FINALLY COPY only valid in comp files")
-        # copy_from = self.parent.get_instrument(str(ctx.Identifier()))
-        # self.state.FINALLY(copy_from.final, self.visit(ctx.unparsed_block()))
+    def visitFinalize(self, ctx:McInstrParser.FinalizeContext):
+        self.state.FINALLY(*self.multi_block("final", ctx.multi_block()))
 
     def visitExtend(self, ctx: McInstrParser.ExtendContext):
         return self.visit(ctx.unparsed_block())
@@ -380,6 +356,22 @@ class InstrVisitor(McInstrVisitor):
         # The even-worse expression use of MYSELF to refer to the current being-constructed component's name
         return Expr.str(self.current_instance.name)
 
+    def multi_block(self, part: str, ctx: McInstrParser.Multi_blockContext):
+        """Common visitor for {part} unparsed_block? ((INHERIT identifier)|(EXTEND unparsed_block))*
+
+        Ensures that the correct 'part' is pulled from named component definition(s)
+        and that the definitions and new unparsed blocks are inserted in their given
+        order.
+        """
+        blocks = dict()
+        for ident in ctx.Identifier():
+            logger.info(f'Copy from component definition {ident} in Instr is ill defined')
+            comp = self.state.get_component(str(ident))
+            blocks[ident.getSourceInterval()[0]] = getattr(comp, part)
+        for unparsed in ctx.unparsed_block():
+            blocks[unparsed.getSourceInterval()[0]] = (self.visit(unparsed),)
+        return [b for n in sorted(blocks.keys()) for b in blocks[n]]
+
 
 class InstrParametersVisitor(McInstrVisitor):
     """A visitor which takes a full parse tree and extracts only the instrument parameters"""
@@ -433,6 +425,7 @@ class InstrParametersVisitor(McInstrVisitor):
     def visitExpressionMyself(self, ctx: McInstrParser.ExpressionMyselfContext):
         # The even-worse expression use of MYSELF to refer to the current being-constructed component's name
         return Expr.str(self.current_instance.name)
+
 
 
 add_common_visitors(InstrVisitor)
