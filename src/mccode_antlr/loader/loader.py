@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Union
 from mccode_antlr.instr import Instr
 from mccode_antlr.reader import Registry
+from mccode_antlr.reader.registry import ensure_registries
 
 
 def parse_mccode_instr_parameters(contents: str):
@@ -27,22 +28,12 @@ def parse_mccode_instr(contents: str, registries: list[Registry], source: str = 
     return instr
 
 
-def ensure_registry(needed: Registry, have: list[Registry] | None):
-    if have is None or len(have) == 0:
-        return [needed]
-    if needed in have:
-        return have
-    return have + [needed]
-
-
 def parse_mcstas_instr(contents: str, registries: list[Registry] | None = None) -> Instr:
-    from mccode_antlr.reader import MCSTAS_REGISTRY
-    return parse_mccode_instr(contents, ensure_registry(MCSTAS_REGISTRY, registries))
+    return parse_mccode_instr(contents, ensure_registries('mcstas', registries))
 
 
 def parse_mcxtrace_instr(contents: str, registries: list[Registry] | None = None) -> Instr:
-    from mccode_antlr.reader import MCXTRACE_REGISTRY
-    return parse_mccode_instr(contents, ensure_registry(MCXTRACE_REGISTRY, registries))
+    return parse_mccode_instr(contents, ensure_registries('mcxtrace', registries))
 
 
 def load_mccode_instr(filename: Union[str, Path], registries: list[Registry]) -> Instr:
@@ -50,10 +41,8 @@ def load_mccode_instr(filename: Union[str, Path], registries: list[Registry]) ->
 
 
 def load_mcstas_instr(filename: Union[str, Path], registries: list[Registry] | None = None) -> Instr:
-    from mccode_antlr.reader import MCSTAS_REGISTRY
-    return load_mccode_instr(filename, ensure_registry(MCSTAS_REGISTRY, registries))
+    return load_mccode_instr(filename, ensure_registries('mcstas', registries))
 
 
 def load_mcxtrace_instr(filename: Union[str, Path], registries: list[Registry] | None = None) -> Instr:
-    from mccode_antlr.reader import MCXTRACE_REGISTRY
-    return load_mccode_instr(filename, ensure_registry(MCXTRACE_REGISTRY, registries))
+    return load_mccode_instr(filename, ensure_registries('mcxtrace', registries))

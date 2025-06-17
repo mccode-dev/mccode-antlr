@@ -299,9 +299,11 @@ class CTargetVisitor(TargetVisitor, target_language='c'):
         # runtime part
         if self.config.get('include_runtime'):
             self.out('#define MC_EMBEDDED_RUNTIME')
-            self.configure_file('mccode-r.h.in', 'mcstas' if is_mcstas else 'mcxtrace')
-            # self.embed_file('mcstas-d.h' if is_mcstas else 'mcxtrace-d.h')
-            # self.embed_file("mccode-r.h")
+            if self.known('mccode-r.h', strict=True):
+                self.embed_file('mccode-r.h')
+            else:
+                self.configure_file('mccode-r.h.in', 'mcstas' if is_mcstas else 'mcxtrace')
+
             self.embed_file('mcstas-r.h' if is_mcstas else 'mcxtrace-r.h')
             self.embed_file("mccode-r.c")
             self.embed_file('mcstas-r.c' if is_mcstas else 'mcxtrace-r.c')

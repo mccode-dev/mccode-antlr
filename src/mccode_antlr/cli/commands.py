@@ -40,7 +40,7 @@ def mccode_script_parse(prog: str):
     return args
 
 
-def mccode(flavor: str, registry: Registry, generator: dict):
+def mccode(flavor: str, generator: dict):
     from mccode_antlr.reader import Reader
     from mccode_antlr.reader.registry import collect_local_registries
     from mccode_antlr.translators.c import CTargetVisitor
@@ -61,7 +61,7 @@ def mccode(flavor: str, registry: Registry, generator: dict):
         instrument = load_hdf5(args.filename)
     else:
         # Construct the object which will read the instrument and component files, producing Python objects
-        reader = Reader(registries=collect_local_registries(flavor, registry, args.search_dir))
+        reader = Reader(registries=collect_local_registries(flavor, args.search_dir))
         # Read the provided .instr file, including all specified .instr and .comp files along the way
         # In minimal mode, the component orientations are not resolved -- to speed up the process
         instrument = reader.get_instrument(args.filename, mode=Mode.minimal)
@@ -73,12 +73,10 @@ def mccode(flavor: str, registry: Registry, generator: dict):
 
 
 def mcstas():
-    from mccode_antlr.reader import MCSTAS_REGISTRY
     from mccode_antlr.translators.target import MCSTAS_GENERATOR
-    mccode('mcstas', MCSTAS_REGISTRY, MCSTAS_GENERATOR)
+    mccode('mcstas', MCSTAS_GENERATOR)
 
 
 def mcxtrace():
-    from mccode_antlr.reader import MCXTRACE_REGISTRY
     from mccode_antlr.translators.target import MCXTRACE_GENERATOR
-    mccode('mcxtrace', MCXTRACE_REGISTRY, MCXTRACE_GENERATOR)
+    mccode('mcxtrace', MCXTRACE_GENERATOR)

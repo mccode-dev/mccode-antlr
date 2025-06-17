@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Union
 from ..common import Expr, InstrumentParameter
 from ..instr import Instr, Instance
@@ -8,8 +10,10 @@ from mccode_antlr.instr.orientation import Vector, Angles
 class Assembler:
     """Interactive instrument assembly"""
 
-    def __init__(self, name: str, registries: list[Registry] = None):
-        from ..reader.registry import ordered_registries
+    def __init__(self, name: str, registries: list[Registry] = None, flavor: str | None = None):
+        from ..reader.registry import ordered_registries, ensure_registries
+        if flavor is not None:
+            registries = ensure_registries(flavor, registries)
         if registries is not None:
             registries = list(ordered_registries(registries))
         self.instrument = Instr(name, source='interactive')
@@ -172,7 +176,7 @@ def _rawc_call(method, string: str, source: str = None, line: int = -1):
 
 
 INTENDED_USAGE = """
-bifrost = Assembler('bifrost', registries=[MCSTAS_REGISTRY, local_bifrost_components])
+bifrost = Assembler('bifrost', registries=[local_bifrost_components], flavor='mcstas')
 bifrost.parameters(par1=5.11, par2=('m', 100), par3={'value': 3.14159, 'unit': 'radian'})
 ...
 bifrost.component('source, 'ESS_BUTTERFLY').set_parameters(...)

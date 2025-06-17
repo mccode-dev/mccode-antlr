@@ -53,11 +53,11 @@ class TargetVisitor:
         # TODO always ensure this is sorted by priority?
         return self.source.registries
 
-    def known(self, name: str, which: str = None):
+    def known(self, name: str, which: str = None, strict: bool = False):
         if self.registries is None:
             return False
         registries = self.registries if which is None else [x for x in self.registries if x.name in which]
-        return any([reg.known(name) for reg in registries])
+        return any([reg.known(name, strict=strict) for reg in registries])
 
     def locate(self, name: str, which: str = None):
         registries = self.registries if which is None else [x for x in self.registries if x.name in which]
