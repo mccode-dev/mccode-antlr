@@ -14,7 +14,7 @@ def mccode_script_parse(prog: str):
     parser.add_argument('-o', '--output-file', type=str, help='Output filename for C runtime file')
     parser.add_argument('-I', '--search-dir', action='append', type=resolvable, help='Extra component search directory')
     parser.add_argument('-t', '--trace', action=BooleanOptionalAction, default=True, help="Enable 'trace' mode for instrument display")
-    parser.add_argument('-p', '--portable', action=BooleanOptionalAction, default=False, help='No idea. Your guess is better than mine.')
+    parser.add_argument('-p', '--portable', action=BooleanOptionalAction, default=False, help='Generate portable output for cross-platform compatibility.')
     parser.add_argument('-v', '--version', action='store_true', help='Print the McCode version')
     parser.add_argument('--source', action=BooleanOptionalAction, default=False, help='Embed the instrument source code in the executable')
     parser.add_argument('--main', action=BooleanOptionalAction, default=True, help='Create main(), --no-main for external embedding')
