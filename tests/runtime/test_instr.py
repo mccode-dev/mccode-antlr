@@ -1,7 +1,7 @@
 from unittest import TestCase
 from loguru import logger
 from .compiled import compiled_test, mcpl_compiled_test, compile_and_run
-
+from mccode_antlr import Flavor
 
 class TestCompiledInstr(TestCase):
     @compiled_test
@@ -60,7 +60,7 @@ class TestCompiledInstr(TestCase):
     def test_assembled_parameters(self):
         """Check that setting an instance parameter to a value that is an instrument parameter name works"""
         from mccode_antlr.assembler import Assembler
-        assembler = Assembler('assembled_parameters_test_instr', flavor='mcstas')
+        assembler = Assembler('assembled_parameters_test_instr', flavor=Flavor.MCSTAS)
         assembler.parameter("double par0 = 3.14159")
         origin = assembler.component("origin", "Progress_bar", at=[0, 0, 0])
         left = assembler.component('left', 'Slit', at=([0, 0, 1], origin), rotate=[0, 90, 0],
@@ -235,7 +235,7 @@ class TestCompiledInstr(TestCase):
     @compiled_test
     def test_assemble_a3_rotation(self):
         from mccode_antlr.assembler import Assembler
-        a = Assembler('test_a3_angle', flavor='mcstas')
+        a = Assembler('test_a3_angle', flavor=Flavor.MCSTAS)
         a.parameter('phase/"degree" = 0')
         a.parameter('a3/"degree" = 0')
         a.component('origin', 'Progress_bar')

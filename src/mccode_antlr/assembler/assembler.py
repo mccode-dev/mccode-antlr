@@ -5,14 +5,17 @@ from ..common import Expr, InstrumentParameter
 from ..instr import Instr, Instance
 from ..reader import Reader, Registry
 from loguru import logger
+from mccode_antlr import Flavor
 from mccode_antlr.instr.orientation import Vector, Angles
 
 class Assembler:
     """Interactive instrument assembly"""
 
-    def __init__(self, name: str, registries: list[Registry] = None, flavor: str | None = None):
+    def __init__(self, name: str, registries: list[Registry] = None, flavor: Flavor | None = None):
         from ..reader.registry import ordered_registries, ensure_registries
         if flavor is not None:
+            if isinstance(flavor, str):
+                raise ValueError('flavor must be a Flavor Enum or None')
             registries = ensure_registries(flavor, registries)
         if registries is not None:
             registries = list(ordered_registries(registries))
@@ -176,7 +179,7 @@ def _rawc_call(method, string: str, source: str = None, line: int = -1):
 
 
 INTENDED_USAGE = """
-bifrost = Assembler('bifrost', registries=[local_bifrost_components], flavor='mcstas')
+bifrost = Assembler('bifrost', registries=[local_bifrost_components], flavor=mcstas_antlr.Flavor.MCSTAS)
 bifrost.parameters(par1=5.11, par2=('m', 100), par3={'value': 3.14159, 'unit': 'radian'})
 ...
 bifrost.component('source, 'ESS_BUTTERFLY').set_parameters(...)

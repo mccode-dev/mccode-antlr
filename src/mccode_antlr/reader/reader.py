@@ -7,6 +7,8 @@ from .registry import Registry, registries_match, registry_from_specification
 from ..comp import Comp
 from ..common import Mode
 
+from mccode_antlr import Flavor
+
 def make_reader_error_listener(super_class, filetype, name, source, pre=5, post=2):
     class ReaderErrorListener(super_class):
         def __init__(self):
@@ -41,12 +43,12 @@ class Reader:
     registries: list[Registry] = field(default_factory=list)
     components: dict[str, Comp] = field(default_factory=dict)
     c_flags: list[str] = field(default_factory=list)
-    flavor: str | None = None
+    flavor: Flavor | None = None
 
     def __post_init__(self):
         from .registry import ordered_registries, default_registries
         if self.flavor is None:
-            self.flavor = 'mcstas'
+            self.flavor = Flavor.MCSTAS
         if len(self.registries) == 0:
             self.registries = default_registries(self.flavor)
         self.registries = list(ordered_registries(self.registries))

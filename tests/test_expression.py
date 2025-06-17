@@ -393,6 +393,7 @@ class TestExpression(TestCase):
 
     def test_instrument_parameter(self):
         from antlr4 import InputStream
+        from mccode_antlr import Flavor
         from mccode_antlr.grammar import McInstr_parse
         from mccode_antlr.instr import InstrVisitor
         from mccode_antlr.reader import Reader
@@ -408,7 +409,7 @@ class TestExpression(TestCase):
         END
         """
         tree = McInstr_parse(InputStream(instr_source), 'prog')
-        visitor = InstrVisitor(Reader(flavor='mcstas'), None)
+        visitor = InstrVisitor(Reader(flavor=Flavor.MCSTAS), None)
         # Parse the instrument definition and return an Instr object
         instr = visitor.visitProg(tree)
         nx = instr.components[-1].get_parameter('nx')

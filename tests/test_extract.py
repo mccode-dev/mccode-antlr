@@ -3,6 +3,7 @@ from unittest import TestCase
 class TestExtract(TestCase):
     def test_runtime_parameter(self):
         from antlr4 import InputStream
+        from mccode_antlr import Flavor
         from mccode_antlr.grammar import McInstr_parse
         from mccode_antlr.instr import InstrVisitor
         from mccode_antlr.reader import Reader
@@ -25,7 +26,7 @@ class TestExtract(TestCase):
         END
         """
         tree = McInstr_parse(InputStream(instr_source), 'prog')
-        visitor = InstrVisitor(Reader(flavor='mcstas'), __file__)
+        visitor = InstrVisitor(Reader(flavor=Flavor.MCSTAS), __file__)
         # Parse the instrument definition and return an Instr object
         instr = visitor.visitProg(tree)
         nx = instr.components[-1].get_parameter('nx')
