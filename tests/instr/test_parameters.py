@@ -1,5 +1,4 @@
 from unittest import TestCase
-from .utils import parse_instr_string
 
 
 class TestInstrParameters(TestCase):
@@ -17,9 +16,9 @@ class TestInstrParameters(TestCase):
         self.assertEqual(instr_parameters[2].value, 30)
 
     def test_used_parameter_check(self):
+        from mccode_antlr import Flavor
         from mccode_antlr.assembler import Assembler
-        from mccode_antlr.reader import MCSTAS_REGISTRY
-        assembler = Assembler('test_used_parameter_check', registries=[MCSTAS_REGISTRY])
+        assembler = Assembler('test_used_parameter_check', flavor=Flavor.MCSTAS)
         assembler.parameter('double par0/"pi" = 3.14159')
         assembler.parameter('int par1 = 49')
         assembler.parameter('int par2 = 1010110')

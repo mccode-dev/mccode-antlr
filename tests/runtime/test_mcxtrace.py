@@ -1,5 +1,5 @@
 from textwrap import dedent
-from mccode_antlr.loader import parse_mcstas_instr
+from mccode_antlr.loader import parse_mcstas_instr, parse_mcxtrace_instr
 from .compiled import compiled_test, compile_and_run, Flavor
 from mccode_antlr.reader.registry import InMemoryRegistry
 
@@ -40,7 +40,7 @@ def test_simplest_mcstas():
 
 @compiled_test
 def test_simplest_mcxtrace():
-    instr = parse_mcstas_instr(dedent("""
+    instr = parse_mcxtrace_instr(dedent("""
     define instrument test_simplest_mcxtrace(dummy=0.)
     trace component origin = useless() at (0, 0, 0) absolute end
     """), registries=[in_memory])
@@ -57,7 +57,7 @@ def test_restore_neutron():
 
 @compiled_test
 def test_restore_xray():
-    instr = parse_mcstas_instr(dedent("""
+    instr = parse_mcxtrace_instr(dedent("""
     define instrument test_restore_xray(dummy=0.)
     trace component origin = calls_restore_xray() at (0, 0, 0) absolute end
     """), registries=[in_memory])

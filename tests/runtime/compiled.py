@@ -1,6 +1,6 @@
 from __future__ import annotations
 from functools import cache
-from enum import Enum
+from mccode_antlr import Flavor
 import pytest
 
 from mccode_antlr.compiler.check import simple_instr_compiles
@@ -44,11 +44,6 @@ def mcpl_compiled_test(method):
         def no_cc(*args, **kwargs):
             return method(*args, **kwargs)
     return method
-
-
-class Flavor(Enum):
-    MCSTAS=1
-    MCXTRACE=2
 
 
 def compile_and_run(instr,

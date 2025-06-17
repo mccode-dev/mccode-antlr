@@ -54,9 +54,9 @@ END
 
 class ComponentVectorParameterTestCase(unittest.TestCase):
     def setUp(self):
+        from mccode_antlr import Flavor
         from mccode_antlr.assembler import Assembler
-        from mccode_antlr.reader import MCSTAS_REGISTRY
-        self.assembler = Assembler('test', registries=[MCSTAS_REGISTRY])
+        self.assembler = Assembler('test', flavor=Flavor.MCSTAS)
         for name, contents in FAKE_COMPONENTS.items():
             self._parse_comp(name, contents)
 

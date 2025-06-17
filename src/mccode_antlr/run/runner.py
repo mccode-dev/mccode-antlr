@@ -1,6 +1,6 @@
 from __future__ import annotations
 from pathlib import Path
-from mccode_antlr.reader import Registry
+from mccode_antlr import Flavor
 
 def regular_mccode_runtime_dict(args: dict) -> dict:
     def insert_best_of(src: dict, snk: dict, names: tuple):
@@ -226,13 +226,13 @@ def mccode_run(instrument, generator, parameters, directory: str | Path, binary_
     mccode_run_scan(instrument.name, binary_path, target, parameters, out_dir, mesh, **runtime)
 
 
-def mccode_run_cmd(flavor: str, registry: Registry, generator: dict):
+def mccode_run_cmd(flavor: Flavor, generator: dict):
     from pathlib import Path
     from mccode_antlr.reader import Reader
     from mccode_antlr.reader.registry import collect_local_registries
     from os import X_OK, R_OK, access
 
-    args, parameters = parse_mccode_run_script(flavor)
+    args, parameters = parse_mccode_run_script(str(flavor).lower())
     filename = args.filename if isinstance(args.filename, Path) else next(iter(args.filename))
     if not isinstance(filename, Path):
         raise ValueError(f'{filename} should be a Path but is {type(filename)}')
@@ -270,7 +270,7 @@ def mccode_run_cmd(flavor: str, registry: Registry, generator: dict):
             instrument = load_hdf5(filename)
         else:
             # Construct the object which will read the instrument and component files, producing Python objects
-            reader = Reader(registries=collect_local_registries(flavor, registry, args.search_dir))
+            reader = Reader(registries=collect_local_registries(flavor, args.search_dir))
             # Read the provided .instr file, including all specified .instr and .comp files along the way
             instrument = reader.get_instrument(filename)
         name = instrument.name
@@ -288,24 +288,20 @@ def mccode_run_cmd(flavor: str, registry: Registry, generator: dict):
 
 
 def mcstas_cmd():
-    from mccode_antlr.reader import MCSTAS_REGISTRY
     from mccode_antlr.translators.target import MCSTAS_GENERATOR
-    mccode_run_cmd('mcstas', MCSTAS_REGISTRY, MCSTAS_GENERATOR)
+    mccode_run_cmd(Flavor.MCSTAS, MCSTAS_GENERATOR)
 
 
 def mcxtrace_cmd():
-    from mccode_antlr.reader import MCXTRACE_REGISTRY
     from mccode_antlr.translators.target import MCXTRACE_GENERATOR
-    mccode_run_cmd('mcxtrace', MCXTRACE_REGISTRY, MCXTRACE_GENERATOR)
+    mccode_run_cmd(Flavor.MCXTRACE, MCXTRACE_GENERATOR)
 
 
-def mcstas_run(instrument, directory):
-    from mccode_antlr.reader import MCSTAS_REGISTRY
+def mcstas_run(instrument, parameters, directory, **kwargs):
     from mccode_antlr.translators.target import MCSTAS_GENERATOR
-    mccode_run(instrument, directory, MCSTAS_REGISTRY, MCSTAS_GENERATOR)
+    mccode_run(instrument, MCSTAS_GENERATOR, parameters, directory, **kwargs)
 
 
-def mcxtrace_run(instrument, directory):
-    from mccode_antlr.reader import MCXTRACE_REGISTRY
+def mcxtrace_run(instrument, parameters, directory, **kwargs):
     from mccode_antlr.translators.target import MCXTRACE_GENERATOR
-    mccode_run(instrument,  directory, MCXTRACE_REGISTRY, MCXTRACE_GENERATOR)
+    mccode_run(instrument, MCXTRACE_GENERATOR, parameters, directory, **kwargs)

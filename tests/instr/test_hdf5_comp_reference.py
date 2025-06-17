@@ -1,4 +1,5 @@
 import unittest
+from mccode_antlr import Flavor
 from mccode_antlr.assembler import Assembler
 
 
@@ -118,8 +119,7 @@ def insert_truncated_bifrost_primary(b: Assembler):
 
 def make_truncated_bifrost():
     from mccode_antlr.assembler import Assembler
-    from mccode_antlr.reader import MCSTAS_REGISTRY
-    bifrost = Assembler('BIFROST', registries=[MCSTAS_REGISTRY])
+    bifrost = Assembler('BIFROST', flavor=Flavor.MCSTAS)
     bifrost, split_at, sample_stack = insert_truncated_bifrost_primary(bifrost)
     return bifrost.instrument
 
