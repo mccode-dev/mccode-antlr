@@ -283,6 +283,9 @@ class LocalRegistry(Registry):
         self.version = mccode_antlr_version()
         self.priority = priority
 
+    def __repr__(self):
+        return f'LocalRegistry({self.name!r}, {self.root!r}, {self.priority!r})'
+
     def to_file(self, output, wrapper):
         contents = '(' + ', '.join([
             wrapper.parameter('name') + '=' + wrapper.value(self.name),
@@ -487,3 +490,42 @@ def _mccode_pooch_registries():
     return mc, mx, lib
 
 MCSTAS_REGISTRY, MCXTRACE_REGISTRY, LIBC_REGISTRY = _mccode_pooch_registries()
+
+
+def collect_local_registries(
+        flavor: str,
+        main: Registry | None = None,
+        specified: list[Path] | None = None
+):
+    """Common collection of on-machine 'local' registries from allowed sources
+
+    Parameters
+    ----------
+    flavor : str
+        one of 'mcstas', 'mcxtrace'
+    main: Registry | None
+        main registry (already created) or None for testing purposes
+    specified: list[Path] | None
+        optional list of paths specified on the command line as -I/--search-dir argument
+
+    Returns
+    -------
+    A list of repositories combining inputs values plus any paths specified in the
+    space deliminated environment variable ${MCCODEANTLR_${FLAVOR}__PATHS} where the
+    double _ is imperative to indicate ${flavor}.paths in the config dictionary
+    """
+    from mccode_antlr.config import config
+
+    registries = [main] if main else []
+
+    if 'paths' in config[flavor]:
+        paths = [Path(p) for p in config[flavor]['paths'].as_str_seq() if Path(p).is_dir()]
+        for path in paths:
+            registries.append(LocalRegistry(path.stem, path.as_posix(), priority=5))
+
+    if specified is not None and len(specified) > 0:
+        registries.extend([LocalRegistry(d.stem, d.as_posix(), priority=10) for d in specified])
+
+    registries.append(LocalRegistry('working_directory', f'{Path().resolve()}'))
+
+    return registries

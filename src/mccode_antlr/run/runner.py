@@ -229,7 +229,7 @@ def mccode_run(instrument, generator, parameters, directory: str | Path, binary_
 def mccode_run_cmd(flavor: str, registry: Registry, generator: dict):
     from pathlib import Path
     from mccode_antlr.reader import Reader
-    from mccode_antlr.reader import LocalRegistry
+    from mccode_antlr.reader.registry import collect_local_registries
     from os import X_OK, R_OK, access
 
     args, parameters = parse_mccode_run_script(flavor)
@@ -269,15 +269,8 @@ def mccode_run_cmd(flavor: str, registry: Registry, generator: dict):
             from mccode_antlr.io import load_hdf5
             instrument = load_hdf5(filename)
         else:
-            # McCode always requires access to a remote Pooch repository:
-            registries = [registry]
-            # A user can specify extra (local) directories to search for included files using -I or --search-dir
-            if args.search_dir is not None and len(args.search_dir):
-                registries.extend([LocalRegistry(d.stem, d) for d in args.search_dir])
-            # And McCode-3 users expect to always have access to files in the current working directory
-            registries.append(LocalRegistry('working_directory', f'{Path().resolve()}'))
             # Construct the object which will read the instrument and component files, producing Python objects
-            reader = Reader(registries=registries)
+            reader = Reader(registries=collect_local_registries(flavor, registry, args.search_dir))
             # Read the provided .instr file, including all specified .instr and .comp files along the way
             instrument = reader.get_instrument(filename)
         name = instrument.name

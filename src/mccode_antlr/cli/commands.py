@@ -41,9 +41,8 @@ def mccode_script_parse(prog: str):
 
 
 def mccode(flavor: str, registry: Registry, generator: dict):
-    from pathlib import Path
     from mccode_antlr.reader import Reader
-    from mccode_antlr.reader import LocalRegistry
+    from mccode_antlr.reader.registry import collect_local_registries
     from mccode_antlr.translators.c import CTargetVisitor
     from mccode_antlr.common import Mode
 
@@ -57,20 +56,12 @@ def mccode(flavor: str, registry: Registry, generator: dict):
                   verbose=args.verbose,
                   output=args.output_file if args.output_file is not None else args.filename.with_suffix('.c')
                   )
-    # McCode always requires access to a remote Pooch repository:
-    registries = [registry]
-    # A user can specify extra (local) directories to search for included files using -I or --search-dir
-    if args.search_dir is not None and len(args.search_dir):
-        registries.extend([LocalRegistry(d.stem, d) for d in args.search_dir])
-    # And McCode-3 users expect to always have access to files in the current working directory
-    registries.append(LocalRegistry('working_directory', f'{Path().resolve()}'))
-
     if args.filename.suffix.lower() == '.h5':
         from mccode_antlr.io import load_hdf5
         instrument = load_hdf5(args.filename)
     else:
         # Construct the object which will read the instrument and component files, producing Python objects
-        reader = Reader(registries=registries)
+        reader = Reader(registries=collect_local_registries(flavor, registry, args.search_dir))
         # Read the provided .instr file, including all specified .instr and .comp files along the way
         # In minimal mode, the component orientations are not resolved -- to speed up the process
         instrument = reader.get_instrument(args.filename, mode=Mode.minimal)
