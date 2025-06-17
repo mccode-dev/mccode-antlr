@@ -4,6 +4,7 @@ import pooch
 from pathlib import Path
 from re import Pattern
 from mccode_antlr.version import version as mccode_antlr_version
+from mccode_antlr import Flavor
 
 
 def ensure_regex_pattern(pattern):
@@ -294,6 +295,9 @@ class LocalRegistry(Registry):
     def __repr__(self):
         return f'LocalRegistry({self.name!r}, {self.root!r}, {self.priority!r})'
 
+    def __hash__(self):
+        return hash(str(self))
+
     def to_file(self, output, wrapper):
         contents = '(' + ', '.join([
             wrapper.parameter('name') + '=' + wrapper.value(self.name),
@@ -515,15 +519,15 @@ def _local_reg(path: Path, priority: int = REGISTRY_PRIORITY_HIGHEST):
 
 
 def collect_local_registries(
-        flavor: str,
+        flavor: Flavor,
         specified: list[Path] | None = None
 ):
     """Common collection of registries from allowed sources
 
     Parameters
     ----------
-    flavor : str
-        one of 'mcstas', 'mcxtrace'
+    flavor : mccode_pooch.Flavor
+        one of Flavor.MCSTAS', Flavor.MCXTRACE
     specified: list[Path] | None
         optional list of paths specified on the command line as -I/--search-dir argument
 
@@ -542,13 +546,13 @@ def collect_local_registries(
     return registries
 
 
-def default_registries(flavor) -> list[Registry]:
+def default_registries(flavor: Flavor) -> list[Registry]:
     """Common collection of needed registries for components and libraries
 
     Parameters
     ----------
-    flavor : str
-        one of 'mcstas', 'mcxtrace'
+    flavor : mccode_antlr.Flavor
+        one of Flavor.MCSTAS', Flavor.MCXTRACE
 
     Returns
     -------
@@ -559,21 +563,21 @@ def default_registries(flavor) -> list[Registry]:
     """
     from mccode_antlr.config import config
 
-    r = [MCSTAS_REGISTRY if flavor == 'mcstas' else MCXTRACE_REGISTRY, LIBC_REGISTRY]
+    r = [MCXTRACE_REGISTRY if flavor == Flavor.MCXTRACE else MCSTAS_REGISTRY, LIBC_REGISTRY]
 
-    if 'paths' not in config[flavor]:
+    if 'paths' not in config[str(flavor).lower()]:
         return r
 
     v = [
         _local_reg(Path(p), REGISTRY_PRIORITY_HIGH)
-        for p in config[flavor]['paths'].as_str_seq() if Path(p).is_dir()
+        for p in config[str(flavor).lower()]['paths'].as_str_seq() if Path(p).is_dir()
     ]
 
     return r + v
 
 
 
-def ensure_registries(flavor: str, have: list[Registry] | None):
+def ensure_registries(flavor: Flavor, have: list[Registry] | None):
     needed = default_registries(flavor)
     if have is None or len(have) == 0:
         return needed

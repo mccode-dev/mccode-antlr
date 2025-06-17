@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Union
+from mccode_antlr import Flavor
 from mccode_antlr.instr import Instr
 from mccode_antlr.reader import Registry
 from mccode_antlr.reader.registry import ensure_registries
@@ -29,11 +30,11 @@ def parse_mccode_instr(contents: str, registries: list[Registry], source: str = 
 
 
 def parse_mcstas_instr(contents: str, registries: list[Registry] | None = None) -> Instr:
-    return parse_mccode_instr(contents, ensure_registries('mcstas', registries))
+    return parse_mccode_instr(contents, ensure_registries(Flavor.MCSTAS, registries))
 
 
 def parse_mcxtrace_instr(contents: str, registries: list[Registry] | None = None) -> Instr:
-    return parse_mccode_instr(contents, ensure_registries('mcxtrace', registries))
+    return parse_mccode_instr(contents, ensure_registries(Flavor.MCXTRACE, registries))
 
 
 def load_mccode_instr(filename: Union[str, Path], registries: list[Registry]) -> Instr:
@@ -41,8 +42,8 @@ def load_mccode_instr(filename: Union[str, Path], registries: list[Registry]) ->
 
 
 def load_mcstas_instr(filename: Union[str, Path], registries: list[Registry] | None = None) -> Instr:
-    return load_mccode_instr(filename, ensure_registries('mcstas', registries))
+    return load_mccode_instr(filename, ensure_registries(Flavor.MCSTAS, registries))
 
 
 def load_mcxtrace_instr(filename: Union[str, Path], registries: list[Registry] | None = None) -> Instr:
-    return load_mccode_instr(filename, ensure_registries('mcxtrace', registries))
+    return load_mccode_instr(filename, ensure_registries(Flavor.MCXTRACE, registries))
