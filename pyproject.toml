@@ -41,7 +41,7 @@ test = ["gputil==1.4.0", 'pytest']
 hdf5 = ["h5py>=3.11.0"]
 
 [project.urls]
-"Homepage" = "https://github.com/McStasMcXtrace/mccode-antlr"
+"Homepage" = "https://github.com/mccode-dev/mccode-antlr"
 
 [project.scripts]
 mcstas-antlr = "mccode_antlr.cli.commands:mcstas"
