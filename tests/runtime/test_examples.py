@@ -186,7 +186,7 @@ def test_function_pointer_component_declare_parameter():
 @compiled_test
 def test_struct_instance_parameter():
     instr = parse_mcstas_instr(dedent(r"""
-    DEFINE INSTRUMENT templateTAS(DM=3.3539)
+    DEFINE INSTRUMENT test_template_TAS(DM=3.3539)
     DECLARE
     %{
       struct machine_hkl_struct {
@@ -235,7 +235,10 @@ def test_struct_instance_parameter():
         results, files = compile_and_run(instr, f'-n 1 DM={dm}')
         lines = results.decode('utf-8').splitlines()
         print('\n'.join(lines))
-        assert lines[0] == '[templateTAS] Initialize'
+        # Remove lines from Table_Read, which are only present if the file
+        # _is_ present and readable, so no user-warnings except in the case of success.
+        lines = [line for line in lines if 'Table_Read' not in line]
+        assert lines[0] == '[test_template_TAS] Initialize'
         assert lines[1] == f"PG1Xtal.r0={r0:3.1f}, PG1Xtal.reflect='{filename}'"
         assert lines[2] == f"PG2Xtal.r0={r0:3.1f}, PG2Xtal.reflect='{filename}'"
 

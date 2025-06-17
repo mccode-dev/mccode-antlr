@@ -1,7 +1,7 @@
 def make_assembler(name: str):
     from mccode_antlr.assembler import Assembler
-    from mccode_antlr.reader import MCSTAS_REGISTRY
-    return Assembler(name, registries=[MCSTAS_REGISTRY])
+    from mccode_antlr.reader.registry import default_registries
+    return Assembler(name, registries=default_registries('mcstas'))
 
 
 def parse_instr_string(instr_source: str):

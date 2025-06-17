@@ -174,13 +174,13 @@ def _monitor_name_file_name_match(folder, monitor_name):
     return None
 
 
-def mccode_test_compiler(work_dir, file_path, target, registry, generator, dump, **kwargs):
+def mccode_test_compiler(work_dir, file_path, target, flavor, generator, dump, **kwargs):
     from pathlib import Path
     from mccode_antlr.reader import Reader
     from mccode_antlr.compiler.c import compile_instrument
     from mccode_antlr.common import Mode
     # only the provided (remote) registry should be necessary for test instruments
-    reader = Reader(registries=[registry])
+    reader = Reader(flavor=flavor)
     inst = reader.get_instrument(file_path, mode=Mode.minimal)
     output = Path(work_dir)
     config = dict(default_main=True, enable_trace=False, portable=False, include_runtime=True,
@@ -195,15 +195,13 @@ def mccode_test_compiler(work_dir, file_path, target, registry, generator, dump,
 
 
 def mcstas_test_compiler(target, work_dir, file_path, dump, **kwargs):
-    from mccode_antlr.reader import MCSTAS_REGISTRY
     from mccode_antlr.translators.target import MCSTAS_GENERATOR
-    return mccode_test_compiler(work_dir, file_path, target, MCSTAS_REGISTRY, MCSTAS_GENERATOR, dump, **kwargs)
+    return mccode_test_compiler(work_dir, file_path, target, 'mcstas', MCSTAS_GENERATOR, dump, **kwargs)
 
 
 def mcxtrace_test_compiler(target, work_dir, file_path, dump, **kwargs):
-    from mccode_antlr.reader import MCXTRACE_REGISTRY
     from mccode_antlr.translators.target import MCXTRACE_GENERATOR
-    return mccode_test_compiler(work_dir, file_path, target, MCXTRACE_REGISTRY, MCXTRACE_GENERATOR, dump, **kwargs)
+    return mccode_test_compiler(work_dir, file_path, target, 'mcxtrace', MCXTRACE_GENERATOR, dump, **kwargs)
 
 
 def mccode_test_runner(target, binary_path, test_parameters: str, n_particles: int):

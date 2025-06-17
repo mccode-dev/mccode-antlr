@@ -1,5 +1,4 @@
 from unittest import TestCase
-from importlib import reload
 from pathlib import Path
 import mccode_antlr.config
 
@@ -22,40 +21,36 @@ class TestLocalRegistryCollection(TestCase):
         for i, j in zip(a, b):
             self.assertEqual(i, j)
 
-    def assertPathsAndWorkingDirectory(self, regs, paths: list[Path]):
-        from mccode_antlr.reader import LocalRegistry
-        ex = [LocalRegistry(path.stem, path.as_posix(), priority=5) for path in paths]
-        ex.append(LocalRegistry('working_directory', f'{Path().resolve()}'))
-        self.assertAllEqual(regs, ex)
+    def assertPaths(self, flavor, paths: list[Path]):
+        from importlib import reload
+        reload(mccode_antlr.config)
+        from mccode_antlr.reader import LocalRegistry as LReg
+        from mccode_antlr.reader.registry import REGISTRY_PRIORITY_HIGH as HIGH
+        from mccode_antlr.reader.registry import default_registries
+        def_regs = default_registries(flavor)
+        for x in [LReg(path.stem, path.as_posix(), priority=HIGH) for path in paths]:
+            self.assertIn(x, def_regs)
 
     def test_mcstas_environment_variable_single(self):
         import os
         from unittest.mock import patch
         with patch.dict(os.environ, {MCKEY: self.temps[0].as_posix()}):
-            reload(mccode_antlr.config)
-            from mccode_antlr.reader.registry import collect_local_registries
-            self.assertPathsAndWorkingDirectory(collect_local_registries('mcstas'), self.temps[0:1])
+            self.assertPaths('mcstas', self.temps[0:1])
 
     def test_mcxtrace_environment_variable_single(self):
         import os
         from unittest.mock import patch
         with patch.dict(os.environ, {MXKEY: self.temps[1].as_posix()}):
-            reload(mccode_antlr.config)
-            from mccode_antlr.reader.registry import collect_local_registries
-            self.assertPathsAndWorkingDirectory(collect_local_registries('mcxtrace'), self.temps[1:2])
+            self.assertPaths('mcxtrace', self.temps[1:2])
 
     def test_mcstas_environment_variable_multi(self):
         import os
         from unittest.mock import patch
         with patch.dict(os.environ, {MCKEY: ' '.join(p.as_posix() for p in self.temps)}):
-            reload(mccode_antlr.config)
-            from mccode_antlr.reader.registry import collect_local_registries
-            self.assertPathsAndWorkingDirectory(collect_local_registries('mcstas'), self.temps[0:2])
+            self.assertPaths('mcstas', self.temps[0:2])
 
     def test_mcxtrace_environment_variable_multi(self):
         import os
         from unittest.mock import patch
         with patch.dict(os.environ, {MXKEY: ' '.join(p.as_posix() for p in self.temps)}):
-            reload(mccode_antlr.config)
-            from mccode_antlr.reader.registry import collect_local_registries
-            self.assertPathsAndWorkingDirectory(collect_local_registries('mcxtrace'), self.temps[0:2])
+            self.assertPaths('mcxtrace', self.temps[0:2])

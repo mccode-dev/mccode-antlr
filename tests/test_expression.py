@@ -395,7 +395,7 @@ class TestExpression(TestCase):
         from antlr4 import InputStream
         from mccode_antlr.grammar import McInstr_parse
         from mccode_antlr.instr import InstrVisitor
-        from mccode_antlr.reader import MCSTAS_REGISTRY, Reader
+        from mccode_antlr.reader import Reader
         from mccode_antlr.common.expression import Value, ObjectType
         instr_source = """
         DEFINE INSTRUMENT blah(int par=0)
@@ -408,7 +408,7 @@ class TestExpression(TestCase):
         END
         """
         tree = McInstr_parse(InputStream(instr_source), 'prog')
-        visitor = InstrVisitor(Reader(registries=[MCSTAS_REGISTRY, ]), None)
+        visitor = InstrVisitor(Reader(flavor='mcstas'), None)
         # Parse the instrument definition and return an Instr object
         instr = visitor.visitProg(tree)
         nx = instr.components[-1].get_parameter('nx')

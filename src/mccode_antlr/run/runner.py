@@ -226,7 +226,7 @@ def mccode_run(instrument, generator, parameters, directory: str | Path, binary_
     mccode_run_scan(instrument.name, binary_path, target, parameters, out_dir, mesh, **runtime)
 
 
-def mccode_run_cmd(flavor: str, registry: Registry, generator: dict):
+def mccode_run_cmd(flavor: str, generator: dict):
     from pathlib import Path
     from mccode_antlr.reader import Reader
     from mccode_antlr.reader.registry import collect_local_registries
@@ -270,7 +270,7 @@ def mccode_run_cmd(flavor: str, registry: Registry, generator: dict):
             instrument = load_hdf5(filename)
         else:
             # Construct the object which will read the instrument and component files, producing Python objects
-            reader = Reader(registries=collect_local_registries(flavor, registry, args.search_dir))
+            reader = Reader(registries=collect_local_registries(flavor, args.search_dir))
             # Read the provided .instr file, including all specified .instr and .comp files along the way
             instrument = reader.get_instrument(filename)
         name = instrument.name
@@ -288,24 +288,20 @@ def mccode_run_cmd(flavor: str, registry: Registry, generator: dict):
 
 
 def mcstas_cmd():
-    from mccode_antlr.reader import MCSTAS_REGISTRY
     from mccode_antlr.translators.target import MCSTAS_GENERATOR
-    mccode_run_cmd('mcstas', MCSTAS_REGISTRY, MCSTAS_GENERATOR)
+    mccode_run_cmd('mcstas', MCSTAS_GENERATOR)
 
 
 def mcxtrace_cmd():
-    from mccode_antlr.reader import MCXTRACE_REGISTRY
     from mccode_antlr.translators.target import MCXTRACE_GENERATOR
-    mccode_run_cmd('mcxtrace', MCXTRACE_REGISTRY, MCXTRACE_GENERATOR)
+    mccode_run_cmd('mcxtrace', MCXTRACE_GENERATOR)
 
 
 def mcstas_run(instrument, directory):
-    from mccode_antlr.reader import MCSTAS_REGISTRY
     from mccode_antlr.translators.target import MCSTAS_GENERATOR
-    mccode_run(instrument, directory, MCSTAS_REGISTRY, MCSTAS_GENERATOR)
+    mccode_run(instrument, directory, MCSTAS_GENERATOR)
 
 
 def mcxtrace_run(instrument, directory):
-    from mccode_antlr.reader import MCXTRACE_REGISTRY
     from mccode_antlr.translators.target import MCXTRACE_GENERATOR
-    mccode_run(instrument,  directory, MCXTRACE_REGISTRY, MCXTRACE_GENERATOR)
+    mccode_run(instrument, directory, MCXTRACE_GENERATOR)

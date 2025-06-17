@@ -18,8 +18,7 @@ class TestInstrParameters(TestCase):
 
     def test_used_parameter_check(self):
         from mccode_antlr.assembler import Assembler
-        from mccode_antlr.reader import MCSTAS_REGISTRY
-        assembler = Assembler('test_used_parameter_check', registries=[MCSTAS_REGISTRY])
+        assembler = Assembler('test_used_parameter_check', flavor='mcstas')
         assembler.parameter('double par0/"pi" = 3.14159')
         assembler.parameter('int par1 = 49')
         assembler.parameter('int par2 = 1010110')

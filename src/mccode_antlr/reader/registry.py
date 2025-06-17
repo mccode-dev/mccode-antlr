@@ -47,6 +47,9 @@ class Registry:
         from mccode_antlr.common import TextWrapper
         return self.to_string(TextWrapper())
 
+    def __hash__(self):
+        return hash(str(self))
+
     def to_string(self, wrapper):
         from io import StringIO
         output = StringIO()
@@ -54,7 +57,7 @@ class Registry:
         return output.getvalue()
 
     def to_file(self, output, wrapper):
-        print('Registry<>', file=output)
+        print(f'Registry<{self.name=},{self.root=},{self.pooch=},{self.version=},{self.priority=}>', file=output)
 
     def known(self, name: str, ext: str = None, strict: bool = False):
         pass
@@ -121,6 +124,9 @@ class RemoteRegistry(Registry):
         self.pooch = None
         self.priority = priority
 
+    def __hash__(self):
+        return hash(str(self))
+
     @classmethod
     def file_keys(cls) -> tuple[str, ...]:
         return 'name', 'url', 'version', 'filename'
@@ -139,11 +145,13 @@ class RemoteRegistry(Registry):
         # the files *in* the registry are already posix paths, so that makes life easier
         if any(x.endswith(compare) for x in self.pooch.registry_files):
             return True
+        if strict:
+            return False
         # fall back to matching without the extension:
         if any(Path(x).with_suffix('').as_posix().endswith(compare) for x in self.pooch.registry_files):
             return True
         # Or matching *any* file that contains name
-        return False if strict else any(name in x for x in self.pooch.registry_files)
+        return any(name in x for x in self.pooch.registry_files)
 
     def unique(self, name: str):
         return sum(name in x for x in self.pooch.registry_files) == 1
@@ -363,6 +371,9 @@ class InMemoryRegistry(Registry):
         self.components = {k if k.lower().endswith('.comp') else f'{k}.comp': v for k, v in components.items()}
         self.priority = priority
 
+    def to_file(self, output, wrapper):
+        print(f'InMemoryRegistry<{self.name=},{self.version=},{self.components=},{self.priority=}>', file=output)
+
     def add(self, name: str, definition: str):
         self.components[name] = definition
 
@@ -462,6 +473,13 @@ def registry_from_specification(spec: str):
     return None
 
 
+REGISTRY_PRIORITY_LOWEST=-10
+REGISTRY_PRIORITY_LOW=-5
+REGISTRY_PRIORITY_MEDIUM=0
+REGISTRY_PRIORITY_HIGH=5
+REGISTRY_PRIORITY_HIGHEST=10
+
+
 def _mccode_pooch_registries():
     def get_remote_repository_version_tags(url):
         import re
@@ -486,46 +504,77 @@ def _mccode_pooch_registries():
 
     src, reg, tag = source_registry_tag()
 
-    mc, mx, lib = [GitHubRegistry(name, src, tag, registry=reg, priority=-10) for name in ('mcstas', 'mcxtrace', 'libc')]
+    mc, mx, lib = [GitHubRegistry(name, src, tag, registry=reg, priority=REGISTRY_PRIORITY_LOWEST) for name in ('mcstas', 'mcxtrace', 'libc')]
     return mc, mx, lib
 
 MCSTAS_REGISTRY, MCXTRACE_REGISTRY, LIBC_REGISTRY = _mccode_pooch_registries()
 
 
+def _local_reg(path: Path, priority: int = REGISTRY_PRIORITY_HIGHEST):
+    return LocalRegistry(path.stem, path.as_posix(), priority=priority)
+
+
 def collect_local_registries(
         flavor: str,
-        main: Registry | None = None,
         specified: list[Path] | None = None
 ):
-    """Common collection of on-machine 'local' registries from allowed sources
+    """Common collection of registries from allowed sources
 
     Parameters
     ----------
     flavor : str
         one of 'mcstas', 'mcxtrace'
-    main: Registry | None
-        main registry (already created) or None for testing purposes
     specified: list[Path] | None
         optional list of paths specified on the command line as -I/--search-dir argument
 
     Returns
     -------
-    A list of repositories combining inputs values plus any paths specified in the
-    space deliminated environment variable ${MCCODEANTLR_${FLAVOR}__PATHS} where the
-    double _ is imperative to indicate ${flavor}.paths in the config dictionary
+    A list of repositories combining required registries and inputs values
     """
-    from mccode_antlr.config import config
 
-    registries = [main] if main else []
-
-    if 'paths' in config[flavor]:
-        paths = [Path(p) for p in config[flavor]['paths'].as_str_seq() if Path(p).is_dir()]
-        for path in paths:
-            registries.append(LocalRegistry(path.stem, path.as_posix(), priority=5))
+    registries = default_registries(flavor)
 
     if specified is not None and len(specified) > 0:
-        registries.extend([LocalRegistry(d.stem, d.as_posix(), priority=10) for d in specified])
+        registries.extend([_local_reg(d) for d in specified])
 
     registries.append(LocalRegistry('working_directory', f'{Path().resolve()}'))
 
     return registries
+
+
+def default_registries(flavor) -> list[Registry]:
+    """Common collection of needed registries for components and libraries
+
+    Parameters
+    ----------
+    flavor : str
+        one of 'mcstas', 'mcxtrace'
+
+    Returns
+    -------
+    A list of repositories combining default component and library registries plus
+    any paths specified in the space delimited environment variable
+    ${MCCODEANTLR_${FLAVOR}__PATHS} where the double _ is imperative to
+    indicate ${flavor}.paths in the config dictionary
+    """
+    from mccode_antlr.config import config
+
+    r = [MCSTAS_REGISTRY if flavor == 'mcstas' else MCXTRACE_REGISTRY, LIBC_REGISTRY]
+
+    if 'paths' not in config[flavor]:
+        return r
+
+    v = [
+        _local_reg(Path(p), REGISTRY_PRIORITY_HIGH)
+        for p in config[flavor]['paths'].as_str_seq() if Path(p).is_dir()
+    ]
+
+    return r + v
+
+
+
+def ensure_registries(flavor: str, have: list[Registry] | None):
+    needed = default_registries(flavor)
+    if have is None or len(have) == 0:
+        return needed
+    return list(set(needed) | set(have))
