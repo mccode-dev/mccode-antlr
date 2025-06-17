@@ -5,7 +5,7 @@ Implementing the `mccode-3` language and targeting the `mcstas` and `mcxtrace` r
 # Installation
 Install the latest development version from GitHub with
 ```Bash
-$ python -m pip install git+https://github.com/McStasMcXtrace/mccode-antlr.git
+$ python -m pip install git+https://github.com/mccode-dev/mccode-antlr.git
 ```
 or the latest release from PyPI with
 ```Bash
@@ -25,8 +25,8 @@ $ mcstas-antlr --help
 $ mcxtrace-antlr --help
 ```
 
-A local cache is usedfor storing instrument component files and
-runtime library files obtained from [the McCode repository](https://github.com/McStasMcXtrace/McCode.git).
+A local cache is used for storing instrument component files and
+runtime library files obtained from [the McCode repository](https://github.com/mccode-dev/McCode.git).
 The cache and configuration parameters for the whole `mccode-antlr` module can be
 accessed via a third command-line interface:
 ```Bash
