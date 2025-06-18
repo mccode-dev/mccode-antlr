@@ -1,12 +1,12 @@
 from textwrap import dedent
 from .c_listener import CDeclarator
 from ..instr import Instr
+from mccode_antlr import Flavor
 
 
 def header_pre_runtime(
-        is_mcstas: bool,
         source: Instr,
-        runtime: dict,
+        flavor: Flavor,
         config: dict,
         uservars: list[CDeclarator]
 ):
@@ -22,17 +22,19 @@ def header_pre_runtime(
 
     jump_string = '\n'.join([jump_line(i, j) for i in source.components for j in i.jump if j.iterate])
 
-    if is_mcstas:
+    if Flavor.MCSTAS == flavor:
         particle_struct = '\n'.join([
             "  double vx,vy,vz; /* velocity [m/s] */",
             "  double sx,sy,sz; /* spin [0-1] */",
             "  int mcgravitation; /* gravity-state */",
             "  void *mcMagnet;    /* precession-state */",
             "  int allow_backprop; /* allow backprop */"])
-    else:
+    elif Flavor.MCXTRACE == flavor:
         particle_struct = '\n'.join([
             "  double kx,ky,kz; /* wave-vector */",
             "  double phi, Ex,Ey,Ez; /* phase and electrical field */"])
+    else:
+        raise ValueError(f'Unknown flavor {flavor.name}')
 
     # Append variables from instr USERVARS block to particle struct
     # Also store these strings in the appropriate instrument list for later def/undef as state variables
@@ -40,7 +42,7 @@ def header_pre_runtime(
     uservar_string = '//user variables and comp - injections:\n' if len(uservars) else ''
     uservar_string += '\n'.join([f'  {x};' for x in uservars])
 
-    members = list(accessible_struct_members(is_mcstas)) + [x.name for x in uservars]
+    members = list(accessible_struct_members(flavor)) + [x.name for x in uservars]
     # Shouldn't we exclude array-valued names here?
     getvar = '\n'.join(
         [f'  if(!str_comp("{x}",name)){{rval=*((double*)(&(p->{x})));s=0;}}' for x in members]
@@ -52,7 +54,7 @@ def header_pre_runtime(
     )
 
     # For non-array values we can safely use memcpy (probably)
-    members_types = ([(x, y) for x, y in accessible_struct_members(is_mcstas).items()]
+    members_types = ([(x, y) for x, y in accessible_struct_members(flavor).items()]
                      + [(x.name, x.dtype) for x in uservars if not x.is_array and not x.is_pointer]
                      )
     setvar_void = '\n'.join(
@@ -66,7 +68,7 @@ def header_pre_runtime(
          for x in uservars if x.is_array or x.is_pointer])
 
     restore = '\n'.join(
-        [f'  p->{x} = p0->{x};' for x in restorable_struct_members(is_mcstas)]
+        [f'  p->{x} = p0->{x};' for x in restorable_struct_members(flavor)]
     )
 
     getuservar_byid = '\n'.join(
@@ -81,13 +83,13 @@ def header_pre_runtime(
         else:
             uservar_init += f'\np->{x.name}={0 if x.init is None else x.init};'
 
-    mcsetstate = ', '.join(f'{t} {n}' for n, t in setstate_signature_members(is_mcstas).items())
-    mcgetstate = ', '.join(f'{t} {n}' for n, t in getstate_signature_members(is_mcstas).items())
-    mcinitstate = ', '.join(setstate_signature_call(is_mcstas))
+    mcsetstate = ', '.join(f'{t} {n}' for n, t in setstate_signature_members(flavor).items())
+    mcgetstate = ', '.join(f'{t} {n}' for n, t in getstate_signature_members(flavor).items())
+    mcinitstate = ', '.join(setstate_signature_call(flavor))
 
     contents = dedent(f"""/* Automatically generated file. Do not edit.
      * Format:     ANSI C source code
-     * Creator:    {runtime.get("fancy")} <{runtime.get("url")}>
+     * Creator:    {flavor} <{flavor.url()}>
      * Generator:  mccode-antlr {version()} <https://github.com/McStasMcXtrace/mccode-antlr.git>
      * Instrument: {source.source} ({source.name})
      * Date: {datetime.now()}
@@ -108,9 +110,9 @@ def header_pre_runtime(
     #pragma warning(disable: 4068)
     #endif
      
-    #define MCCODE_STRING "{runtime.get("fancy")}"
-    #define FLAVOR "{runtime.get("name", "none")}"
-    #define FLAVOR_UPPER "{runtime.get("name", "none").upper()}"
+    #define MCCODE_STRING "{flavor}"
+    #define FLAVOR "{str(flavor).lower()}"
+    #define FLAVOR_UPPER "{str(flavor).upper()}"
     {'#define MC_USE_DEFAULT_MAIN' if config.get('default_main') else ''}
     {'#define MC_TRACE_ENABLED' if config.get('enable_trace') else ''}
     {'#define MC_PORTABLE' if config.get('portable') else ''}
@@ -277,7 +279,7 @@ def header_pre_runtime(
     return contents
 
 
-def header_post_runtime(source, runtime: dict, config: dict, include_path):
+def header_post_runtime(source, flavor: Flavor, config: dict, include_path):
     from ..common.utilities import escape_str_for_c
 
     def source_file_contents():
@@ -307,7 +309,7 @@ def header_post_runtime(source, runtime: dict, config: dict, include_path):
     #else
     int traceenabled = 0;
     #endif
-    #define {runtime.get("name", "none").upper()} "{escape_str_for_c(str(include_path))}"
+    #define {str(flavor).upper()} "{escape_str_for_c(str(include_path))}"
     int   defaultmain         = {1 if config.get("default_main") else 0};
     char  instrument_name[]   = "{source.name}";
     char  instrument_source[] = "{escape_str_for_c(source.source)}";

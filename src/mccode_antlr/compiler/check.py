@@ -25,7 +25,7 @@ def compiles(compiler: str, instr):
     from loguru import logger
     from pathlib import Path
     from tempfile import TemporaryDirectory
-    from mccode_antlr.translators.target import MCSTAS_GENERATOR
+    from mccode_antlr import Flavor
     from .c import (CBinaryTarget, instrument_source,
                     linux_split_flags, windows_split_flags,
                     linux_compile, windows_compile)
@@ -42,7 +42,7 @@ def compiles(compiler: str, instr):
 
     with TemporaryDirectory() as directory:
         binary = Path(directory) / f"output{module_config['ext'].get(str)}"
-        source = instrument_source(instr, generator=MCSTAS_GENERATOR, config=compile_config)
+        source = instrument_source(instr, flavor=Flavor.MCSTAS, config=compile_config)
         compile_func = windows_compile if 'Windows' == system() else linux_compile
         command, result = compile_func(target.compiler, compiler_flags, binary, linker_flags, source)
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 from pathlib import Path
 from mccode_antlr import Flavor
+from mccode_antlr.instr import Instr
 
 def regular_mccode_runtime_dict(args: dict) -> dict:
     def insert_best_of(src: dict, snk: dict, names: tuple):
@@ -128,7 +129,7 @@ def parse_mccode_run_script(prog: str):
     return args, parameters
 
 
-def mccode_compile(instr, directory, generator, target: dict | None = None, config: dict | None = None, **kwargs):
+def mccode_compile(instr, directory, flavor: Flavor, target: dict | None = None, config: dict | None = None, **kwargs):
     from mccode_antlr.compiler.c import compile_instrument, CBinaryTarget
     from loguru import logger
 
@@ -139,7 +140,7 @@ def mccode_compile(instr, directory, generator, target: dict | None = None, conf
     def_target.update(target or {})
 
     try:
-        binary = compile_instrument(instr, def_target, directory, generator=generator, config=def_config, **kwargs)
+        binary = compile_instrument(instr, def_target, directory, flavor=flavor, config=def_config, **kwargs)
     except RuntimeError as compilation_error:
         logger.error(f'Failed to compile instrument: {compilation_error}')
         raise compilation_error
@@ -188,7 +189,10 @@ def mccode_run_scan(name: str, binary, target, parameters, directory, grid: bool
         return mccode_run_compiled(binary, target, directory, pars, capture=capture, dry_run=dry_run)
 
 
-def mccode_run(instrument, generator, parameters, directory: str | Path, binary_name: str | None = None,
+def mccode_run(instrument: Instr,
+               flavor: Flavor,
+               parameters, directory: str | Path,
+               binary_name: str | None = None,
                trace: bool = False, source: bool = False, verbose: bool = False,
                parallel: bool = False, gpu: bool = False, process_count: int = 0,
                mesh: bool = False, seed: int | None = None, ncount: int | None = None,
@@ -209,7 +213,7 @@ def mccode_run(instrument, generator, parameters, directory: str | Path, binary_
     target = {'mpi': parallel, 'acc': gpu, 'count': process_count, 'nexus': False}
     if not binary_path.exists():
         config = {'enable_trace': trace, 'embed_instrument_file': source, 'verbose': verbose}
-        binary_path, target = mccode_compile(instrument, binary_path, generator, target=target, config=config)
+        binary_path, target = mccode_compile(instrument, binary_path, flavor=flavor, target=target, config=config)
 
     runtime = dict(
         seed=seed,
@@ -226,7 +230,7 @@ def mccode_run(instrument, generator, parameters, directory: str | Path, binary_
     mccode_run_scan(instrument.name, binary_path, target, parameters, out_dir, mesh, **runtime)
 
 
-def mccode_run_cmd(flavor: Flavor, generator: dict):
+def mccode_run_cmd(flavor: Flavor):
     from pathlib import Path
     from mccode_antlr.reader import Reader
     from mccode_antlr.reader.registry import collect_local_registries
@@ -276,7 +280,7 @@ def mccode_run_cmd(flavor: Flavor, generator: dict):
         name = instrument.name
         # Generate the C binary for the instrument -- will output to, e.g., {instrument.name}.out, in the current directory
         # unless if output_file was specified
-        binary, target = mccode_compile(instrument, args.output_file, generator, target=target, config=config)
+        binary, target = mccode_compile(instrument, args.output_file, flavor=flavor, target=target, config=config)
 
     if not len(parameters):
         from loguru import logger
@@ -288,20 +292,16 @@ def mccode_run_cmd(flavor: Flavor, generator: dict):
 
 
 def mcstas_cmd():
-    from mccode_antlr.translators.target import MCSTAS_GENERATOR
-    mccode_run_cmd(Flavor.MCSTAS, MCSTAS_GENERATOR)
+    mccode_run_cmd(Flavor.MCSTAS)
 
 
 def mcxtrace_cmd():
-    from mccode_antlr.translators.target import MCXTRACE_GENERATOR
-    mccode_run_cmd(Flavor.MCXTRACE, MCXTRACE_GENERATOR)
+    mccode_run_cmd(Flavor.MCXTRACE)
 
 
 def mcstas_run(instrument, parameters, directory, **kwargs):
-    from mccode_antlr.translators.target import MCSTAS_GENERATOR
-    mccode_run(instrument, MCSTAS_GENERATOR, parameters, directory, **kwargs)
+    mccode_run(instrument, Flavor.MCSTAS, parameters, directory, **kwargs)
 
 
 def mcxtrace_run(instrument, parameters, directory, **kwargs):
-    from mccode_antlr.translators.target import MCXTRACE_GENERATOR
-    mccode_run(instrument, MCXTRACE_GENERATOR, parameters, directory, **kwargs)
+    mccode_run(instrument, Flavor.MCXTRACE, parameters, directory, **kwargs)

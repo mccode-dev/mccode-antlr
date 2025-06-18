@@ -26,10 +26,10 @@ class Capturing(list):
 def instrument_translation_prints_funnel(instr):
     import re
     from mccode_antlr.compiler.c import instrument_source
-    from mccode_antlr.translators.target import MCSTAS_GENERATOR
+    from mccode_antlr import Flavor
     # Check that the McStas-parsing of the instrument prints '-DFUNNEL' to STDOUT
     with Capturing() as output:
-        instrument_source(instr, MCSTAS_GENERATOR, {}, False)
+        instrument_source(instr, Flavor.MCSTAS, {}, False)
 
     flags_line = re.compile('^CFLAGS=.*$')
 

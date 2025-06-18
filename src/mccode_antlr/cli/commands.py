@@ -45,7 +45,6 @@ def mccode(flavor: Flavor):
     from mccode_antlr.reader.registry import collect_local_registries
     from mccode_antlr.translators.c import CTargetVisitor
     from mccode_antlr.common import Mode
-    from mccode_antlr.translators.target import MCSTAS_GENERATOR, MCXTRACE_GENERATOR
 
     args = mccode_script_parse(str(flavor).lower() + '-antlr')
 
@@ -67,9 +66,8 @@ def mccode(flavor: Flavor):
         # In minimal mode, the component orientations are not resolved -- to speed up the process
         instrument = reader.get_instrument(args.filename, mode=Mode.minimal)
 
-    generator = MCXTRACE_GENERATOR if flavor == Flavor.MCXTRACE else MCSTAS_GENERATOR
     # Construct the object which will translate the Python instrument to C
-    visitor = CTargetVisitor(instrument, generate=generator, config=config, verbose=config['verbose'])
+    visitor = CTargetVisitor(instrument, flavor=flavor, config=config, verbose=config['verbose'])
     # Go through the instrument, finish by writing the output file:
     visitor.save(filename=config['output'])
 

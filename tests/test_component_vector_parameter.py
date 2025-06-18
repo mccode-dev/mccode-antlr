@@ -62,7 +62,7 @@ class ComponentVectorParameterTestCase(unittest.TestCase):
 
     def _compile_and_run(self, instr, parameters):
         from mccode_antlr.compiler.c import compile_instrument, CBinaryTarget, run_compiled_instrument
-        from mccode_antlr.translators.target import MCSTAS_GENERATOR
+        from mccode_antlr import Flavor
         from mccode_antlr.config import config as module_config
         from tempfile import TemporaryDirectory
         from os import R_OK, access
@@ -74,7 +74,7 @@ class ComponentVectorParameterTestCase(unittest.TestCase):
 
         with TemporaryDirectory() as directory:
             try:
-                compile_instrument(instr, target, directory, generator=MCSTAS_GENERATOR, config=config, dump_source=True)
+                compile_instrument(instr, target, directory, flavor=Flavor.MCSTAS, config=config, dump_source=True)
             except RuntimeError as e:
                 raise e
             binary = Path(directory).joinpath(f'{instr.name}{module_config["ext"].get(str)}')

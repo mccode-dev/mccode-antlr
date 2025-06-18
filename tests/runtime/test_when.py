@@ -30,12 +30,11 @@ def test_when_logical_parses():
 def do_when_op_(checker, op, message):
     from pathlib import Path
     from tempfile import TemporaryDirectory
-    from mccode_antlr.translators.target import MCSTAS_GENERATOR
+    from mccode_antlr import Flavor
     from mccode_antlr.run import mccode_compile, mccode_run_compiled
     from itertools import product
 
-    kwargs = dict(generator=MCSTAS_GENERATOR, target=None, config=None,
-                  dump_source=False)
+    kwargs = dict(target=None, config=None, dump_source=False)
 
     instr = parse_mcstas_instr(
         dedent(f"""DEFINE INSTRUMENT when_equal(int value=0, int check=-1)
@@ -51,7 +50,7 @@ def do_when_op_(checker, op, message):
         """)
     )
     with TemporaryDirectory() as directory:
-        binary, target = mccode_compile(instr, directory, **kwargs)
+        binary, target = mccode_compile(instr, directory, Flavor.MCSTAS, **kwargs)
         for index, (value, check) in enumerate(product((0, 1, 2, 3), (1, 2, 3, 4))):
             path = Path(directory).joinpath(f't{index}')
             result, data = mccode_run_compiled(binary, target, path, f'-n 1 {value=} {check=}')

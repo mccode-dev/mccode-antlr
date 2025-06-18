@@ -1,5 +1,6 @@
 from unittest import TestCase
 from pathlib import Path
+from mccode_antlr import Flavor
 import mccode_antlr.config
 
 MCKEY = 'MCCODEANTLR_MCSTAS__PATHS'
@@ -35,22 +36,22 @@ class TestLocalRegistryCollection(TestCase):
         import os
         from unittest.mock import patch
         with patch.dict(os.environ, {MCKEY: self.temps[0].as_posix()}):
-            self.assertPaths('mcstas', self.temps[0:1])
+            self.assertPaths(Flavor.MCSTAS, self.temps[0:1])
 
     def test_mcxtrace_environment_variable_single(self):
         import os
         from unittest.mock import patch
         with patch.dict(os.environ, {MXKEY: self.temps[1].as_posix()}):
-            self.assertPaths('mcxtrace', self.temps[1:2])
+            self.assertPaths(Flavor.MCXTRACE, self.temps[1:2])
 
     def test_mcstas_environment_variable_multi(self):
         import os
         from unittest.mock import patch
         with patch.dict(os.environ, {MCKEY: ' '.join(p.as_posix() for p in self.temps)}):
-            self.assertPaths('mcstas', self.temps[0:2])
+            self.assertPaths(Flavor.MCSTAS, self.temps[0:2])
 
     def test_mcxtrace_environment_variable_multi(self):
         import os
         from unittest.mock import patch
         with patch.dict(os.environ, {MXKEY: ' '.join(p.as_posix() for p in self.temps)}):
-            self.assertPaths('mcxtrace', self.temps[0:2])
+            self.assertPaths(Flavor.MCXTRACE, self.temps[0:2])

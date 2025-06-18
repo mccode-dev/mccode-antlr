@@ -8,7 +8,7 @@ from mccode_antlr.instr import Instr
 from mccode_antlr.translators.c import CTargetVisitor
 from loguru import logger
 from .check import compiled, gpu_only, mpi_only
-
+from mccode_antlr import Flavor
 
 class CBinaryTarget:
     class Type(Flag):
@@ -84,11 +84,11 @@ class CBinaryTarget:
         return extras
 
 
-def instrument_source(instrument: Instr, generator: dict, config: dict, verbose: bool = None):
+def instrument_source(instrument: Instr, flavor: Flavor, config: dict, verbose: bool = None):
     if verbose is None:
         verbose = config.get('verbose', False)
     # TargetVisitor to uses instrument.registries (and the CTargetVisitor *appends* its LIBC_REGISTRY if necessary)
-    visitor = CTargetVisitor(instrument, generate=generator, config=config, verbose=verbose)
+    visitor = CTargetVisitor(instrument, flavor=flavor, config=config, verbose=verbose)
     # Does the conversion by 'visiting' the instrument, then returns the full string of the generated source code
     return visitor.contents()
 

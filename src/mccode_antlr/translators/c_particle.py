@@ -1,8 +1,12 @@
-def restore_name(is_mcstas):
-    return "RESTORE_NEUTRON" if is_mcstas else "RESTORE_XRAY"
+from mccode_antlr import Flavor
 
 
-def xyz_Axyz_Bxyz(is_mcstas, type_str):
+def restore_name(flavor: Flavor):
+    particle = {Flavor.MCSTAS: "NEUTRON", Flavor.MCXTRACE: "XRAY"}[flavor]
+    return f"RESTORE_{particle}"
+
+
+def xyz_Axyz_Bxyz(flavor: Flavor, type_str):
     """Return lists of particle struct members
 
     Either:
@@ -11,21 +15,21 @@ def xyz_Axyz_Bxyz(is_mcstas, type_str):
         (x, y, z), (kx, ky, kz, phi), (Ex, Ey, Ez)
     """
     xyz = ('x', 'y', 'z')
-    ps = ('', 'v', 's') if is_mcstas else ('', 'k', 'E')
+    ps = {Flavor.MCSTAS: ('', 'v', 's'), Flavor.MCXTRACE: ('', 'k', 'E')}[flavor]
     z, a, b = (tuple((f'{p}{x}', type_str) for x in xyz) for p in ps)
-    if not is_mcstas:
+    if Flavor.MCXTRACE == flavor:
         a = a + (('phi', type_str),)
     return z, a, b
 
 
 
-def struct_members(is_mcstas: bool):
+def struct_members(flavor: Flavor):
     """Get the name and type of the members of the _class_particle struct
 
     The members of the struct are not equivalent between McStas and McXtrace
     """
-    z, a, b = xyz_Axyz_Bxyz(is_mcstas, 'double')
-    if is_mcstas:
+    z, a, b = xyz_Axyz_Bxyz(flavor, 'double')
+    if Flavor.MCSTAS == flavor:
         a = a +  (
             ('mcgravitation', 'int'),
             ('mcMagnet', 'void *'),
@@ -50,7 +54,7 @@ def struct_members(is_mcstas: bool):
     )
     return {k: v for k, v in members}
 
-def accessible_struct_members(is_mcstas: bool):
+def accessible_struct_members(flavor: Flavor):
     """Get the name and type of the accessible members of the _class_particle struct
 
     The members of the struct are not equivalent between McStas and McXtrace
@@ -64,7 +68,7 @@ def accessible_struct_members(is_mcstas: bool):
         void particle_restore(...)
     written-out here within c_header.py
     """
-    z, a, b = xyz_Axyz_Bxyz(is_mcstas, 'double')
+    z, a, b = xyz_Axyz_Bxyz(flavor, 'double')
     members = (z + a + b) + (
         ('t', 'double'),
         ('p', 'double'),
@@ -75,7 +79,7 @@ def accessible_struct_members(is_mcstas: bool):
     )
     return {k: v for k, v in members}
 
-def restorable_struct_members(is_mcstas: bool):
+def restorable_struct_members(flavor: Flavor):
     """Get the name and type of the restorable members of the _class_particle struct
 
     The members of the struct are not equivalent between McStas and McXtrace
@@ -86,13 +90,13 @@ def restorable_struct_members(is_mcstas: bool):
         void particle_restore(...)
     written-out here within c_header.py
     """
-    z, a, b = xyz_Axyz_Bxyz(is_mcstas, 'double')
+    z, a, b = xyz_Axyz_Bxyz(flavor, 'double')
     members = z + a + b + (('t', 'double'), ('p', 'double'),)
     return {k: v for k, v in members}
 
 
-def setstate_signature_members(is_mcstas: bool):
-    z, a, b = xyz_Axyz_Bxyz(is_mcstas, 'double')
+def setstate_signature_members(flavor: Flavor):
+    z, a, b = xyz_Axyz_Bxyz(flavor, 'double')
     members = (
         z + a + (('t', 'double'),) + b
         + (
@@ -105,8 +109,8 @@ def setstate_signature_members(is_mcstas: bool):
     return {k: v for k, v in members}
 
 
-def getstate_signature_members(is_mcstas):
-    z, a, b = xyz_Axyz_Bxyz(is_mcstas, 'double *')
+def getstate_signature_members(flavor: Flavor):
+    z, a, b = xyz_Axyz_Bxyz(flavor, 'double *')
     members = (
             (('mcparticle', '_class_particle'),)
             + z + a + (('t', 'double *'),) + b + (('p', 'double *'),)
@@ -115,13 +119,13 @@ def getstate_signature_members(is_mcstas):
 
 
 
-def setstate_signature_call(is_mcstas: bool):
+def setstate_signature_call(flavor: Flavor):
     values = {
-        'vz' if is_mcstas else 'kz': '1',
+        {Flavor.MCSTAS: 'vz', Flavor.MCXTRACE: 'kz'}[flavor]: '1',
         'p': '1',
         'mcgravitation': 'mcgravitation',
         'mcMagnet': 'NULL',
         'allow_backprop': 'mcallowbackprop',
     }
-    members = setstate_signature_members(is_mcstas)
+    members = setstate_signature_members(flavor)
     return [values.get(key, '0') for key in members]

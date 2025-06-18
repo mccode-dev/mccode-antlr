@@ -129,7 +129,7 @@ class TestCompiledInstr(TestCase):
         from mccode_antlr.instr import Instr
         from mccode_antlr.common import ComponentParameter, Expr
         from mccode_antlr.compiler.c import compile_instrument, run_compiled_instrument, CBinaryTarget
-        from mccode_antlr.translators.target import MCSTAS_GENERATOR
+        from mccode_antlr import Flavor
         from mccode_antlr.loader import read_mccode_dat, parse_mcstas_instr
         from tempfile import TemporaryDirectory
         from os import R_OK, access
@@ -187,7 +187,7 @@ class TestCompiledInstr(TestCase):
             expected_binaries = [Path(directory).joinpath(f'{x.name}.out') for x in (instr, before, after)]
             for obj in (instr, before, after):
                 try:
-                    compile_instrument(obj, target, directory, generator=MCSTAS_GENERATOR, config=config)
+                    compile_instrument(obj, target, directory, flavor=Flavor.MCSTAS, config=config)
                 except RuntimeError as e:
                     logger.error(f'Failed to compile instrument: {e}')
                     raise e

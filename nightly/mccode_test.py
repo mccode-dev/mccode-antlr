@@ -8,6 +8,7 @@ from loguru import logger
 
 from numpy import nan
 
+from mccode_antlr import Flavor
 from mccode_antlr.reader import Registry
 
 NightlyInstrExampleType = TypeVar('NightlyInstrExampleType', bound='NightlyInstrExample')
@@ -174,7 +175,7 @@ def _monitor_name_file_name_match(folder, monitor_name):
     return None
 
 
-def mccode_test_compiler(work_dir, file_path, target, flavor, generator, dump, **kwargs):
+def mccode_test_compiler(work_dir, file_path, target, flavor, dump, **kwargs):
     from pathlib import Path
     from mccode_antlr.reader import Reader
     from mccode_antlr.compiler.c import compile_instrument
@@ -186,7 +187,7 @@ def mccode_test_compiler(work_dir, file_path, target, flavor, generator, dump, *
     config = dict(default_main=True, enable_trace=False, portable=False, include_runtime=True,
                   embed_instrument_file=False, verbose=False)
     try:
-        binary_path = compile_instrument(inst, target, output, generator=generator, config=config, dump_source=dump, **kwargs)
+        binary_path = compile_instrument(inst, target, output, flavor=flavor, config=config, dump_source=dump, **kwargs)
     except RuntimeError as err:
         logger.critical(f'Failed to produce a binary for {file_path}')
         logger.info(err)
@@ -195,13 +196,11 @@ def mccode_test_compiler(work_dir, file_path, target, flavor, generator, dump, *
 
 
 def mcstas_test_compiler(target, work_dir, file_path, dump, **kwargs):
-    from mccode_antlr.translators.target import MCSTAS_GENERATOR
-    return mccode_test_compiler(work_dir, file_path, target, 'mcstas', MCSTAS_GENERATOR, dump, **kwargs)
+    return mccode_test_compiler(work_dir, file_path, target, Flavor.MCSTAS, dump, **kwargs)
 
 
 def mcxtrace_test_compiler(target, work_dir, file_path, dump, **kwargs):
-    from mccode_antlr.translators.target import MCXTRACE_GENERATOR
-    return mccode_test_compiler(work_dir, file_path, target, 'mcxtrace', MCXTRACE_GENERATOR, dump, **kwargs)
+    return mccode_test_compiler(work_dir, file_path, target, Flavor.MCXTRACE, dump, **kwargs)
 
 
 def mccode_test_runner(target, binary_path, test_parameters: str, n_particles: int):
