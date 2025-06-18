@@ -1,33 +1,37 @@
 from .c_listener import CDeclarator
 from ..comp import Comp
 from ..instr import Instr
+from mccode_antlr import Flavor
 
-def _runtime_parameters(is_mcstas: bool):
+def _runtime_parameters(flavor: Flavor):
     pars = ['x', 'y', 'z']
-    if is_mcstas:
+    if Flavor.MCSTAS == flavor:
         pars.extend(['vx', 'vy', 'vz', 't', 'sx', 'sy', 'sz', 'p', 'mcgravitation', 'mcMagnet', 'allow_backprop'])
-    else:
+    elif Flavor.MCXTRACE == flavor:
         pars.extend(['kx', 'ky', 'kz', 'phi', 't', 'Ex', 'Ey', 'Ez', 'p'])
+    else:
+        raise ValueError(f'Unknown flavor {flavor}')
     # Add the temporary particle parameters added sometime after v3.4.0 ... to the v3.4.0 tag
     pars.extend(['_mctmp_a', '_mctmp_b', '_mctmp_c'])
     return pars
 
 
-def _runtime_kv_parameters(is_mcstas: bool):
+def _runtime_kv_parameters(flavor: Flavor):
     pars = ['p', 't']
-    pars.extend(['vx', 'vy', 'vz'] if is_mcstas else ['kx', 'ky', 'kz'])
+    options = {Flavor.MCSTAS: ['vx', 'vy', 'vz'], Flavor.MCXTRACE: ['kx', 'ky', 'kz']}
+    pars.extend(options[flavor])
     pars.extend(['x', 'y', 'z'])
     return pars
 
 
-def def_trace_section(is_mcstas: bool):
+def def_trace_section(flavor: Flavor):
     from .c_particle import restore_name
     lines = [
         "/*******************************************************************************",
         "* components TRACE",
         "*******************************************************************************/"
     ]
-    lines.extend([f'#define {x} (_particle->{x})' for x in _runtime_parameters(is_mcstas)])
+    lines.extend([f'#define {x} (_particle->{x})' for x in _runtime_parameters(flavor)])
     lines.extend([
         "/* if on GPU, globally nullify sprintf,fprintf,printfs   */",
         "/* (Similar defines are available in each comp trace but */",
@@ -43,7 +47,7 @@ def def_trace_section(is_mcstas: bool):
         "#define SCATTERED (_particle->_scattered)",
         "#define RESTORE (_particle->_restore)",
         "#define ABSORBED (_particle->_absorbed)",
-        f'#define {restore_name(is_mcstas)}(_index, ...) _particle->_restore = _index;',
+        f'#define {restore_name(flavor)}(_index, ...) _particle->_restore = _index;',
         # /* define mcget_run_num within trace scope to refer to the particle */
         "#define mcget_run_num() _particle->_uid",
         "#define ABSORB0 do { DEBUG_STATE(); DEBUG_ABSORB(); MAGNET_OFF; ABSORBED++; return(_comp); } while(0)",
@@ -52,9 +56,9 @@ def def_trace_section(is_mcstas: bool):
     return '\n'.join(lines)
 
 
-def undef_trace_section(is_mcstas: bool):
+def undef_trace_section(flavor: Flavor):
     from .c_particle import restore_name
-    lines = [f'#undef {x}' for x in _runtime_parameters(is_mcstas)]
+    lines = [f'#undef {x}' for x in _runtime_parameters(flavor)]
     lines.extend([
         "#ifdef OPENACC",
         "#undef strlen",
@@ -66,7 +70,7 @@ def undef_trace_section(is_mcstas: bool):
         "#endif",
         "#undef SCATTERED",
         "#undef RESTORE",
-        f"#undef {restore_name(is_mcstas)}",
+        f"#undef {restore_name(flavor)}",
         "#undef STORE_NEUTRON",
         "#undef ABSORBED",
         "#undef ABSORB",
@@ -76,7 +80,7 @@ def undef_trace_section(is_mcstas: bool):
 
 
 def cogen_trace_section(
-        is_mcstas: bool,
+        flavor: Flavor,
         source: Instr,
         declared_parameters: dict[str, list[CDeclarator]],
         instrument_uservars: list[CDeclarator],
@@ -84,7 +88,7 @@ def cogen_trace_section(
 ) -> str:
     return '\n'.join([
         cogen_comp_trace_class(
-            is_mcstas,
+            flavor,
             component_type,
             source,
             declared_parameters[component_type.name],
@@ -95,7 +99,7 @@ def cogen_trace_section(
 
 
 def cogen_comp_trace_class(
-        is_mcstas: bool,
+        flavor: Flavor,
         comp: Comp,
         source: Instr,
         declared_parameters: list[CDeclarator],
@@ -148,7 +152,7 @@ def cogen_comp_trace_class(
         lines.append(block.to_c())
 
     # instr files do not produce a code block to output here.
-    pars = _runtime_kv_parameters(is_mcstas)
+    pars = _runtime_kv_parameters(flavor)
     lines.extend(["#ifndef NOABSORB_INF_NAN", "  /* Check for nan or inf particle parms */ "])
     # Change following https://github.com/McStasMcXtrace/McCode/commit/6876e5c6f6618d527c67a01610119fa8b1188084
     # lines.extend([f"  if(isnan({x}) || isinf({x})) ABSORB;" for x in pars])

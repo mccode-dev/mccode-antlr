@@ -1,10 +1,8 @@
+from loguru import logger
 from io import StringIO
 from ..instr import Instr, Instance
-from ..comp import Comp
-from loguru import logger
+from mccode_antlr import Flavor
 
-MCSTAS_GENERATOR = dict(project=1, name="mcstas", fancy="McStas", url='http://www.mcstas.org')
-MCXTRACE_GENERATOR = dict(project=2, name='mcxtrace', fancy='McXtrace', url='http://www.mcxtrace.org')
 
 # These _should_ be set in a call to, e.g., `mcstas4`,
 # They were previously set in the yacc generated main function
@@ -14,8 +12,8 @@ CONFIG = dict(default_main=True, enable_trace=True, portable=True, include_runti
 
 # Follow the logic of codegen.c(.in) from McCode-3, but make use of visitor semantics for possible alternate runtimes
 class TargetVisitor:
-    def __init__(self, instr: Instr, generate: dict = None, config: dict = None, verbose=False):
-        self.runtime = MCSTAS_GENERATOR if generate is None else generate
+    def __init__(self, instr: Instr, flavor: Flavor = Flavor.MCSTAS, config: dict = None, verbose=False):
+        self.flavor = flavor
         self.config = CONFIG if config is None else config
         self.source = instr
         self.output = None
@@ -40,13 +38,6 @@ class TargetVisitor:
 
     def __post_init__(self):
         pass
-
-    @property
-    def is_mcstas(self):
-        index = self.runtime.get('project')
-        if index != 1 and index != 2:
-            raise RuntimeError(f'Unknown runtime for project index {index}')
-        return index == 1
 
     @property
     def registries(self):

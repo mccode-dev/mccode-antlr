@@ -293,28 +293,29 @@ class CTargetVisitor(TargetVisitor, target_language='c'):
         #     uuv = uuv.union(x)
 
         uuv = self._instrument_and_component_uservars()
-
-        is_mcstas = self.is_mcstas
-        self.out(header_pre_runtime(is_mcstas, self.source, self.runtime, self.config, uuv))
+        self.out(header_pre_runtime(self.source, self.flavor, self.config, uuv))
         # runtime part
+        name = str(self.flavor).lower()
         if self.config.get('include_runtime'):
             self.out('#define MC_EMBEDDED_RUNTIME')
             if self.known('mccode-r.h', strict=True):
                 self.embed_file('mccode-r.h')
             else:
-                self.configure_file('mccode-r.h.in', 'mcstas' if is_mcstas else 'mcxtrace')
+                self.configure_file('mccode-r.h.in', name)
 
-            self.embed_file('mcstas-r.h' if is_mcstas else 'mcxtrace-r.h')
+            self.embed_file(f'{name}-r.h')
             self.embed_file("mccode-r.c")
-            self.embed_file('mcstas-r.c' if is_mcstas else 'mcxtrace-r.c')
+            self.embed_file(f'{name}-r.c')
             if self.verbose:
                 print(f"Compile with flags '-DUSE_NEXUS -lNeXus' to enable NeXus support")
         else:
             # This only works if the module is *not* a compressed archive
             # If it is, we would need to do some trickery to ... write out the
             self.out(f'#include "{self.include_path("mccode-r.h")}"')
-            self.out(f'#include "{self.include_path("mcstas-r.h" if is_mcstas else "mcxtrace-r.h")}"')
-            print(f"Dependency: mccode_antlr-r.o\nDependency: {'mcstas-r.o' if is_mcstas else 'mcxtrace-r.o'}")
+            path = self.include_path(f"{name}-r.h")
+            self.out(f'#include "{path}"')
+            libname = f'{name}-r.o'
+            print(f"Dependency: mccode-r.o\nDependency: {libname}")
 
         # # TODO insert includes here?
         # if len(self.includes):
@@ -323,7 +324,7 @@ class CTargetVisitor(TargetVisitor, target_language='c'):
         #     self.out(f'/* Contents of {include.name}.h (requested from {include.parent})*/')
         #     self.out(include.content)
 
-        self.out(header_post_runtime(self.source, self.runtime, self.config, self.include_path()))
+        self.out(header_post_runtime(self.source, self.flavor, self.config, self.include_path()))
 
     def include_header(self, header: CInclude):
         self.info(f'include {header} header')
@@ -380,13 +381,13 @@ class CTargetVisitor(TargetVisitor, target_language='c'):
 
     def enter_trace(self):
         from .c_trace import def_trace_section, cogen_trace_section
-        self.out(def_trace_section(self.is_mcstas))
-        self.out(cogen_trace_section(self.is_mcstas, self.source, self.component_declared_parameters,
+        self.out(def_trace_section(self.flavor))
+        self.out(cogen_trace_section(self.flavor, self.source, self.component_declared_parameters,
                                      self.instrument_uservars, self.component_uservars))
 
     def leave_trace(self):
         from .c_trace import undef_trace_section
-        self.out(undef_trace_section(self.is_mcstas))
+        self.out(undef_trace_section(self.flavor))
 
     def enter_uservars(self):
         # After cogen_trace_section, the USERVAR particle struct members need to be defined for raytrace

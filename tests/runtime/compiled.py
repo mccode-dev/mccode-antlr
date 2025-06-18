@@ -55,15 +55,12 @@ def compile_and_run(instr,
                     flavor: Flavor = Flavor.MCSTAS):
     from pathlib import Path
     from tempfile import TemporaryDirectory
-    from mccode_antlr.translators.target import MCSTAS_GENERATOR, MCXTRACE_GENERATOR
     from mccode_antlr.run import mccode_compile, mccode_run_compiled
 
-    generator = MCXTRACE_GENERATOR if flavor == Flavor.MCXTRACE else MCSTAS_GENERATOR
-
-    kwargs = dict(generator=generator, target=target, config=config, dump_source=dump_source)
+    kwargs = dict(target=target, config=config, dump_source=dump_source)
 
     with TemporaryDirectory() as directory:
-        binary, target = mccode_compile(instr, directory, **kwargs)
+        binary, target = mccode_compile(instr, directory, flavor=flavor, **kwargs)
         # The runtime output directory used *can not* exist for McStas/McXtrace to work properly.
         # So find a name inside this directory that doesn't exist (any name should work)
         return mccode_run_compiled(binary, target, Path(directory).joinpath('t'), parameters) if run else (None, None)

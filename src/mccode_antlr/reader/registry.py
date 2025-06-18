@@ -562,8 +562,8 @@ def default_registries(flavor: Flavor) -> list[Registry]:
     indicate ${flavor}.paths in the config dictionary
     """
     from mccode_antlr.config import config
-
-    r = [MCXTRACE_REGISTRY if flavor == Flavor.MCXTRACE else MCSTAS_REGISTRY, LIBC_REGISTRY]
+    options = {Flavor.MCSTAS: MCSTAS_REGISTRY, Flavor.MCXTRACE: MCXTRACE_REGISTRY}
+    r = [options[flavor], LIBC_REGISTRY]
 
     if 'paths' not in config[str(flavor).lower()]:
         return r
