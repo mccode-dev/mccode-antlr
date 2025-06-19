@@ -94,7 +94,7 @@ def add_config_management_parser(modes):
 
 def cache_path():
     from pooch import os_cache
-    return os_cache(f'mccode_antlr')
+    return os_cache(f'mccodeantlr')
 
 
 def cache_remove(name, version, force):

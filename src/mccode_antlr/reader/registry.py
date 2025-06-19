@@ -241,7 +241,7 @@ class GitHubRegistry(RemoteRegistry):
             registry = f'{registry}/raw/{self.version}/'
 
         base_url = f'{self.url}/raw/{self.version}/'
-        cache_path = pooch.os_cache(f'mccode_antlr/{self.name}')
+        cache_path = pooch.os_cache(f'mccodeantlr/{self.name}')
         registry_file = self.filename or 'pooch-registry.txt'
         registry_file_path = cache_path.joinpath(self.version, registry_file)
         if registry_file_path.exists() and registry_file_path.is_file() and access(registry_file_path, R_OK):
@@ -500,6 +500,8 @@ def _mccode_pooch_registries(flavor: Flavor):
         return list(dict.fromkeys(ex.findall(res)))
 
     def source_registry_tag():
+        """This causes the confuse config directory to be created, so could fail
+        on read-only systems."""
         from mccode_antlr.config import config
         requested_tag = config['mccode_pooch']['tag'].as_str_expanded()
         registry_url = config['mccode_pooch']['registry'].as_str_expanded()

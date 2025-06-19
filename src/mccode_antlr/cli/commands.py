@@ -42,9 +42,8 @@ def mccode_script_parse(prog: str):
 
 def mccode(flavor: Flavor):
     args = mccode_script_parse(str(flavor).lower() + '-antlr')
-    from mccode_antlr.reader import Reader # Causes creation of .cache and .config folders
-    from mccode_antlr.reader.registry import collect_local_registries # Causes creation of .cache and .config folders
-    from mccode_antlr.translators.c import CTargetVisitor  # Causes creation of .cache and .config folders
+    from mccode_antlr.reader import Reader, collect_local_registries
+    from mccode_antlr.translators.c import CTargetVisitor
     from mccode_antlr.common import Mode
 
     config = dict(default_main=args.main,
