@@ -13,11 +13,16 @@ class Flavor(IntEnum):
 
     Enumerated _values_ follow the McCode _project_ number.
     """
+    BASE=0
     MCSTAS=1
     MCXTRACE=2
 
     def __str__(self):
-        options = {Flavor.MCSTAS: 'McStas', Flavor.MCXTRACE: 'McXTrace'}
+        options = {
+            Flavor.BASE: 'base',
+            Flavor.MCSTAS: 'McStas',
+            Flavor.MCXTRACE: 'McXTrace'
+        }
         return options[self]
 
     def url(self) -> str:

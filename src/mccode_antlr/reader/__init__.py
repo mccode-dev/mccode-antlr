@@ -1,6 +1,10 @@
 from .reader import Reader
-from .registry import (Registry, LocalRegistry, RemoteRegistry, ModuleRemoteRegistry, GitHubRegistry,
-                       MCSTAS_REGISTRY, MCXTRACE_REGISTRY, LIBC_REGISTRY)
+from .registry import (
+    Registry,
+    LocalRegistry, RemoteRegistry, ModuleRemoteRegistry, GitHubRegistry,
+    InMemoryRegistry,
+    collect_local_registries, default_registries, ensure_registries
+)
 
 __all__ = [
     'Reader',
@@ -9,7 +13,8 @@ __all__ = [
     'RemoteRegistry',
     'ModuleRemoteRegistry',
     'GitHubRegistry',
-    'MCSTAS_REGISTRY',
-    'MCXTRACE_REGISTRY',
-    'LIBC_REGISTRY',
+    'InMemoryRegistry',
+    collect_local_registries,
+    default_registries,
+    ensure_registries,
 ]

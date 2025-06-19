@@ -3,6 +3,7 @@ from __future__ import annotations
 import pooch
 from pathlib import Path
 from re import Pattern
+from loguru import logger
 from mccode_antlr.version import version as mccode_antlr_version
 from mccode_antlr import Flavor
 
@@ -228,6 +229,7 @@ class ModuleRemoteRegistry(RemoteRegistry):
 class GitHubRegistry(RemoteRegistry):
     def __init__(self, name: str, url: str, version: str, filename: str | None = None,
                  registry: str | dict | None = None, priority: int = 0):
+        from os import access, R_OK, W_OK
         if filename is None:
             filename = f'{name}-registry.txt'
         super().__init__(name, url, version, filename, priority)
@@ -242,11 +244,7 @@ class GitHubRegistry(RemoteRegistry):
         cache_path = pooch.os_cache(f'mccode_antlr/{self.name}')
         registry_file = self.filename or 'pooch-registry.txt'
         registry_file_path = cache_path.joinpath(self.version, registry_file)
-        if registry_file_path.exists() and registry_file_path.is_file():
-            from os import access, R_OK
-            if not access(registry_file_path, R_OK):
-                from loguru import logger
-                logger.error(f'Registry file {registry_file_path} exists but is not readable')
+        if registry_file_path.exists() and registry_file_path.is_file() and access(registry_file_path, R_OK):
             with registry_file_path.open('r') as file:
                 registry = {k: v for k, v in [x.strip().split(maxsplit=1) for x in file.readlines() if len(x)]}
         else:
@@ -259,9 +257,17 @@ class GitHubRegistry(RemoteRegistry):
                     raise RuntimeError(f"Could not retrieve {r.url} because {r.reason}")
                 registry = {k: v for k, v in [x.split(maxsplit=1) for x in r.text.split('\n') if len(x)]}
             # stash-away the registry file to be re-read next time
-            registry_file_path.parent.mkdir(parents=True, exist_ok=True)
-            with registry_file_path.open('w') as file:
-                file.writelines('\n'.join([f'{k} {v}' for k, v in registry.items()]))
+            check = registry_file_path.parent
+            last = Path('/')
+            while not check.exists() and check != last:
+                last, check = check, check.parent
+            # check is now a directory that exists, it may be the root of the filesystem
+            if access(check, W_OK):
+                registry_file_path.parent.mkdir(parents=True, exist_ok=True)
+                with registry_file_path.open('w') as file:
+                    file.writelines('\n'.join([f'{k} {v}' for k, v in registry.items()]))
+            else:
+                logger.warning(f'Can not output {registry_file_path}, you lack write permissions for {check}')
 
         self.pooch = pooch.create(
             path=cache_path,
@@ -484,14 +490,14 @@ REGISTRY_PRIORITY_HIGH=5
 REGISTRY_PRIORITY_HIGHEST=10
 
 
-def _mccode_pooch_registries():
+def _mccode_pooch_registries(flavor: Flavor):
     def get_remote_repository_version_tags(url):
         import re
         import git
         g = git.cmd.Git()
         res = g.ls_remote(url, sort='-v:refname', tags=True)
         ex = re.compile(r'v\d+(?:\.\d+(?:\.\d+)?)?')
-        return ex.findall(res)
+        return list(dict.fromkeys(ex.findall(res)))
 
     def source_registry_tag():
         from mccode_antlr.config import config
@@ -508,10 +514,13 @@ def _mccode_pooch_registries():
 
     src, reg, tag = source_registry_tag()
 
-    mc, mx, lib = [GitHubRegistry(name, src, tag, registry=reg, priority=REGISTRY_PRIORITY_LOWEST) for name in ('mcstas', 'mcxtrace', 'libc')]
-    return mc, mx, lib
+    def make_registry(name):
+        return GitHubRegistry(name, src, tag, registry=reg, priority=REGISTRY_PRIORITY_LOWEST)
 
-MCSTAS_REGISTRY, MCXTRACE_REGISTRY, LIBC_REGISTRY = _mccode_pooch_registries()
+    registries = [make_registry('libc')]
+    if flavor in (Flavor.MCSTAS, Flavor.MCXTRACE):
+        registries.append(make_registry(str(flavor).lower()))
+    return registries
 
 
 def _local_reg(path: Path, priority: int = REGISTRY_PRIORITY_HIGHEST):
@@ -562,15 +571,14 @@ def default_registries(flavor: Flavor) -> list[Registry]:
     indicate ${flavor}.paths in the config dictionary
     """
     from mccode_antlr.config import config
-    options = {Flavor.MCSTAS: MCSTAS_REGISTRY, Flavor.MCXTRACE: MCXTRACE_REGISTRY}
-    r = [options[flavor], LIBC_REGISTRY]
-
-    if 'paths' not in config[str(flavor).lower()]:
+    r = _mccode_pooch_registries(flavor)
+    key = str(flavor).lower()
+    if key not in config or 'paths' not in config[key]:
         return r
 
     v = [
         _local_reg(Path(p), REGISTRY_PRIORITY_HIGH)
-        for p in config[str(flavor).lower()]['paths'].as_str_seq() if Path(p).is_dir()
+        for p in config[key]['paths'].as_str_seq() if Path(p).is_dir()
     ]
 
     return r + v
