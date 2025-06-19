@@ -1,9 +1,9 @@
 """Translates a McComp instrument from its intermediate form to a C runtime source file."""
 from loguru import logger
 from dataclasses import dataclass
-from ..reader import LIBC_REGISTRY
 from .target import TargetVisitor
 from .c_listener import extract_c_declared_variables
+from mccode_antlr import Flavor
 
 
 @dataclass
@@ -231,10 +231,9 @@ class CTargetVisitor(TargetVisitor, target_language='c'):
         """
         # Make sure the registry list contains the C library registry, so that we can find and include files
         from packaging.version import Version
-        from ..reader.registry import ordered_registries
-        if not any(reg == LIBC_REGISTRY for reg in self.registries):
-            self.source.registries += (LIBC_REGISTRY, )
-        self.source.registries = tuple(ordered_registries(list(self.source.registries)))
+        from ..reader.registry import ordered_registries, ensure_registries
+        # make sure that the libc registry is present before sorting:
+        self.source.registries = tuple(ordered_registries(ensure_registries(Flavor.BASE, list(self.source.registries))))
 
         # Check that the LIBC registry is not too old for current translation
         for reg in self.source.registries:

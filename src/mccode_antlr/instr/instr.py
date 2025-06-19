@@ -267,6 +267,7 @@ class Instr:
 
     def _replace_keywords(self, flag):
         from mccode_antlr.config import config
+        from mccode_antlr.config.fallback import config_fallback
         from re import sub, findall
         if '@NEXUSFLAGS@' in flag:
             flag = sub(r'@NEXUSFLAGS@', config['flags']['nexus'].as_str_expanded(), flag)
@@ -277,12 +278,9 @@ class Instr:
         general_re = r'@(\w+)@'
         for replace in findall(general_re, flag):
             # Is this replacement something like XXXFLAGS?
-            if replace.lower().endswith('flags') and replace.lower()[:-5] in config['flags']:
-                flag = sub(f'@{replace}@', config['flags'][replace.lower()[:-5]].as_str_expanded(), flag)
-            elif replace.lower().endswith('flags'):
-                # Punt, and just replace with the lowercase version of the keyword -- hopefully this was intended
-                flag = sub(f'@{replace}@', f'-l{replace.lower()[:-5]}', flag)
-                logger.warning(f'Guessing that @{replace}@ should be {flag}')
+            if replace.lower().endswith('flags'):
+                replacement = config_fallback(config['flags'], replace.lower()[:-5])
+                flag = sub(f'@{replace}@', replacement, flag)
             else:
                 logger.warning(f'Unknown keyword @{replace}@ in dependency string')
         return flag
