@@ -14,7 +14,7 @@ __all__ = [
     'ModuleRemoteRegistry',
     'GitHubRegistry',
     'InMemoryRegistry',
-    collect_local_registries,
-    default_registries,
-    ensure_registries,
+    'collect_local_registries',
+    'default_registries',
+    'ensure_registries',
 ]
