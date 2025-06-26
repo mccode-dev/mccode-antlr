@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from pathlib import Path
 from typing import Union
 from loguru import logger
@@ -477,7 +479,21 @@ def save_hdf5(obj, filename: Union[str, Path]) -> None:
         HDF5IO.save(file, obj)
 
 
-def load_hdf5(filename: Union[str, Path]):
+def load_hdf5(filename: Union[str, Path], path: str | None = None):
+    """Load all or part of a serialized Instr from a HDF5 file.
+
+    Parameters
+    ----------
+    filename : Union[str, Path]
+        Path to the HDF5 file.
+    path: str or None
+        Location within the file to load, or None to load all.
+
+    Example
+    -------
+    >>> from mccode_antlr.io.hdf5 import load_hdf5
+    >>> instrument_parameters = load_hdf5('instr.h5', 'parameters')
+    """
     import h5py
     with h5py.File(filename, 'r', driver='core', backing_store=False) as file:
-        return HDF5IO.load(file)
+        return HDF5IO.load(file[path] if path else file)
