@@ -167,6 +167,21 @@ class SplitHDF5BifrostTestCase(SplitBifrostTestCase):
             save_hdf5(make_truncated_bifrost(), filepath)
             self.bifrost = load_hdf5(filepath)
 
+    def test_load_parameters(self):
+        from mccode_antlr.io import load_hdf5
+        from mccode_antlr.common import InstrumentParameter
+        parameters = load_hdf5(self.td.joinpath('bifrost.h5'), 'parameters')
+        self.assertTrue(isinstance(parameters, tuple))
+        self.assertTrue(all(isinstance(p, InstrumentParameter) for p in parameters))
+
+        expected = [InstrumentParameter.parse(s) for s in (
+            'int pulses = 1', 'power/"MW" = 2', 'source_lambda_min/"angstrom" = 0.75',
+            'source_lambda_max/"angstrom" = 30',)]
+        self.assertEqual(len(parameters), len(expected))
+        self.assertTrue(all(x in expected for x in parameters))
+        self.assertTrue(all(x in parameters for x in expected))
+
+
     def tearDown(self):
         from shutil import rmtree
         rmtree(self.td)
