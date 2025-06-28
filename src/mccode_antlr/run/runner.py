@@ -74,9 +74,38 @@ def sort_args(args: list[str]) -> list[str]:
     return first + last
 
 
+def si_int(s: str) -> int:
+    from loguru import logger
+    suffix_value = {
+        'k': 1000, 'M': 10 ** 6, 'G': 10 ** 9, 'T': 10 ** 12, 'P': 10 ** 15,
+        'Ki': 2 ** 10, 'Mi': 2 ** 20, 'Gi': 2 ** 30, 'Ti': 2 ** 40, 'Pi': 2 ** 50
+    }
+    def int_mult(x: str, mult: int = 1):
+        return int(x) * mult if x.isnumeric() else int(float(x) * mult)
+
+    def do_parse():
+        try:
+            if suffix := next(k for k in suffix_value if s.endswith(k)):
+                return int_mult(s[:-len(suffix)].strip(),  suffix_value[suffix])
+        except StopIteration:
+            pass
+        return int_mult(s)
+    value = do_parse()
+    if value < 0:
+        logger.info('Negative value encountered')
+    elif value > 2**53:
+        logger.info(
+            'McStas/McXtrace parse integer inputs as doubles,'
+            f' this requested {value=} will not be evaluated precisely'
+            ' since it is more than 2^53'
+        )
+    return value
+
+
 def mccode_run_script_parser(prog: str):
     from argparse import ArgumentParser, BooleanOptionalAction
     from pathlib import Path
+    from mccode_antlr import __version__
 
     def resolvable(name: str):
         return None if name is None else Path(name).resolve()
@@ -86,20 +115,20 @@ def mccode_run_script_parser(prog: str):
 
     aa('filename', type=resolvable, nargs=1, help='.instr file name to be converted')
     aa('parameters', nargs='*', help='Parameters to be passed to the instrument', type=str, default=None)
+    aa('-v', '--version', action='version', version=__version__)
     aa('-o', '--output-file', type=str, help='Output filename for C runtime binary', default=None)
     aa('-d', '--directory', type=str, help='Output directory for C runtime artifacts')
     aa('-I', '--search-dir', action='append', type=resolvable, help='Extra component search directory')
     aa('-t', '--trace', action=BooleanOptionalAction, default=True, help="Enable 'trace' mode for instrument display")
-    aa('-v', '--version', action='store_true', help='Print the McCode version')
+    aa('--copyright', action='store_true', help='Print the McCode copyright statement')
     aa('--source', action=BooleanOptionalAction, default=False, help='Embed the instrument source code in the executable')
     aa('--verbose', action=BooleanOptionalAction, default=False, help='Verbose output')
-
-    aa('-n', '--ncount', nargs=1, type=int, default=None, help='Number of neutrons to simulate')
+    aa('-n', '--ncount', nargs=1, type=si_int, default=None, help='Number of neutrons to simulate')
     aa('-m', '--mesh', action='store_true', default=False, help='N-dimensional mesh scan')
     aa('-s', '--seed', nargs=1, type=int, default=None, help='Random number generator seed')
     aa('-g', '--gravitation', action='store_true', default=False,
        help='Enable gravitation for all trajectories')
-    aa('--bufsiz', nargs=1, type=int, default=None, help='Monitor_nD list/buffer-size')
+    aa('--bufsiz', nargs=1, type=si_int, default=None, help='Monitor_nD list/buffer-size')
     aa('--format', nargs=1, type=str, default=None, help='Output data files using FORMAT')
     aa('--dryrun', action='store_true', default=False,
        help='Do not run any simulations, just print the commands')
