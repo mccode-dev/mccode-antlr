@@ -62,10 +62,11 @@ class TestOrientation(TestCase):
         from mccode_antlr.instr.orientation import Matrix, Vector
         from mccode_antlr.common import Expr
         from numpy import random
+        from itertools import zip_longest
         m1 = Matrix(*[Expr.float(random.rand()) for _ in range(9)])
         m2 = Matrix(*[Expr.float(random.rand()) for _ in range(9)])
         m3 = m1 - m2
-        for one, two, three in zip(iter(m1), iter(m2), iter(m3), strict=True):
+        for one, two, three in zip_longest(iter(m1), iter(m2), iter(m3)):
             self.assertEqual(one - two, three)
         m4 = m3 - m3
         v = Vector(*[Expr.float(random.rand()) for _ in range(3)])
@@ -91,6 +92,7 @@ class TestOrientation(TestCase):
         from mccode_antlr.instr.orientation import Rotation, Angles, _rotation_angles_to_axes_coordinates
         from mccode_antlr.common import Expr
         from numpy import random, pi
+        from itertools import zip_longest
         a = Angles(*[Expr.float(random.rand() * 2 * pi - pi) for _ in range(3)])
         while a.is_null():
             a = Angles(*[Expr.float(random.rand() * 2 * pi - pi) for _ in range(3)])
@@ -99,7 +101,7 @@ class TestOrientation(TestCase):
         inv_r = r.inverse()
         one = r * inv_r
         identity = Rotation()
-        for i, j in zip(iter(one), iter(identity), strict=True):
+        for i, j in zip_longest(iter(one), iter(identity)):
             self.assertAlmostEqual(i, j)
 
         zero = r - r
@@ -416,6 +418,7 @@ class TestOrientation(TestCase):
     def test_OrientationParts_from_at_rotated(self):
         from mccode_antlr.instr.orientation import Parts, Seitz, RotationX, RotationY, RotationZ, TranslationPart, Angles
         from mccode_antlr.common import Expr
+        from itertools import zip_longest
         tx, ty, tz = _random_angles_degrees()
         rx, ry, rz = _make_seitz_list(tx, ty, tz, degrees=True)
         t = _random_vector(0.1, 1.0)
@@ -439,7 +442,7 @@ class TestOrientation(TestCase):
         self.assertEqual(full, resolved)
         full = full.seitz()
         identity = Seitz()
-        for i, j in zip(iter(full), iter(identity), strict=True):
+        for i, j in zip_longest(iter(full), iter(identity)):
             self.assertAlmostEqual(i, j)
 
     def test_DependentOrientation_no_rotations(self):
