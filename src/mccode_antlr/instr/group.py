@@ -1,4 +1,3 @@
-# from dataclasses import dataclass, field
 from msgspec import Struct, field
 from .instance import Instance
 

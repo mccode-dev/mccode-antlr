@@ -2,8 +2,8 @@
 from __future__ import annotations
 
 from io import StringIO
-# from dataclasses import dataclass, field
 from msgspec import Struct, field
+from typing import Optional
 from ..common import InstrumentParameter, MetaData, parameter_name_present, RawC, blocks_to_raw_c, Expr, Value
 from ..reader import Registry
 from .instance import Instance, DepInstance, Comp
@@ -18,8 +18,8 @@ class Instr(Struct):
     Read from a .instr file -- possibly including more .comp and .instr file sources
     For output to a runtime source file
     """
-    name: str | None = None  # Instrument name, e.g. {name}.instr (typically)
-    source: str | None = None  # Instrument *file* name
+    name: Optional[str] = None  # Instrument name, e.g. {name}.instr (typically)
+    source: Optional[str] = None  # Instrument *file* name
     parameters: tuple[InstrumentParameter, ...] = field(default_factory=tuple)  # runtime-set instrument parameters
     metadata: tuple[MetaData, ...] = field(default_factory=tuple)  # metadata for use by simulation consumers
     components: tuple[Instance, ...] = field(default_factory=tuple)  #

@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from typing import Union
+from typing import Union, Optional
 
 from enum import Enum, IntEnum
 
 from loguru import logger
 
-from dataclasses import dataclass
 from msgspec import Struct
 
 class ObjectType(Enum):
@@ -590,8 +589,8 @@ class UnaryOp(Op):
 class Value(Struct):
     _value: int | float | str | list[int] | list[float] | list[str]
     _data: DataType = DataType.undefined
-    _object: ObjectType | None = None
-    _shape: ShapeType | None = None
+    _object: Optional[ObjectType] = None
+    _shape: Optional[ShapeType] = None
 
     def __post_init__(self):
         if self._object is None:

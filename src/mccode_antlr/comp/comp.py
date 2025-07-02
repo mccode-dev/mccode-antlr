@@ -1,7 +1,7 @@
 """Data structures required for representing the contents of a McCode comp file"""
 from __future__ import annotations
 
-# from dataclasses import dataclass, field
+from typing import Optional
 from msgspec import Struct, field
 from ..common import ComponentParameter, MetaData, parameter_name_present, RawC, blocks_to_raw_c
 
@@ -14,13 +14,13 @@ class Comp(Struct):
     Read from a .comp file
     For output to a runtime source file
     """
-    name: str | None = None           # Component *type* name, e.g. {name}.comp
-    category: str | None = None       # Component type catagory -- nearly free-form
+    name: Optional[str] = None           # Component *type* name, e.g. {name}.comp
+    category: Optional[str] = None       # Component type catagory -- nearly free-form
     define: tuple[ComponentParameter, ...] = field(default_factory=tuple)   # C #define'ed parameters
     setting: tuple[ComponentParameter, ...] = field(default_factory=tuple)  # Formal 'setting' parameters
     output: tuple[ComponentParameter, ...] = field(default_factory=tuple)   # 'output' parameters
     metadata: tuple[MetaData, ...] = field(default_factory=tuple)           # metadata for use by simulation consumers
-    dependency: str | None = None     # compile-time dependency
+    dependency: Optional[str] = None     # compile-time dependency
     acc: bool = True           # False if this component *can not* work under OpenACC
     # literal strings writen into C source files
     share: tuple[RawC, ...] = field(default_factory=tuple)       # function(s) for all instances of this class

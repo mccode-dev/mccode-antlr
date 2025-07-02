@@ -1,15 +1,15 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from typing import Optional
 from msgspec import Struct
 from .utilities import escape_str_for_c
 
 # @dataclass
 class RawC(Struct):
-    filename: str | None
+    filename: Optional[str]
     line: int
     source: str
-    translated: str | None = None
+    translated: Optional[str] = None
 
     @classmethod
     def from_dict(cls, args: dict):

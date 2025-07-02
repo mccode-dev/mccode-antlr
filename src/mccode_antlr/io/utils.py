@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Union, Any, Type
+from typing import Any, Type
 import msgspec
 import numpy as np
 

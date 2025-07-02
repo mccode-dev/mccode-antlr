@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from loguru import logger
-# from dataclasses import dataclass, field
+from typing import Optional
 from msgspec import Struct, field
 from typing import TypeVar, Union, Optional
 from ..comp import Comp
@@ -25,13 +25,13 @@ class Instance(Struct):
     type: Comp
     at_relative: VectorReference
     rotate_relative: AnglesReference
-    orientation: Orient | None = None
+    orientation: Optional[Orient] = None
     parameters: tuple[ComponentParameter, ...] = field(default_factory=tuple)
     removable: bool = False
     cpu: bool = False
-    split: Expr | None = None
-    when: Expr | None = None
-    group: str | None = None
+    split: Optional[Expr] = None
+    when: Optional[Expr] = None
+    group: Optional[str] = None
     extend: tuple[RawC, ...] = field(default_factory=tuple)
     jump: tuple[Jump, ...] = field(default_factory=tuple)
     metadata: tuple[MetaData, ...] = field(default_factory=tuple)
