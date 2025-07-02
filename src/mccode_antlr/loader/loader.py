@@ -16,7 +16,7 @@ def parse_mccode_instr_parameters(contents: str):
     return visitor.visitProg(McInstr_parse(InputStream(contents), 'prog'))
 
 
-def parse_mccode_instr(contents: str, registries: list[Registry], source: str = None) -> Instr:
+def parse_mccode_instr(contents: str, registries: list[Registry], source: str | None = None) -> Instr:
     from antlr4 import InputStream
     from mccode_antlr.grammar import McInstr_parse
     from mccode_antlr.instr import InstrVisitor

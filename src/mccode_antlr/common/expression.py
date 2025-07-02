@@ -1,39 +1,12 @@
-from typing import Union
+from __future__ import annotations
 
-from enum import Enum
+from typing import Union, Optional
+
+from enum import Enum, IntEnum
+
 from loguru import logger
 
-# class NameReplacer(ast.NodeTransformer):
-#     def __init__(self, **values):
-#         self.values = values
-#
-#     def visit_Name(self, node):
-#         if node.id in self.values:
-#             return ast.Constant(self.values[node.id])
-#         return node
-#
-#
-# @dataclass
-# class Expr:
-#     expr: str = ""
-#
-#     @property
-#     def ids(self):
-#         from ast import walk, parse, Name
-#         tree = parse(self.expr)
-#         return list(set(x.id for x in walk(tree) if isinstance(x, Name)))
-#
-#     def eval(self, **values):
-#         from ast import parse, fix_missing_locations, dump, literal_eval
-#         if any(name not in values for name in self.ids):
-#             raise RuntimeError(f"Not all of {self.ids} provided as keyword=value arguments")
-#         tree = NameReplacer(**values).visit(parse(self.expr))
-#         fixed = fix_missing_locations(tree)
-#         print(eval(fixed))
-#         print(dump(fixed))
-#         obj = compile(fixed, '', 'exec')
-#         eval(obj)
-
+from msgspec import Struct
 
 class ObjectType(Enum):
     value = 1
@@ -191,10 +164,15 @@ def _fmt_comb(fmt, s: list):
     return ','.join(f'{x:{fmt}}' for x in s)
 
 
-class Op:
-    def __init__(self):
-        self.data_type = DataType.undefined
-        self.style = 'C'  # there should be a better way to do this
+class OpStyle (IntEnum):
+    C = 1
+    PYTHON = 2
+
+
+# @dataclass
+class Op(Struct):
+    data_type: DataType
+    style: OpStyle
 
     def __hash__(self):
         return hash(str(self))
@@ -244,12 +222,12 @@ class Op:
     def __add__(self, other):
         if other.is_zero:
             return self
-        return BinaryOp('+', self, other)
+        return BinaryOp(self.data_type, self.style, '+', [self], other)
 
     def __sub__(self, other):
         if other.is_zero:
             return self
-        return BinaryOp('-', self, other)
+        return BinaryOp(self.data_type, self.style, '-', [self], other)
 
     def __mul__(self, other):
         if other.is_zero:
@@ -258,7 +236,7 @@ class Op:
             return self
         if other.is_value(-1):
             return -self
-        return BinaryOp('*', self, other)
+        return BinaryOp(self.data_type, self.style, '*', [self], other)
 
     def __truediv__(self, other):
         if other.is_zero:
@@ -267,7 +245,7 @@ class Op:
             return self
         if other.is_value(-1):
             return -self
-        return BinaryOp('/', self, other)
+        return BinaryOp(self.data_type, self.style, '/', [self], other)
 
     def __floordiv__(self, other):
         if other.is_zero:
@@ -276,51 +254,42 @@ class Op:
             return self
         if other.is_value(-1):
             return -self
-        return BinaryOp('//', self, other)
+        return BinaryOp(self.data_type, self.style, '//', [self], other)
 
     def __neg__(self):
-        return UnaryOp('-', self)
+        return UnaryOp(self.data_type, self.style, '-', [self])
 
     def __pos__(self):
         return self
 
     def __abs__(self):
-        return UnaryOp('abs', self)
+        return UnaryOp(self.data_type, self.style, 'abs', [self])
 
     def as_type(self, pdt):
         raise NotImplementedError()
 
-
+# @dataclass
 class TrinaryOp(Op):
-    def __init__(self, op, first, second, third):
-        super().__init__()
-        self.op = op
-        first, second, third = [x.expr if isinstance(x, Expr) else x for x in (first, second, third)]
-        first, second, third = [[x] if not isinstance(x, list) else x for x in (first, second, third)]
-        self.first = first
-        self.second = second
-        self.third = third
-        # In C the data types for `if_true` and `if_false` in
-        #   `(logical test) ? if_true : if_false;`
-        # _must_ be the same. Python is more flexible, but we need to at least have a promotable common type
-        # for compatibility with C.
-        left_data_types = list(dict.fromkeys(x.data_type for x in second))
-        right_data_types = list(dict.fromkeys(x.data_type for x in third))
-        if len(left_data_types) != 1 or len(right_data_types) != 1:
-            raise RuntimeError('Multiple data types in one value not supported')
-        self.data_type = left_data_types[0] + right_data_types[0]
+    op: str
+    first: OpNode
+    second: OpNode
+    third: OpNode
+
+    def __post_init__(self):
+        op_post_init(self, ['first', 'second', 'third'], {})
 
     def as_type(self, pdt):
         first = [x.as_type(pdt) for x in self.first]
         second = [x.as_type(pdt) for x in self.second]
         third = [x.as_type(pdt) for x in self.third]
-        return TrinaryOp(self.op, first, second, third)
+        return TrinaryOp(self.data_type, self.style, self.op, first, second, third)
 
     def _str_repr_(self, first, second, third):
         if '__trinary__' == self.op:
-            if self.style == 'C':
+            if self.style == OpStyle.C:
                 return f'{first} ? {second} : {third}'
             return f'{second} if {first} else {third}'
+        raise ValueError('Only trinary three-argument operators are supported')
 
     def __str__(self):
         return self._str_repr_(_comb(str, self.first), _comb(str, self.second), _comb(str, self.third))
@@ -358,17 +327,17 @@ class TrinaryOp(Op):
                 return Expr(s)
             if f[0].is_value(False) and not f[0].is_value(True):
                 return Expr(t)
-        return TrinaryOp(self.op, f, s, t)
+        return TrinaryOp(self.data_type, self.style, self.op, f, s, t)
 
     def evaluate(self, known: dict):
         first, second, third = [[x.evaluate(known) for x in y] for y in (self.first, self.second, self.third)]
-        return TrinaryOp(self.op, first, second, third).simplify()
+        return TrinaryOp(self.data_type, self.style, self.op, first, second, third).simplify()
 
     def depends_on(self, name: str):
         return any(any(x.depends_on(name) for x in y) for y in (self.first, self.second, self.third))
 
     def copy(self):
-        return TrinaryOp(self.op, self.first, self.second, self.third)
+        return TrinaryOp(self.data_type, self.style, self.op, self.first, self.second, self.third)
 
     def __contains__(self, value):
         # first, second, and third are lists, so we need to check each element to avoid using __eq__
@@ -380,47 +349,34 @@ class TrinaryOp(Op):
                 x.verify_parameters(instrument_parameter_names)
 
 
+# @dataclass
 class BinaryOp(Op):
-    def __init__(self, op, left, right):
-        super().__init__()
-        if isinstance(left, Expr):
-            left = left.expr
-        if isinstance(right, Expr):
-            right = right.expr
-        if not isinstance(left, list):
-            left = [left]
-        if not isinstance(right, list):
-            right = [right]
-        self.op = op
-        self.left = left
-        self.right = right
-        if op in ('__call__', '__struct_access__', '__pointer_access__', '__getitem__'):
-            data_type = DataType.undefined
-        else:
-            left_data_types = list(dict.fromkeys(x.data_type for x in left))
-            right_data_types = list(dict.fromkeys(x.data_type for x in right))
-            if len(left_data_types) != 1 or len(right_data_types) != 1:
-                raise RuntimeError('Multiple data types in one value not supported')
-            data_type = left_data_types[0] + right_data_types[0]
-        self.data_type = data_type
-        self.style = 'C'  # there should be a better way to do this
+    op: str
+    left: OpNode
+    right: OpNode
+
+    def __post_init__(self):
+        special = {k: DataType.undefined for k in (
+            '__call__', '__struct_access__', '__pointer_access__', '__getitem__')}
+        op_post_init(self, ['left', 'right'], special)
 
     def as_type(self, pdt):
         left = [x.as_type(pdt) for x in self.left]
         right = [x.as_type(pdt) for x in self.right]
-        return BinaryOp(self.op, left, right)
+        return BinaryOp(self.data_type, self.style, self.op, left, right)
 
     def _str_repr_(self, lstr, rstr):
+        c_style = self.style == OpStyle.C
         if '__call__' == self.op:
             return f'{lstr}({rstr})'
         if '__struct_access__' == self.op:
-            return f'{lstr}.{rstr}' if 'C' == self.style else f'getattr({lstr}, "{rstr}")'
+            return f'{lstr}.{rstr}' if c_style else f'getattr({lstr}, "{rstr}")'
         if '__pointer_access__' == self.op:
-            return f'{lstr}->{rstr}' if 'C' == self.style else f'getattr({lstr}, "{rstr}")'
+            return f'{lstr}->{rstr}' if c_style else f'getattr({lstr}, "{rstr}")'
         if '__getitem__' == self.op:
             return f'{lstr}[{rstr}]'
         if '__pow__' == self.op:
-            return f'{lstr}^{rstr}' if 'C' == self.style else f'{lstr}**{rstr}'
+            return f'{lstr}^{rstr}' if c_style else f'{lstr}**{rstr}'
         if '__lt__' == self.op:
             return f'{lstr}<{rstr}'
         if '__gt__' == self.op:
@@ -434,12 +390,12 @@ class BinaryOp(Op):
         if '__eq__' == self.op:
             return f'{lstr}=={rstr}'
         if '__or__' == self.op:
-            return f'{lstr} || {rstr}' if 'C' == self.style else f'{lstr} or {rstr}'
+            return f'{lstr} || {rstr}' if c_style else f'{lstr} or {rstr}'
         if '__and__' == self.op:
-            return f'{lstr} && {rstr}' if 'C' == self.style else f'{lstr} and {rstr}'
+            return f'{lstr} && {rstr}' if c_style else f'{lstr} and {rstr}'
         if any(x == self.op for x in ('+', '-', '%', '<<', '>>')):
             return f'({lstr} {self.op} {rstr})'
-        if self.op == '//' and 'C' == self.style:
+        if self.op == '//' and c_style:
             # Verify that the operands are integers before reducing to a single slash?
             return f'{lstr} / {rstr}'
         if any(x in self.op for x in '*/'):
@@ -467,7 +423,7 @@ class BinaryOp(Op):
         return self.left == other.left and self.right == other.right
 
     def __round__(self, n=None):
-        return self if self.data_type.is_int else UnaryOp('round', self)
+        return self if self.data_type.is_int else UnaryOp(self.data_type, self.style, 'round', [self])
 
     @property
     def is_scalar(self):
@@ -512,17 +468,17 @@ class BinaryOp(Op):
             if self.op == '/':
                 return left[0] / right[0]
         # punt!
-        return BinaryOp(self.op, left, right)
+        return BinaryOp(self.data_type, self.style, self.op, left, right)
 
     def evaluate(self, known: dict):
         left, right = [[x.evaluate(known) for x in y] for y in (self.left, self.right)]
-        return BinaryOp(self.op, left, right).simplify()
+        return BinaryOp(self.data_type, self.style, self.op, left, right).simplify()
 
     def depends_on(self, name: str):
         return any(any(x.depends_on(name) for x in y) for y in (self.left, self.right))
 
     def copy(self):
-        return BinaryOp(self.op, self.left.copy(), self.right.copy())
+        return BinaryOp(self.data_type, self.style, self.op, self.left.copy(), self.right.copy())
 
     def __contains__(self, value):
         # left and right are lists, so we need to check each element to avoid using __eq__
@@ -534,30 +490,24 @@ class BinaryOp(Op):
                 x.verify_parameters(instrument_parameter_names)
 
 
+# @dataclass
 class UnaryOp(Op):
-    def __init__(self, op, value):
-        super().__init__()
-        if isinstance(value, Expr):
-            value = value.expr
-        if not isinstance(value, list):
-            value = [value]
-        self.op = op
-        self.value = value
-        data_types = list(dict.fromkeys(x.data_type for x in value))
-        if len(data_types) != 1:
-            raise RuntimeError('Multiple data types in one value not supported')
-        self.data_type = data_types[0]
-        self.style = 'C'  # there should be a better way to do this
+    op: str
+    value: OpNode
+
+    def __post_init__(self):
+        op_post_init(self, ['value'], {})
 
     def as_type(self, pdt):
         value = [x.as_type(pdt) for x in self.value]
         return UnaryOp(self.op, value)
 
     def _str_repr_(self, vstr):
+        c_style = self.style == OpStyle.C
         if '__group__' == self.op:
             return f'({vstr})'
         if '__not__' == self.op:
-            return f'!{vstr}' if 'C' == self.style else f'not {vstr}'
+            return f'!{vstr}' if c_style else f'not {vstr}'
         if any(x in self.op for x in '+-'):
             return f'{self.op}{vstr}'
         return f'{self.op}({vstr})'
@@ -575,13 +525,13 @@ class UnaryOp(Op):
         if self.op == '-':
             # Avoid returning a list unless we need to
             return self.value if len(self.value) != 1 else self.value[0]
-        return UnaryOp('-', self)
+        return UnaryOp(self.data_type, self.style, '-', [self])
 
     def __abs__(self):
         if self.op == 'abs':
             # abs(abs(x)) is abs(x)
             return self
-        return UnaryOp('abs', self)
+        return UnaryOp(self.data_type, self.style, 'abs', [self])
 
     def __eq__(self, other):
         if not isinstance(other, UnaryOp):
@@ -589,7 +539,7 @@ class UnaryOp(Op):
         return self.op == other.op and self.value == other.value
 
     def __round__(self, n=None):
-        return self if self.data_type.is_int else UnaryOp('round', self)
+        return self if self.data_type.is_int else UnaryOp(self.data_type, self.style, 'round', [self])
 
     @property
     def is_scalar(self):
@@ -614,17 +564,17 @@ class UnaryOp(Op):
         value = [v.simplify() for v in self.value]
         if self.op == '__group__' and len(value) == 1 and isinstance(value[0], Value):
             return value[0]  # Expr(value)
-        return UnaryOp(self.op, value)
+        return UnaryOp(self.data_type, self.style, self.op, value)
 
     def evaluate(self, known: dict):
         value = [x.evaluate(known) for x in self.value]
-        return UnaryOp(self.op, value).simplify()
+        return UnaryOp(self.data_type, self.style, self.op, value).simplify()
 
     def depends_on(self, name: str):
         return any(x.depends_on(name) for x in self.value)
 
     def copy(self):
-        return UnaryOp(self.op, self.value.copy())
+        return UnaryOp(self.data_type, self.style, self.op, [v.copy() for v in self.value])
 
     def __contains__(self, value):
         # value is a list
@@ -635,18 +585,18 @@ class UnaryOp(Op):
             x.verify_parameters(instrument_parameter_names)
 
 
-class Value:
-    def __init__(self, value, data_type=None, object_type=None, shape_type=None):
-        self._value = value
-        if data_type is None or not isinstance(data_type, DataType):
-            data_type = DataType.undefined
-        if object_type is None or not isinstance(object_type, ObjectType):
-            object_type = ObjectType.identifier if data_type != DataType.str and isinstance(value, str) else ObjectType.value
-        if shape_type is None or not isinstance(shape_type, ShapeType):
-            shape_type = ShapeType.vector if not isinstance(value, str) and hasattr(value, '__len__') else ShapeType.scalar
-        self._object = object_type
-        self._data = data_type
-        self._shape = shape_type
+# @dataclass
+class Value(Struct):
+    _value: int | float | str | list[int] | list[float] | list[str]
+    _data: DataType = DataType.undefined
+    _object: Optional[ObjectType] = None
+    _shape: Optional[ShapeType] = None
+
+    def __post_init__(self):
+        if self._object is None:
+            self._object = ObjectType.identifier if self._data != DataType.str and isinstance(self._value, str) else ObjectType.value
+        if self._shape is None:
+            self._shape = ShapeType.vector if not isinstance(self._value, str) and hasattr(self._value, '__len__') else ShapeType.scalar
 
     def __int__(self):
         if self.data_type != DataType.int:
@@ -687,7 +637,7 @@ class Value:
     @value.setter
     def value(self, value):
         logger.debug(f'Updating Value from {self._value} to {value}')
-        self._object = self.data_type != DataType.str and isinstance(value, str)
+        # self._object = self.data_type != DataType.str and isinstance(value, str)
         self._value = value
 
     @data_type.setter
@@ -760,12 +710,12 @@ class Value:
         return cls(value, DataType.undefined, ObjectType.identifier, ShapeType.scalar)
 
     @classmethod
-    def array(cls, value, dt=None):
-        return cls(value, data_type=dt, object_type=None, shape_type=ShapeType.vector)
+    def array(cls, value, dt:DataType|None=None):
+        return cls(value, dt if dt is not None else DataType.undefined, None, ShapeType.vector)
 
     @classmethod
-    def function(cls, value, dt=None):
-        return cls(value, object_type=ObjectType.function)
+    def function(cls, value, dt:DataType|None=None):
+        return cls(value, dt if dt is not None else DataType.undefined, ObjectType.function)
 
     @classmethod
     def best(cls, value):
@@ -773,7 +723,7 @@ class Value:
             return cls(value, DataType.str)
         elif isinstance(value, str):
             # Any string value which is not wrapped in double quotes must(?) be an identifier
-            return cls(value, DataType.undefined, object_type=ObjectType.identifier, shape_type=ShapeType.unknown)
+            return cls(value, DataType.undefined, ObjectType.identifier, ShapeType.unknown)
         if isinstance(value, int) or (isinstance(value, float) and value.is_integer()):
             return cls(value, DataType.int)
         return cls(value, DataType.float)
@@ -834,8 +784,8 @@ class Value:
     def vector_len(self):
         return len(self.value) if self.is_vector else 1
 
-    def as_type(self, dt):
-        return Value(self.value, data_type=dt, object_type=self.object_type, shape_type=self.shape_type)
+    def as_type(self, dt: DataType):
+        return Value(self.value, dt, self.object_type, self.shape_type)
 
     def __add__(self, other):
         other = other if isinstance(other, (Value, Op)) else Value.best(other)
@@ -848,9 +798,9 @@ class Value:
         if self.is_id and (isinstance(other, Value) and not isinstance(other.value, str) and other < 0):
             return self - (-other.value)
         if other.is_op or self.is_id or other.is_id or not self.is_constant or not other.is_constant:
-            return BinaryOp('+', self, other)
+            return BinaryOp(self.data_type, OpStyle.C, '+', [self], [other])
         pdt = self.data_type + other.data_type
-        return BinaryOp('+', self, other) if pdt.is_str else Value(self.value + other.value, pdt)
+        return BinaryOp(self.data_type, OpStyle.C, '+', [self], [other]) if pdt.is_str else Value(self.value + other.value, pdt)
 
     def __sub__(self, other):
         other = other if isinstance(other, (Value, Op)) else Value.best(other)
@@ -863,9 +813,9 @@ class Value:
         if self.is_id and (isinstance(other, Value) and not isinstance(other.value, str) and other < 0):
             return self + (-other.value)
         if other.is_op or self.is_id or other.is_id or not self.is_constant or not other.is_constant:
-            return BinaryOp('-', self, other)
+            return BinaryOp(self.data_type, OpStyle.C, '-', [self], [other])
         pdt = self.data_type - other.data_type
-        return BinaryOp('-', self, other) if pdt.is_str else Value(self.value - other.value, pdt)
+        return BinaryOp(self.data_type, OpStyle.C, '-', [self], [other]) if pdt.is_str else Value(self.value - other.value, pdt)
 
     def __mul__(self, other):
         other = other if isinstance(other, (Value, Op)) else Value.best(other)
@@ -881,8 +831,8 @@ class Value:
         if other.is_value(-1):
             return (-self).as_type(pdt)
         if other.is_op or self.is_id or other.is_id:
-            return BinaryOp('*', self, other)
-        return BinaryOp('*', self, other) if pdt.is_str else Value(self.value * other.value, pdt)
+            return BinaryOp(self.data_type, OpStyle.C, '*', [self], [other])
+        return BinaryOp(self.data_type, OpStyle.C, '*', [self], [other]) if pdt.is_str else Value(self.value * other.value, pdt)
 
     def __truediv__(self, other):
         other = other if isinstance(other, (Value, Op)) else Value.best(other)
@@ -896,8 +846,8 @@ class Value:
         if other.is_zero:
             raise RuntimeError('Division by zero!')
         if other.is_op or self.is_id or other.is_id:
-            return BinaryOp('/', self, other)
-        return BinaryOp('/', self, other) if pdt.is_str else Value(self.value / other.value, pdt)
+            return BinaryOp(self.data_type, OpStyle.C, '/', [self], [other])
+        return BinaryOp(self.data_type, OpStyle.C, '/', [self], [other]) if pdt.is_str else Value(self.value / other.value, pdt)
 
     def __floordiv__(self, other):
         other = other if isinstance(other, (Value, Op)) else Value.best(other)
@@ -911,20 +861,20 @@ class Value:
         if other.is_zero:
             raise RuntimeError('Division by zero!')
         if other.is_op or self.is_id or other.is_id:
-            return BinaryOp('//', self, other)
-        return BinaryOp('//', self, other) if pdt.is_str else Value.int(self.value // other.value)
+            return BinaryOp(self.data_type, OpStyle.C, '//', [self], [other])
+        return BinaryOp(self.data_type, OpStyle.C, '//', [self], [other]) if pdt.is_str else Value.int(self.value // other.value)
 
     def __neg__(self):
-        return UnaryOp('-', self) if self.is_id or self.data_type.is_str else Value(-self.value, self.data_type)
+        return UnaryOp(self.data_type, OpStyle.C, '-', [self]) if self.is_id or self.data_type.is_str else Value(-self.value, self.data_type)
 
     def __pos__(self):
         return Value(self.value, self.data_type)
 
     def __abs__(self):
-        return UnaryOp('abs', self) if self.is_id or self.data_type.is_str else Value(abs(self.value), self.data_type)
+        return UnaryOp(self.data_type, OpStyle.C, 'abs', [self]) if self.is_id or self.data_type.is_str else Value(abs(self.value), self.data_type)
 
     def __round__(self, n=None):
-        return UnaryOp('round', self) if self.is_id or self.data_type.is_str \
+        return UnaryOp(self.data_type, OpStyle.C, 'round', [self]) if self.is_id or self.data_type.is_str \
             else Value(round(self.value, n), self.data_type)
 
     def __eq__(self, other):
@@ -936,25 +886,25 @@ class Value:
     def __lt__(self, other):
         other = other if isinstance(other, (Value, Op)) else Value.best(other)
         if self.is_id or other.is_op or other.is_id:
-            return BinaryOp('__lt__', self, other)
+            return BinaryOp(self.data_type, OpStyle.C, '__lt__', [self], [other])
         return self.value < other.value
 
     def __gt__(self, other):
         other = other if isinstance(other, (Value, Op)) else Value.best(other)
         if self.is_id or other.is_op or other.is_id:
-            return BinaryOp('__gt__', self, other)
+            return BinaryOp(self.data_type, OpStyle.C, '__gt__', [self], [other])
         return self.value > other.value
 
     def __le__(self, other):
         other = other if isinstance(other, (Value, Op)) else Value.best(other)
         if self.is_id or other.is_op or other.is_id:
-            return BinaryOp('__le__', self, other)
+            return BinaryOp(self.data_type, OpStyle.C, '__le__', [self], [other])
         return self.value <= other.value
 
     def __ge__(self, other):
         other = other if isinstance(other, (Value, Op)) else Value.best(other)
         if self.is_id or other.is_op or other.is_id:
-            return BinaryOp('__ge__', self, other)
+            return BinaryOp(self.data_type, OpStyle.C, '__ge__', [self], [other])
         return self.value >= other.value
 
     def __pow__(self, power):
@@ -963,8 +913,8 @@ class Value:
         if self.is_zero or self.is_value(1):
             return self
         if power.is_zero:
-            return Value(1, data_type=self.data_type)
-        return BinaryOp('__pow__', self, power)
+            return Value(1, self.data_type)
+        return BinaryOp(self.data_type, OpStyle.C, '__pow__', [self], [power])
 
     @property
     def mccode_c_type(self):
@@ -1017,12 +967,25 @@ class Value:
 
 
 ExprNodeSingular = Union[Value, UnaryOp, BinaryOp, TrinaryOp]
-ExprNode = Union[ExprNodeSingular, list[ExprNodeSingular]]
+ExprNodeList = list[ExprNodeSingular]
+ExprNode = Union[ExprNodeSingular, ExprNodeList]
+OpNode = list[Union[Value, UnaryOp, BinaryOp, TrinaryOp, Op]]
 
 
-class Expr:
-    def __init__(self, expr: ExprNode):
-        self.expr = expr if isinstance(expr, list) else [expr]
+# @dataclass
+class Expr(Struct):
+    expr: ExprNode
+
+    @classmethod
+    def from_dict(cls, args: dict):
+        expr = args['expr']
+        if not hasattr(expr, '__len__'):
+            expr = [expr]
+        return cls([value_or_op_from_dict(x) for x in expr])
+
+    def __post_init__(self):
+        if not isinstance(self.expr, list):
+            self.expr = [self.expr]
 
     def __str__(self):
         return ','.join(str(x) for x in self.expr)
@@ -1319,6 +1282,8 @@ class Expr:
     def shape_type(self, st):
         if len(self.expr) != 1:
             raise RuntimeError('No data type for array Expr objects')
+        if not isinstance(self.expr[0], Value):
+            raise RuntimeError('No data type for non-scalar-Value Expr objects')
         self.expr[0].shape_type = st
 
     def simplify(self):
@@ -1351,7 +1316,7 @@ def unary_expr(func, name, v):
         if v.is_str or isinstance(v.value, str):
             raise RuntimeError(f'How is a _string_ valued parameter, {v} not an identifier?')
         return Expr(Value.best(func(v.value)))
-    return Expr(UnaryOp(name, v))
+    return Expr(UnaryOp(DataType.float, OpStyle.C, name, v))
 
 
 def binary_expr(func, name, left, right):
@@ -1370,4 +1335,57 @@ def binary_expr(func, name, left, right):
             return Expr(left.value)
     if isinstance(left, Value) and isinstance(right, Value) and not left.is_id and not right.is_id:
         return Expr(Value.best(func(left.value, right.value)))
-    return Expr(BinaryOp(name, left, right))
+    return Expr(BinaryOp(DataType.float, OpStyle.C, name, left, right))
+
+
+
+def value_or_op_from_dict(args: dict):
+    # Value: _value, _data, _object, _shape,
+    if all(x in args for x in ('_value', '_data', '_object', '_shape')):
+        return Value(**args)
+    # UnaryOp, BinaryOp, TrinaryOp
+    if all(x in args for x in ('data_type', 'style', 'op')):
+        if all(x in args for x in ('value',)):
+            return UnaryOp(**args)
+        if all(x in args for x in ('left', 'right')):
+            return BinaryOp(**args)
+        if all(x in args for x in ('first', 'second', 'third')):
+            return TrinaryOp(**args)
+    print(f'{args=}')
+    raise ValueError("Not a valid expression node element")
+
+
+def op_node_from_obj(obj):
+    if not hasattr(obj, '__len__'):
+        raise ValueError('Op nodes should have length')
+    return [value_or_op_from_dict(d) for d in obj]
+
+
+def op_post_init(obj, props: list[str], special: dict):
+    for prop in props:
+        if isinstance(getattr(obj, prop), Expr):
+            setattr(obj, prop, getattr(obj, prop).expr)
+        if not isinstance(getattr(obj, prop), list):
+            setattr(obj, prop, [getattr(obj, prop)])
+
+    def data_type_set_list(i):
+        return list(dict.fromkeys(x.data_type for x in getattr(obj, props[i])))
+
+    for prop in props:
+        if any(isinstance(x, dict) for x in getattr(obj, prop)):
+            setattr(obj, prop, op_node_from_obj(getattr(obj, prop)))
+
+    if obj.op in special:
+        obj.data_type = special[obj.op]
+    else:
+        # In C the data types for `if_true` and `if_false` in
+        #   `(logical test) ? if_true : if_false;`
+        # _must_ be the same. Python is more flexible, but we need to at least have a promotable common type
+        # for compatibility with C. (the type of the logical test can differ)
+        a = data_type_set_list(-1)
+        b = data_type_set_list(-2) if len(props) > 1 else a
+        if len(a) != 1 or len(b) != 1:
+            raise RuntimeError('Multiple data types in one value not supported')
+        # datatype + datatype promotion preserves A+A=A
+        obj.data_type = a[0] + b[0]
+

@@ -6,6 +6,8 @@ from re import Pattern
 from loguru import logger
 from mccode_antlr.version import version as mccode_antlr_version
 from mccode_antlr import Flavor
+from typing import Type, Any
+from msgspec import Struct
 
 
 def ensure_regex_pattern(pattern):
@@ -304,6 +306,9 @@ class LocalRegistry(Registry):
     def __hash__(self):
         return hash(str(self))
 
+    def file_contents(self):
+        return {'name': self.name, 'root': self.root.as_posix(), 'priority': self.priority}
+
     def to_file(self, output, wrapper):
         contents = '(' + ', '.join([
             wrapper.parameter('name') + '=' + wrapper.value(self.name),
@@ -371,6 +376,30 @@ class LocalRegistry(Registry):
         if other.root != self.root:
             return False
         return True
+
+
+class SerializableRegistry(Struct):
+    registry_type: str
+    registry_data: dict[str, str]
+
+    @classmethod
+    def from_registry(cls, registry: Any):
+        return cls(str(type(registry)), registry.file_contents())
+
+    def to_registry(self) -> Any:
+        nt = {str(k): k for k in
+              (GitHubRegistry, LocalRegistry, RemoteRegistry, ModuleRemoteRegistry)}
+        return nt[self.registry_type](**self.registry_data)
+
+    @classmethod
+    def from_dict(self, args: dict):
+        name = args['registry_type']
+        nt = {str(k): k for k in (GitHubRegistry, LocalRegistry, RemoteRegistry, ModuleRemoteRegistry)}
+        if isinstance(name, str) and name in nt:
+            return nt[name](**args['registry_data'])
+        if name in nt:
+            return nt[name](**args['registry_data'])
+        raise RuntimeError(f'Unknown registry type {name}')
 
 
 class InMemoryRegistry(Registry):

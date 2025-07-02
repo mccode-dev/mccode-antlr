@@ -1,11 +1,24 @@
+from __future__ import annotations
 from pathlib import Path
-from typing import Union
+import msgspec
+from mccode_antlr.io.utils import enc_hook, dec_hook, Model, from_model
 
 
-def save_json(obj, filename: Union[str, Path]) -> None:
-    pass
+def to_json(obj) -> bytes:
+    encoder = msgspec.json.Encoder(enc_hook=enc_hook)
+    return encoder.encode(Model.from_value(obj, encoder=encoder))
 
 
-def load_json(filename: Union[str, Path]):
-    pass
+def from_json(msg: bytes):
+    decoder = msgspec.json.Decoder(dec_hook=dec_hook)
+    return from_model(decoder, msgspec.json.decode(msg, type=Model))
 
+
+def save_json(obj, filename: str | Path) -> None:
+    with open(filename, "wb") as f:
+        f.write(to_json(obj))
+
+
+def load_json(filename: str | Path):
+    with open(filename, "rb") as f:
+        return from_json(f.read())

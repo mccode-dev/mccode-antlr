@@ -5,6 +5,8 @@ from typing import Union
 from pathlib import Path
 from numpy import ndarray
 
+# TODO: Find a way to remove this ndarray dependency on numpy?
+#       As is, DatFile* is not serialized, so left as a dataclass for now.
 
 @dataclass
 class DatFileCommon:
