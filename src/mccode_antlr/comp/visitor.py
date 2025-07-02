@@ -96,7 +96,7 @@ class CompVisitor(McCompVisitor):
                 default = "NULL"
                 if ctx.Identifier(1) is not None:
                     default = str(ctx.Identifier(1))
-            value = Expr(Value(default, data_type=DataType.float, shape_type=ShapeType.vector))
+            value = Expr(Value(default, DataType.float, _shape=ShapeType.vector))
         return ComponentParameter(name=name, value=value)
 
     def visitComponentParameterSymbol(self, ctx: Parser.ComponentParameterSymbolContext):
@@ -118,7 +118,7 @@ class CompVisitor(McCompVisitor):
                 default = "NULL"
                 if ctx.Identifier(1) is not None:
                     default = str(ctx.Identifier(1))
-            value = Expr(Value(default, data_type=DataType.int, shape_type=ShapeType.vector))
+            value = Expr(Value(default, DataType.int, _shape=ShapeType.vector))
         return ComponentParameter(name=name, value=value)
 
     def visitDependency(self, ctx: Parser.DependencyContext):

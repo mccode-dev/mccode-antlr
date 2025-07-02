@@ -16,6 +16,7 @@ dependencies = [
     'confuse>=2.0.1',
     'loguru>=0.7.2',
     'gitpython>=3.1.43',
+    'msgspec>=0.19.0',
 ]
 description = "ANTLR4 grammars for McStas and McXtrace"
 readme = "README.md"

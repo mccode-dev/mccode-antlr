@@ -1,7 +1,8 @@
 from __future__ import annotations
 from pathlib import Path
 from loguru import logger
-from dataclasses import dataclass, field
+# from dataclasses import dataclass, field
+from msgspec import Struct, field
 
 from .registry import Registry, registries_match, registry_from_specification
 from ..comp import Comp
@@ -38,8 +39,8 @@ def make_reader_error_listener(super_class, filetype, name, source, pre=5, post=
     return ReaderErrorListener()
 
 
-@dataclass
-class Reader:
+# @dataclass
+class Reader(Struct):
     registries: list[Registry] = field(default_factory=list)
     components: dict[str, Comp] = field(default_factory=dict)
     c_flags: list[str] = field(default_factory=list)
@@ -145,7 +146,7 @@ class Reader:
             self.add_component(name, current_instance_name=current_instance_name)
         return self.components[name]
 
-    def get_instrument(self, name: str | Path, destination=None, mode: Mode | None = None):
+    def get_instrument(self, name: str | None | Path, destination=None, mode: Mode | None = None):
         """Load and parse an instr Instrument definition file
 
         In McCode3 fashion, the instrument file *should* be in the current working directory.
@@ -162,7 +163,11 @@ class Reader:
         else:
             path = self.locate(path.name)  # include the .instr for the search
             source = self.contents(path.name)
-        filename = str(path.resolve())
+
+        if not path.resolve().exists():
+            filename = name
+        else:
+            filename = path.resolve().as_posix()
 
         stream = InputStream(source)
         error_listener = make_reader_error_listener(

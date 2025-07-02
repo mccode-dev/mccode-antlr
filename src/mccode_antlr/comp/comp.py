@@ -1,23 +1,26 @@
 """Data structures required for representing the contents of a McCode comp file"""
-from dataclasses import dataclass, field
+from __future__ import annotations
+
+# from dataclasses import dataclass, field
+from msgspec import Struct, field
 from ..common import ComponentParameter, MetaData, parameter_name_present, RawC, blocks_to_raw_c
 
 
 # Could this be replaced by a subclassed 'name' class? E.g., Slit.comp <=> class McCompSlit(McComp)?
-@dataclass
-class Comp:
+# @dataclass
+class Comp(Struct):
     """Intermediate representation of a McCode component definition
 
     Read from a .comp file
     For output to a runtime source file
     """
-    name: str = None           # Component *type* name, e.g. {name}.comp
-    category: str = None       # Component type catagory -- nearly free-form
+    name: str | None = None           # Component *type* name, e.g. {name}.comp
+    category: str | None = None       # Component type catagory -- nearly free-form
     define: tuple[ComponentParameter, ...] = field(default_factory=tuple)   # C #define'ed parameters
     setting: tuple[ComponentParameter, ...] = field(default_factory=tuple)  # Formal 'setting' parameters
     output: tuple[ComponentParameter, ...] = field(default_factory=tuple)   # 'output' parameters
     metadata: tuple[MetaData, ...] = field(default_factory=tuple)           # metadata for use by simulation consumers
-    dependency: str = None     # compile-time dependency
+    dependency: str | None = None     # compile-time dependency
     acc: bool = True           # False if this component *can not* work under OpenACC
     # literal strings writen into C source files
     share: tuple[RawC, ...] = field(default_factory=tuple)       # function(s) for all instances of this class
@@ -28,6 +31,22 @@ class Comp:
     save: tuple[RawC, ...] = field(default_factory=tuple)        # statements executed after TRACE to save results
     final: tuple[RawC, ...] = field(default_factory=tuple)       # clean-up memory for global declare parameters
     display: tuple[RawC, ...] = field(default_factory=tuple)     # draw this component
+
+    @classmethod
+    def from_dict(cls, args: dict):
+        preq = 'acc',
+        popt = 'name', 'category', 'dependency'
+        tmreq = {'define': ComponentParameter, 'setting': ComponentParameter,
+                  'output': ComponentParameter, 'metadata': MetaData,
+                  'share': RawC, 'user': RawC, 'declare': RawC, 'initialize': RawC,
+                  'trace': RawC, 'save': RawC, 'final': RawC, 'display': RawC
+                  }
+        data = {}
+        data.update({k: args[k] for k in preq})
+        data.update({k: args[k] for k in popt if k in args})
+        data.update(
+            {k: tuple(t.from_dict(a) for a in args[k]) for k, t in tmreq.items()})
+        return cls(**data)
 
     def __hash__(self):
         return hash(repr(self))

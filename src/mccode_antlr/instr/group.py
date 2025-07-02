@@ -1,8 +1,9 @@
-from dataclasses import dataclass, field
+# from dataclasses import dataclass, field
+from msgspec import Struct, field
 from .instance import Instance
 
-@dataclass
-class Group:
+# @dataclass
+class Group(Struct):
     name: str
     index: int
     ids: list[int] = field(default_factory=list)
@@ -35,3 +36,25 @@ class Group:
 
     def copy(self):
         return Group(self.name, self.index, self.ids.copy(), self.members.copy())
+
+
+class DependentGroup(Group):
+    members: list[str] = field(default_factory=list)
+
+    @classmethod
+    def from_independent(cls, independent: Group):
+        name = independent.name
+        index = independent.index
+        ids = [x for x in independent.ids]
+        members = [x.name for x in independent.members]
+        return cls(name, index, ids, members)
+
+    @classmethod
+    def from_dict(cls, args: dict):
+        args['ids'] = [x for x in args['ids']]
+        args['members'] = [x for x in args['members']]
+        return cls(**args)
+
+    def make_independent(self, instances: tuple[Instance, ...]):
+        members = [next(i for i in instances if i.name == m) for m in self.members]
+        return Group(name=self.name, index=self.index, ids=self.ids, members=members)

@@ -65,8 +65,8 @@ class TestOrientation(TestCase):
         m1 = Matrix(*[Expr.float(random.rand()) for _ in range(9)])
         m2 = Matrix(*[Expr.float(random.rand()) for _ in range(9)])
         m3 = m1 - m2
-        for i in range(9):
-            self.assertEqual(m1[i] - m2[i], m3[i])
+        for one, two, three in zip(iter(m1), iter(m2), iter(m3), strict=True):
+            self.assertEqual(one - two, three)
         m4 = m3 - m3
         v = Vector(*[Expr.float(random.rand()) for _ in range(3)])
         self.assertTrue((m4 * v).is_null)
@@ -99,12 +99,12 @@ class TestOrientation(TestCase):
         inv_r = r.inverse()
         one = r * inv_r
         identity = Rotation()
-        for i in range(9):
-            self.assertAlmostEqual(one[i], identity[i])
+        for i, j in zip(iter(one), iter(identity), strict=True):
+            self.assertAlmostEqual(i, j)
 
         zero = r - r
-        for i in range(9):
-            self.assertEqual(zero[i], Expr.float(0))
+        for i in zero:
+            self.assertEqual(i, Expr.float(0))
 
     def test_rotation_mccode_style(self):
         from mccode_antlr.instr.orientation import Rotation, Angles, Matrix
@@ -439,8 +439,8 @@ class TestOrientation(TestCase):
         self.assertEqual(full, resolved)
         full = full.seitz()
         identity = Seitz()
-        for i in range(9):
-            self.assertAlmostEqual(full[i], identity[i])
+        for i, j in zip(iter(full), iter(identity), strict=True):
+            self.assertAlmostEqual(i, j)
 
     def test_DependentOrientation_no_rotations(self):
         from mccode_antlr.common import Expr

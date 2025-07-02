@@ -2,24 +2,24 @@
 from __future__ import annotations
 
 from io import StringIO
-from dataclasses import dataclass, field
-from typing import Union
+# from dataclasses import dataclass, field
+from msgspec import Struct, field
 from ..common import InstrumentParameter, MetaData, parameter_name_present, RawC, blocks_to_raw_c, Expr, Value
 from ..reader import Registry
-from .instance import Instance
-from .group import Group
+from .instance import Instance, DepInstance, Comp
+from .group import Group, DependentGroup
 from loguru import logger
 
 
-@dataclass
-class Instr:
+# @dataclass
+class Instr(Struct):
     """Intermediate representation of a McCode instrument
 
     Read from a .instr file -- possibly including more .comp and .instr file sources
     For output to a runtime source file
     """
-    name: str = None  # Instrument name, e.g. {name}.instr (typically)
-    source: str = None  # Instrument *file* name
+    name: str | None = None  # Instrument name, e.g. {name}.instr (typically)
+    source: str | None = None  # Instrument *file* name
     parameters: tuple[InstrumentParameter, ...] = field(default_factory=tuple)  # runtime-set instrument parameters
     metadata: tuple[MetaData, ...] = field(default_factory=tuple)  # metadata for use by simulation consumers
     components: tuple[Instance, ...] = field(default_factory=tuple)  #
@@ -32,6 +32,52 @@ class Instr:
     groups: dict[str, Group] = field(default_factory=dict)
     flags: tuple[str, ...] = field(default_factory=tuple)  # (C) flags needed for compilation of the (translated) instrument
     registries: tuple[Registry, ...] = field(default_factory=tuple)  # the registries used by the reader to populate this
+
+    @classmethod
+    def from_dict(cls, args: dict):
+        from mccode_antlr.reader.registry import SerializableRegistry as SR
+        from mccode_antlr.instr.instance import make_independent
+        popt = 'name', 'source'
+        tpreq = 'included', 'flags',
+        tmtype = {'parameters': InstrumentParameter, 'metadata': MetaData,
+                 'instances': DepInstance, 'user': RawC, 'declare': RawC,
+                  'initialize': RawC, 'save': RawC, 'final': RawC, 'registries': SR
+                 }
+        dtype = {'components': Comp, 'groups': DependentGroup}
+
+        data = {}
+        data.update({k: args[k] for k in popt if k in args})
+        data.update({k: tuple(a for a in args[k]) for k in tpreq})
+        data.update({k: tuple(t.from_dict(a) for a in args[k]) for k, t in tmtype.items()})
+        data.update({k: {n: t.from_dict(v) for n, v in args[k].items()} for k, t in dtype.items()})
+
+        instances = data.pop('instances')
+        components = data.pop('components')
+        data['components'] = make_independent(instances, components)
+        data['groups'] = {k: v.make_independent(data['components']) for k, v in data['groups'].items()}
+        return cls(**data)
+
+    def to_dict(self):
+        from msgspec.structs import fields
+        from mccode_antlr.reader.registry import SerializableRegistry as SR
+        data = {k.name: getattr(self, k.name) for k in fields(self)}
+        instances = tuple(DepInstance.from_independent(inst) for inst in self.components)
+        components = {inst.type.name: inst.type for inst in self.components}
+
+        data['registries'] = [SR.from_registry(r) for r in self.registries]
+        data['instances'] = instances
+        data['components'] = components
+        data['groups'] = {k: DependentGroup.from_independent(v) for k, v in self.groups.items()}
+        return data
+
+    def __eq__(self, other):
+        if not isinstance(other, Instr):
+            return NotImplemented
+        from msgspec.structs import fields
+        for name in [f.name for f in fields(self)]:
+            if getattr(self, name) != getattr(other, name):
+                return False
+        return True
 
     def to_file(self, output=None, wrapper=None):
         if output is None:
@@ -407,7 +453,7 @@ class Instr:
         if filename[0] != '"' or filename[-1] != '"':
             filename = '"' + filename + '"'
 
-        filename_parameter = ComponentParameter('filename', Expr(Value('mcpl_filename', object_type=ObjectType.parameter)))
+        filename_parameter = ComponentParameter('filename', Expr(Value('mcpl_filename', _object=ObjectType.parameter)))
         first, second = self.split(after, remove_unused_parameters=remove_unused_parameters)
         mcpl_filename = InstrumentParameter.parse(f'string mcpl_filename = {filename}')
         first.add_parameter(mcpl_filename)

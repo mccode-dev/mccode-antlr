@@ -1,13 +1,19 @@
 from dataclasses import dataclass
+from msgspec import Struct
 from typing import Union
 from .expression import Expr
 
 
-@dataclass
-class InstrumentParameter:
+# @dataclass
+class InstrumentParameter(Struct):
     name: str
     unit: str
     value: Expr
+
+    @classmethod
+    def from_dict(cls, args: dict):
+        args['value'] = Expr.from_dict(args['value'])
+        return cls(**args)
 
     def to_file(self, output, wrapper):
         from .expression import DataType
@@ -48,10 +54,15 @@ class InstrumentParameter:
         return InstrumentParameter(self.name, self.unit, self.value.copy())
 
 
-@dataclass
-class ComponentParameter:
+# @dataclass
+class ComponentParameter(Struct):
     name: str
     value: Expr
+
+    @classmethod
+    def from_dict(cls, args: dict):
+        args['value'] = Expr.from_dict(args['value'])
+        return cls(**args)
 
     def to_string(self, wrapper):
         from io import StringIO

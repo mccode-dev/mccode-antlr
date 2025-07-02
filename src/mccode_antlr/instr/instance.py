@@ -1,6 +1,9 @@
+from __future__ import annotations
+
 from loguru import logger
-from dataclasses import dataclass, field
-from typing import TypeVar, Union
+# from dataclasses import dataclass, field
+from msgspec import Struct, field
+from typing import TypeVar, Union, Optional
 from ..comp import Comp
 from ..common import Expr, Value, Mode
 from ..common import InstrumentParameter, ComponentParameter, MetaData, parameter_name_present, RawC, blocks_to_raw_c
@@ -8,11 +11,11 @@ from .orientation import Orient, Vector, Angles
 from .jump import Jump
 
 InstanceReference = TypeVar('InstanceReference', bound='Instance')
-VectorReference = tuple[Vector, InstanceReference]
-AnglesReference = tuple[Angles, InstanceReference]
+VectorReference = tuple[Vector, Optional[InstanceReference]]
+AnglesReference = tuple[Angles, Optional[InstanceReference]]
 
-@dataclass
-class Instance:
+# @dataclass
+class Instance(Struct):
     """Intermediate representation of a McCode component instance
 
     Read from a .instr file TRACE section, using one or more .comp sources
@@ -22,17 +25,26 @@ class Instance:
     type: Comp
     at_relative: VectorReference
     rotate_relative: AnglesReference
-    orientation: Orient = None
+    orientation: Orient | None = None
     parameters: tuple[ComponentParameter, ...] = field(default_factory=tuple)
     removable: bool = False
     cpu: bool = False
-    split: Expr = None
-    when: Expr = None
-    group: str = None
+    split: Expr | None = None
+    when: Expr | None = None
+    group: str | None = None
     extend: tuple[RawC, ...] = field(default_factory=tuple)
     jump: tuple[Jump, ...] = field(default_factory=tuple)
     metadata: tuple[MetaData, ...] = field(default_factory=tuple)
     mode: Mode = Mode.normal
+
+    def __eq__(self, other: Instance) -> bool:
+        if not isinstance(other, Instance):
+            return NotImplemented
+        from msgspec.structs import fields
+        for name in [field.name for field in fields(self)]:
+            if getattr(self, name) != getattr(other, name):
+                return False
+        return True
 
     def __repr__(self):
         return f'Instance({self.name}, {self.type.name})'
@@ -134,13 +146,13 @@ class Instance:
 
         if p.value.is_vector and isinstance(value, str):
             # FIXME can this be more general? Do we _need_ to treat vectors differently?
-            value = Expr(Value(value, data_type=p.value.data_type, shape_type=p.value.shape_type))
+            value = Expr(Value(value, p.value.data_type, _shape=p.value.shape_type))
         elif isinstance(value, str):
             value = Expr.parse(value)
         elif not isinstance(value, Expr):
             # Copy the data_type of the component definition parameter
             # -- thus if value is a str but an int or float is expected, we will know it is an identifier
-            value = Expr(Value(value, data_type=p.value.data_type))
+            value = Expr(Value(value, p.value.data_type))
 
         # 2023-09-14 This did nothing. Why was this here?
         # # is this parameter value *actually* an instrument parameter *name*
@@ -253,3 +265,67 @@ def _triplet_ref_str(which, tr: Union[VectorReference, AnglesReference], absolut
     if pos.is_null() and ref is None and not required:
         return ''
     return f'{which} {pos} {absolute if ref is None else f"{relative} {ref.name}"}'
+
+
+class DepInstance(Instance):
+    at_relative: tuple[Vector, str]
+    rotate_relative: tuple[Angles, str]
+    type: str
+
+    def __post_init__(self):
+        """Only created from exising/partial instances, so don't do post-init"""
+        pass
+
+    @classmethod
+    def from_independent(cls, independent: Instance):
+        from msgspec.structs import fields
+        to_copy = {k.name for k in fields(cls) if k.name != 'type'}
+        data = {k: getattr(independent, k) for k in to_copy}
+        data['type'] = independent.type.name
+
+        def a_b(w):
+            a, b = w
+            return a, b.name if b is not None else None
+
+        data['at_relative'] = a_b(independent.at_relative)
+        data['rotate_relative'] = a_b(independent.rotate_relative)
+        return cls(**data)
+
+    @classmethod
+    def from_dict(cls, args: dict):
+        preq = 'name', 'type', 'removable', 'cpu',
+        popt = 'group',
+        mreq = {'mode': Mode}
+        tmreq = {'parameters': ComponentParameter, 'extend': RawC, 'jump': Jump,
+                 'metadata': MetaData}
+        mopt = {'split': Expr, 'when': Expr, 'orientation': Orient, }
+        data = {k: args[k] for k in preq}
+        data.update({k: args[k] for k in popt})
+        data.update({k: t(args[k]) for k, t in mreq.items()})
+        data.update({k: t.from_dict(args[k]) for k, t in mopt.items() if k in args and args[k]})
+        data.update({k: tuple(t.from_dict(a) for a in args[k]) for k, t in tmreq.items()})
+
+        vector, ar_name = args['at_relative']
+        angles, rr_name = args['rotate_relative']
+        vectors = Vector.from_dict(vector)
+        angles = Angles.from_dict(angles)
+        data['at_relative'] = (vectors, ar_name)
+        data['rotate_relative'] = angles, rr_name
+        return cls(**data)
+
+    def make_independent(self, components: dict[str, Comp]):
+        from msgspec.structs import fields
+        data = {k.name: getattr(self, k.name) for k in fields(self)}
+        data['type'] = components[self.type]
+        return Instance(**data)
+
+def make_independent(dependents: tuple[DepInstance, ...], components: dict[str, Comp]):
+    independents = [d.make_independent(components) for d in dependents]
+    # hopefully 'orientation' was set so no check was made against the relative instances
+    names = tuple(i.name for i in independents)
+    for d, t in zip(dependents, independents):
+        if d.at_relative[1] in names:
+            t.at_relative = t.at_relative[0], next(i for i in independents if i.name == d.at_relative[1])
+        if d.rotate_relative[1] in names:
+            t.rotate_relative = t.rotate_relative[0], next(i for i in independents if i.name == d.rotate_relative[1])
+    return tuple(independents)

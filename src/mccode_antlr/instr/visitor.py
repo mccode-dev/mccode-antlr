@@ -183,7 +183,7 @@ class InstrVisitor(McInstrVisitor):
         default = self.current_comp.get_parameter(name)
         if default is None:
             raise RuntimeError(f'{name} is not a known DEFINITION or SETTING parameter for {self.current_comp.name}')
-        if DataType.undefined == value.data_type:
+        if not value.is_op and DataType.undefined == value.data_type:
             value.data_type = default.value.data_type
             value.shape_type = default.value.shape_type
         return name, value

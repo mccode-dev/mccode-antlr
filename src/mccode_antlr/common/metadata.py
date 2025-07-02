@@ -1,16 +1,21 @@
 from dataclasses import dataclass
+from msgspec import Struct
 from enum import Enum
 
-
-class DataSource:
+# @dataclass
+class DataSource(Struct):
     class Type(Enum):
         Component = 1
         Instance = 2
         Instrument = 3
 
-    def __init__(self, source_type: Type, name: str):
-        self._type = source_type
-        self._name = name
+    _type : Type
+    _name : str
+
+    @classmethod
+    def from_dict(cls, args: dict):
+        args['_type'] = DataSource.Type(args['_type'])
+        return cls(**args)
 
     @property
     def name(self):
@@ -32,12 +37,17 @@ class DataSource:
         return DataSource(DataSource.Type[type_name], name)
 
 
-@dataclass
-class MetaData:
+# @dataclass
+class MetaData(Struct):
     source: DataSource
     name: str
     mimetype: str
     value: str
+
+    @classmethod
+    def from_dict(cls, args: dict):
+        args['source'] = DataSource.from_dict(args['source'])
+        return cls(**args)
 
     def to_file(self, output, wrapper):
         print(wrapper.metadata_group('METADATA', self.mimetype, self.name, self.value), file=output)

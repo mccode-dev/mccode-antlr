@@ -27,7 +27,7 @@ class TestInstrEmptyTrace(TestCase):
             self.assertTrue(isinstance(p, InstrumentParameter))
             self.assertEqual(p.name, f'par{i}')
             self.assertTrue(isinstance(p.value, Expr))
-            self.assertEqual(p.value, Value(val, data_type=DataType.from_name(d_type)))
+            self.assertEqual(p.value, Value(val, DataType.from_name(d_type)))
 
     def test_assemble_empty_trace(self):
         from mccode_antlr.instr import Instr
@@ -63,4 +63,4 @@ class TestInstrEmptyTrace(TestCase):
             self.assertTrue(isinstance(par, InstrumentParameter))
             self.assertEqual(par.name, f'par{i}')
             self.assertTrue(isinstance(par.value, Expr))
-            self.assertEqual(par.value, Value(val, data_type=DataType.from_name(d_type)))
+            self.assertEqual(par.value, Value(val, DataType.from_name(d_type)))

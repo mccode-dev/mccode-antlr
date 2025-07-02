@@ -1,6 +1,7 @@
-from dataclasses import dataclass, field
+# from dataclasses import dataclass, field
+from msgspec import Struct, field
 from ..common import Expr, unary_expr, binary_expr
-from typing import TypeVar, NamedTuple, Union
+from typing import TypeVar,Union
 from loguru import logger
 
 VectorType = TypeVar('VectorType', bound='Vector')
@@ -10,23 +11,37 @@ RotationType = TypeVar('RotationType', bound='Rotation')
 SeitzType = TypeVar('SeitzType', bound='Seitz')
 
 
-class Matrix(NamedTuple):
+
+# @dataclass
+class Matrix(Struct):
     """Any 3D matrix, not necessarily a rotation matrix"""
-    xx: Expr = Expr.float(0)
-    xy: Expr = Expr.float(0)
-    xz: Expr = Expr.float(0)
-    yx: Expr = Expr.float(0)
-    yy: Expr = Expr.float(0)
-    yz: Expr = Expr.float(0)
-    zx: Expr = Expr.float(0)
-    zy: Expr = Expr.float(0)
-    zz: Expr = Expr.float(0)
+    xx: Expr = field(default_factory=lambda: Expr.float(0))
+    xy: Expr = field(default_factory=lambda: Expr.float(0))
+    xz: Expr = field(default_factory=lambda: Expr.float(0))
+    yx: Expr = field(default_factory=lambda: Expr.float(0))
+    yy: Expr = field(default_factory=lambda: Expr.float(0))
+    yz: Expr = field(default_factory=lambda: Expr.float(0))
+    zx: Expr = field(default_factory=lambda: Expr.float(0))
+    zy: Expr = field(default_factory=lambda: Expr.float(0))
+    zz: Expr = field(default_factory=lambda: Expr.float(0))
+
+    @classmethod
+    def from_dict(cls, args: dict):
+        from msgspec.structs import fields
+        for name in [f.name for f in fields(cls)]:
+            args[name] = Expr.from_dict(args[name])
+        return cls(**args)
 
     @classmethod
     def eye(cls):
         o = Expr.float(1)
         z = Expr.float(0)
         return cls(o, z, z, z, o, z, z, z, o)
+
+    def __iter__(self):
+        for x in (self.xx, self.xy, self.xz, self.yx, self.yy, self.yz, self.zx, self.zy, self.zz):
+            yield x
+
 
     def __str__(self):
         x = [f'{x}' for x in (self.xx, self.xy, self.xz, self.yx, self.yy, self.yz, self.zx, self.zy, self.zz)]
@@ -87,10 +102,22 @@ class Matrix(NamedTuple):
                       round(self.zx, n), round(self.zy, n), round(self.zz, n))
 
 
-class Vector(NamedTuple):
-    x: Expr = Expr.float(0)
-    y: Expr = Expr.float(0)
-    z: Expr = Expr.float(0)
+# @dataclass
+class Vector(Struct):
+    x: Expr = field(default_factory=lambda: Expr.float(0))
+    y: Expr = field(default_factory=lambda: Expr.float(0))
+    z: Expr = field(default_factory=lambda: Expr.float(0))
+
+    @classmethod
+    def from_dict(cls, args: dict):
+        from msgspec.structs import fields
+        for name in [f.name for f in fields(cls)]:
+            args[name] = Expr.from_dict(args[name])
+        return cls(**args)
+
+    def __iter__(self):
+        for v in (self.x, self.y, self.z):
+            yield v
 
     def __mul__(self, other: Union[MatrixType, RotationType, Expr]) -> VectorType:
         if isinstance(other, Expr):
@@ -133,10 +160,22 @@ class Vector(NamedTuple):
         return any(value in x for x in (self.x, self.y, self.z))
 
 
-class Angles(NamedTuple):
-    x: Expr = Expr.float(0)
-    y: Expr = Expr.float(0)
-    z: Expr = Expr.float(0)
+# @dataclass
+class Angles(Struct):
+    x: Expr = field(default_factory=lambda: Expr.float(0))
+    y: Expr = field(default_factory=lambda: Expr.float(0))
+    z: Expr = field(default_factory=lambda: Expr.float(0))
+
+    @classmethod
+    def from_dict(cls, args: dict):
+        from msgspec.structs import fields
+        for name in [f.name for f in fields(cls)]:
+            args[name] = Expr.from_dict(args[name])
+        return cls(**args)
+
+    def __iter__(self):
+        for a in (self.x, self.y, self.z):
+            yield a
 
     def __mul__(self, other: Expr) -> AnglesType:
         return Angles(self.x * other, self.y * other, self.z * other)
@@ -157,22 +196,35 @@ class Angles(NamedTuple):
         return any(value in x for x in (self.x, self.y, self.z))
 
 
-class Rotation(NamedTuple):
+# @dataclass
+class Rotation(Struct):
     """A _valid_ 3-D rotation matrix flattened in row-order.
 
     Note:
         To be valid, the Rotation must have an inverse which is its (conjugate) transpose.
         This is equivalent to the matrix being Orthogonal (or Unitary, if complex-valued)
     """
-    xx: Expr = Expr.float(1)
-    xy: Expr = Expr.float(0)
-    xz: Expr = Expr.float(0)
-    yx: Expr = Expr.float(0)
-    yy: Expr = Expr.float(1)
-    yz: Expr = Expr.float(0)
-    zx: Expr = Expr.float(0)
-    zy: Expr = Expr.float(0)
-    zz: Expr = Expr.float(1)
+    xx: Expr = field(default_factory=lambda: Expr.float(1))
+    xy: Expr = field(default_factory=lambda: Expr.float(0))
+    xz: Expr = field(default_factory=lambda: Expr.float(0))
+    yx: Expr = field(default_factory=lambda: Expr.float(0))
+    yy: Expr = field(default_factory=lambda: Expr.float(1))
+    yz: Expr = field(default_factory=lambda: Expr.float(0))
+    zx: Expr = field(default_factory=lambda: Expr.float(0))
+    zy: Expr = field(default_factory=lambda: Expr.float(0))
+    zz: Expr = field(default_factory=lambda: Expr.float(1))
+
+    @classmethod
+    def from_dict(cls, args: dict):
+        from msgspec.structs import fields
+        for name in [f.name for f in fields(cls)]:
+            args[name] = Expr.from_dict(args[name])
+        return cls(**args)
+
+    def __iter__(self):
+        for x in (self.xx, self.xy, self.xz, self.yx, self.yy, self.yz, self.zx,
+                  self.zy, self.zz):
+            yield x
 
     def __str__(self):
         return f'[({self.xx}, {self.xy}, {self.xz})({self.yx}, {self.yy}, {self.yz})({self.zx}, {self.zy}, {self.zz})]'
@@ -225,19 +277,27 @@ class Rotation(NamedTuple):
         return any(value in x for x in (self.xx, self.xy, self.xz, self.yx, self.yy, self.yz, self.zx, self.zy, self.zz))
 
 
-class Seitz(NamedTuple):
-    xx: Expr = Expr.float(1)
-    xy: Expr = Expr.float(0)
-    xz: Expr = Expr.float(0)
-    xt: Expr = Expr.float(0)
-    yx: Expr = Expr.float(0)
-    yy: Expr = Expr.float(1)
-    yz: Expr = Expr.float(0)
-    yt: Expr = Expr.float(0)
-    zx: Expr = Expr.float(0)
-    zy: Expr = Expr.float(0)
-    zz: Expr = Expr.float(1)
-    zt: Expr = Expr.float(0)
+# @dataclass
+class Seitz(Struct):
+    xx: Expr = field(default_factory=lambda: Expr.float(1))
+    xy: Expr = field(default_factory=lambda: Expr.float(0))
+    xz: Expr = field(default_factory=lambda: Expr.float(0))
+    xt: Expr = field(default_factory=lambda: Expr.float(0))
+    yx: Expr = field(default_factory=lambda: Expr.float(0))
+    yy: Expr = field(default_factory=lambda: Expr.float(1))
+    yz: Expr = field(default_factory=lambda: Expr.float(0))
+    yt: Expr = field(default_factory=lambda: Expr.float(0))
+    zx: Expr = field(default_factory=lambda: Expr.float(0))
+    zy: Expr = field(default_factory=lambda: Expr.float(0))
+    zz: Expr = field(default_factory=lambda: Expr.float(1))
+    zt: Expr = field(default_factory=lambda: Expr.float(0))
+
+    @classmethod
+    def from_dict(cls, args: dict):
+        from msgspec.structs import fields
+        for name in [f.name for f in fields(cls)]:
+            args[name] = Expr.from_dict(args[name])
+        return cls(**args)
 
     @classmethod
     def from_rotation(cls, rotation: Rotation):
@@ -253,6 +313,11 @@ class Seitz(NamedTuple):
 
     def __str__(self):
         return f'[{str(self.rotation())}|{str(self.vector())}]'
+
+    def __iter__(self):
+        for s in (self.xx, self.xy, self.xz, self.xt, self.yx, self.yy, self.yz, self.yt,
+                self.zx, self.zy, self.zz, self.zt):
+            yield s
 
     def rotation(self) -> Rotation:
         return Rotation(self.xx, self.xy, self.xz, self.yx, self.yy, self.yz, self.zx, self.zy, self.zz)
@@ -373,7 +438,8 @@ def atan2_value(va: Expr, vb: Expr, degrees=True):
 
 
 def cos_from_sin_value(v: Expr):
-    from ..common import UnaryOp
+    from ..common import UnaryOp, DataType
+    from ..common.expression import OpStyle
     if v.is_value(0):
         return Expr.float(1)
     if v.is_value(1):
@@ -382,7 +448,7 @@ def cos_from_sin_value(v: Expr):
         if '-' == v.expr[0].op:
             return cos_from_sin_value(Expr(v.expr[0].value))
         if 'sin' == v.expr[0].op:
-            return Expr(UnaryOp('cos', v.expr[0].value))
+            return Expr(UnaryOp(DataType.undefined, OpStyle.C, 'cos', v.expr[0].value))
     return sqrt_value(Expr.float(1) - v * v)
 
 
@@ -430,10 +496,14 @@ def axes_euler_angles(m: Rotation, degrees) -> Angles:
 OrientationPartType = TypeVar('OrientationPartType', bound='OrientationPart')
 
 
-@dataclass
-class Part:
+# @dataclass
+class Part(Struct):
     """The Seitz matrix part of any arbitrary projective affine transformation"""
     _axes: Seitz = field(default_factory=lambda: Seitz())
+
+    @classmethod
+    def from_dict(cls, args: dict):
+        return cls(Seitz.from_dict(args['_axes']))
 
     def __post_init__(self):
         """If this is not defined, the subclass' __post_init__ may not be called"""
@@ -442,7 +512,7 @@ class Part:
 
     @property
     def is_translation(self):
-        return any(not p.is_zero for p in (self._axes[3], self._axes[7], self._axes[11]))
+        return any(not p.is_zero for p in (self._axes.xt, self._axes.yt, self._axes.zt))
 
     @property
     def is_rotation(self):
@@ -487,7 +557,10 @@ class Part:
         a = axis.cross_matrix()
         r = Matrix.eye() + a * sin_value(angle, True) + (a * a) * (Expr.float(1) - cos_value(angle, True))
         # and flip the sign of angle if not:
-        return axis, -angle if any(flat[index] * r[index] < Expr.float(0) for index in range(9)) else angle, 'degrees'
+        fr = (flat.xx * r.xx, flat.xy * r.xy, flat.xz * r.xz,
+              flat.yx * r.yx, flat.yy * r.yy, flat.yz * r.yz,
+              flat.zx * r.zx, flat.zy * r.zy, flat.zz * r.zz, )
+        return axis, -angle if any(q < Expr.float(0) for q in fr) else angle, 'degrees'
 
     def __str__(self):
         x = [f'{x}' for x in self._axes]
@@ -557,20 +630,24 @@ class Part:
         return value in self._axes
 
 
-@dataclass
+# @dataclass
 class TranslationPart(Part):
     """A specialization to the translation-only part of a projective affine transformation"""
     v: Vector = field(default_factory=lambda: Vector())
 
+    @classmethod
+    def from_dict(cls, args: dict):
+        return cls(Vector.from_dict(args['v']))
+
     def __str__(self):
-        return f'({self.v[0]}, {self.v[1]}, {self.v[2]}) [0, 0, 0]'
+        return f'({self.v.x}, {self.v.y}, {self.v.z}) [0, 0, 0]'
 
     def __repr__(self):
         return f'{self.__class__.__name__}({self.v})'
 
     @property
     def is_constant(self):
-        return all(x.has_value for x in self.v)
+        return all(x.has_value for x in (self.v.x, self.v.y, self.v.z))
 
     @property
     def is_translation(self):
@@ -586,10 +663,10 @@ class TranslationPart(Part):
 
     def __post_init__(self):
         z, o = Expr.float(0), Expr.float(1)
-        self._axes = Seitz(o, z, z, self.v[0], z, o, z, self.v[1], z, z, o, self.v[2])
+        self._axes = Seitz(o, z, z, self.v.x, z, o, z, self.v.y, z, z, o, self.v.z)
 
     def inverse(self):
-        return TranslationPart(v=Vector(-self.v[0], -self.v[1], -self.v[2]))
+        return TranslationPart(v=Vector(-self.v.x, -self.v.y, -self.v.z))
 
     def position(self, which=None) -> Vector:
         return self.v
@@ -602,11 +679,16 @@ class TranslationPart(Part):
         return value in self.v
 
 
-@dataclass
+# @dataclass
 class RotationPart(Part):
     """A specialization to the rotation-only part of a projective affine transformation"""
-    v: Expr = Expr.float(0)
+    v: Expr = field(default_factory=lambda: Expr.float(0))
     degrees: bool = True
+
+    @classmethod
+    def from_dict(cls, args: dict):
+        args['v'] = Expr.from_dict(args['v'])
+        return cls(**args)
 
     def __post_init__(self):
         """If this is not defined, the subclass' __post_init__ will not be called"""
@@ -653,6 +735,13 @@ class RotationPart(Part):
 
 class RotationX(RotationPart):
     """A specialization to the rotation-around-X part of a projective affine transformation"""
+
+    @classmethod
+    def from_dict(cls, args: dict):
+        args['v'] = Expr.from_dict(args['v'])
+        args['_axes'] = Seitz.from_dict(args['_axes'])
+        return cls(**args)
+
     def __post_init__(self):
         c, s, o, z = self._cos_sin_one_zero()
         self._axes = Seitz(o, z, z, z, z, c, s, z, z, -s, c, z)
@@ -674,6 +763,13 @@ class RotationX(RotationPart):
 
 class RotationY(RotationPart):
     """A specialization to the rotation-around-Y part of a projective affine transformation"""
+
+    @classmethod
+    def from_dict(cls, args: dict):
+        args['v'] = Expr.from_dict(args['v'])
+        args['_axes'] = Seitz.from_dict(args['_axes'])
+        return cls(**args)
+
     def __post_init__(self):
         c, s, o, z = self._cos_sin_one_zero()
         self._axes = Seitz(c, z, -s, z, z, o, z, z, s, z, c, z)
@@ -695,6 +791,12 @@ class RotationY(RotationPart):
 
 class RotationZ(RotationPart):
     """A specialization to the rotation-around-Z part of a projective affine transformation"""
+    @classmethod
+    def from_dict(cls, args: dict):
+        args['v'] = Expr.from_dict(args['v'])
+        args['_axes'] = Seitz.from_dict(args['_axes'])
+        return cls(**args)
+
     def __post_init__(self):
         c, s, o, z = self._cos_sin_one_zero()
         self._axes = Seitz(c, s, z, z, -s, c, z, z, z, z, o, z)
@@ -717,10 +819,14 @@ class RotationZ(RotationPart):
 PartsType = TypeVar('PartsType', bound='Parts')
 
 
-@dataclass
-class Parts:
+# @dataclass
+class Parts(Struct):
     """A list of unresolved or partially resolved successive projective affine transformation(s)"""
     _stack: tuple[Part, ...] = field(default_factory=tuple)
+
+    @classmethod
+    def from_dict(cls, args: dict):
+        return cls(tuple(Part.from_dict(x) for x in args['_stack']))
 
     def __str__(self):
         inner = ','.join(str(x) for x in self._stack) if len(self._stack) else ''
@@ -774,13 +880,13 @@ class Parts:
         """
         # The order of individual OrientationPart objects in this tuple is paramount
         s = tuple()
-        if not rotated[0].is_zero:
-            s += (RotationX(v=rotated[0], degrees=degrees), )
-        if not rotated[1].is_zero:
-            s += (RotationY(v=rotated[1], degrees=degrees), )
-        if not rotated[2].is_zero:
-            s += (RotationZ(v=rotated[2], degrees=degrees), )
-        if not all(x.is_zero for x in at):
+        if not rotated.x.is_zero:
+            s += (RotationX(v=rotated.x, degrees=degrees), )
+        if not rotated.y.is_zero:
+            s += (RotationY(v=rotated.y, degrees=degrees), )
+        if not rotated.z.is_zero:
+            s += (RotationZ(v=rotated.z, degrees=degrees), )
+        if not all(x.is_zero for x in (at.x, at.y, at.z)):
             s += (TranslationPart(v=at),)
         return cls(s)
 
@@ -868,12 +974,18 @@ class Parts:
 OrientType = TypeVar('OrientType', bound='Orient')
 
 
-@dataclass
-class Orient:
+# @dataclass
+class Orient(Struct):
     """Un-evaluated lists of dependent operations that position and orient an object in a coordinate system"""
     _position: Parts = field(default_factory=Parts)
     _rotation: Parts = field(default_factory=Parts)
     _degrees: bool = True
+
+    @classmethod
+    def from_dict(cls, args: dict):
+        args['_position'] = Parts.from_dict(args['_position'])
+        args['_rotation'] = Parts.from_dict(args['_rotation'])
+        return cls(**args)
 
     def __str__(self):
         return f'Orient<{self._position}, {self._rotation}>'

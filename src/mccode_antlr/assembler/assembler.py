@@ -173,9 +173,9 @@ class Assembler:
         self.instrument.add_metadata(MetaData.from_instrument_tokens(source, mimetype, name, value))
 
 
-def _rawc_call(method, string: str, source: str = None, line: int = -1):
+def _rawc_call(method, string: str, source: str | None = None, line: int = -1):
     from mccode_antlr.common import RawC
-    return method(RawC(str(source), line, string))
+    return method(RawC(source, line, string))
 
 
 INTENDED_USAGE = """

@@ -1,12 +1,19 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
+from msgspec import Struct
 from .utilities import escape_str_for_c
 
-@dataclass
-class RawC:
-    filename: str
+# @dataclass
+class RawC(Struct):
+    filename: str | None
     line: int
     source: str
-    translated: str = None
+    translated: str | None = None
+
+    @classmethod
+    def from_dict(cls, args: dict):
+        return cls(**args)
 
     def __str__(self):
         return self.source
@@ -22,9 +29,9 @@ class RawC:
                 isinstance(p[0], str) and isinstance(p[1], int) and isinstance(p[2], str):
             return RawC(*p)
         if isinstance(p, tuple) and len(p) == 2 and isinstance(p[0], int) and isinstance(p[1], str):
-            return RawC("", *p)
+            return RawC(None, *p)
         if isinstance(p, str):
-            return RawC("", -1, p)
+            return RawC(None, -1, p)
         raise RuntimeError(f"No conversion to RawC from\n{p}")
 
     def to_c(self):

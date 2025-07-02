@@ -265,15 +265,16 @@ def _op_io(typename, fields: list[str]):
     class _OpIO:
         @staticmethod
         def load(group, **kwargs) -> typename:
-            from mccode_antlr.common.expression import DataType
+            from mccode_antlr.common.expression import DataType, OpStyle
             _check_header(group, typename)
-            attrs = {name: group.attrs.get(name) for name in ('op', 'style', 'data_type_name')}
+            attrs = {name: group.attrs.get(name) for name in ('op', 'style_number', 'data_type_name')}
             values = {name: HDF5IO.load(group[name], **kwargs) for name in fields}
             if any(v is None for v in values.values()):
                 raise ValueError(f"Could not load values for {typename}")
-            op = typename(attrs['op'], **values)
-            op.style = attrs['style']
-            if op.data_type != DataType.from_name(attrs['data_type_name']):
+            data_type = DataType.from_name(attrs['data_type_name'])
+            style = OpStyle(attrs['style_number'])
+            op = typename(data_type, style, attrs['op'], **values)
+            if op.data_type != data_type:
                 raise ValueError(
                     f"Loaded {typename} with data type {op.data_type}, but expected {attrs['data_type_name']}")
             return op
@@ -281,10 +282,11 @@ def _op_io(typename, fields: list[str]):
         @staticmethod
         def save(group, data: typename, **kwargs):
             _write_header(group, typename)
-            for name in ('op', 'style'):
+            for name in ('op',):
                 if getattr(data, name) is not None:
                     group.attrs[name] = getattr(data, name)
             group.attrs['data_type_name'] = data.data_type.name
+            group.attrs['style_number'] = int(data.style)
             for name in fields:
                 if getattr(data, name) is not None:
                     HDF5IO.save(group=group.create_group(name), data=getattr(data, name), **kwargs)
@@ -298,12 +300,15 @@ class ValueIO:
     @staticmethod
     def load(group, **kwargs) -> Value:
         from mccode_antlr.common.expression import ObjectType, DataType, ShapeType
+        # Since Value takes kwargs different from the calculated property names
+        names = {'_object': 'object_type_name', '_shape': 'shape_type_name',
+                 '_data': 'data_type_name'}
         _check_header(group, ValueIO.Value)
-        types = {f: t.from_name(group.attrs.get(f'{f}_name'))
-                 for t, f in ((ObjectType, 'object_type'), (DataType, 'data_type'), (ShapeType, 'shape_type'))}
+        types = {f: t.from_name(group.attrs.get(names[f]))
+                 for t, f in ((ObjectType, '_object'), (DataType, '_data'), (ShapeType, '_shape'))}
         # A missing value is valid:
         value = HDF5IO.load(group['value'], **kwargs) if 'value' in group else None
-        return ValueIO.Value(**types, value=value)
+        return ValueIO.Value(value, **types)
 
     @staticmethod
     def save(group, data: Value, **kwargs):
@@ -488,6 +493,13 @@ def load_hdf5(filename: Union[str, Path], path: str | None = None):
         Path to the HDF5 file.
     path: str or None
         Location within the file to load, or None to load all.
+
+    Warning
+    -------
+    HDF5 can not natively represent Python infinite precision integers, and as a result
+    H5PY silently converts to fixed-bit-width integers at saving and therefore returns
+    numpy.int64 integers at loading. Similarly, Bool values become numpy.bool and floats
+    become something (numpy.float64?)
 
     Example
     -------

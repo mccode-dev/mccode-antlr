@@ -1,14 +1,20 @@
-from dataclasses import dataclass
+# from dataclasses import dataclass
+from msgspec import Struct
 from ..common import Expr
 
 
-@dataclass
-class Jump:
+# @dataclass
+class Jump(Struct):
     target: str
     relative_target: int
     iterate: bool
     condition: Expr
     absolute_target: int = -1
+
+    @classmethod
+    def from_dict(cls, args: dict):
+        args['condition'] = Expr.from_dict(args['condition'])
+        return cls(**args)
 
     def to_file(self, output, wrapper):
         # self.target is one of "PREVIOUS", "PREVIOUS_{i}, "MYSELF", "MYSELF_{i}, "NEXT",
