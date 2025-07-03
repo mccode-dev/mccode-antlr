@@ -36,21 +36,13 @@ def config_fallback(
         In case the system call or failsafe function are slow we likely do not want to
         evaluate them more than once.
     """
-    from shutil import which
-    from subprocess import run
+    from mccode_antlr.utils import run_prog_message_output
     if key in cfg:
         return getattr(cfg[key], method or 'get')()
 
     prog = prog or [f'{key}-config', '--show', 'buildflags']
 
-    message, output = None, None
-    if which(prog[0]):
-        res = run(prog, capture_output=True, text=True)
-        output = res.stdout
-        if res.returncode or len(res.stderr):
-            message = f'Evaluating "{" ".join(prog)}" produced error: {res.stderr}'
-    else:
-        message = f'{prog[0]} not found'
+    message, output = run_prog_message_output(prog)
 
     if message:
         if failsafe is None:

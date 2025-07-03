@@ -278,12 +278,11 @@ class Instr(Struct):
             return self._getpath(chars).as_posix()
 
         def eval_cmd(chars):
-            from subprocess import run, CalledProcessError
-            try:
-                proc = run(chars, check=True, shell=True, capture_output=True, text=True)
-                output = proc.stdout
-            except CalledProcessError as error:
-                raise RuntimeError(f"Calling {chars} resulted in error {error}")
+            from mccode_antlr.utils import run_prog_message_output
+            from shlex import split
+            message, output = run_prog_message_output(split(chars))
+            if message:
+                raise RuntimeError(f"Calling {chars} resulted in error {message}")
             output = [line.strip() for line in output.splitlines() if line.strip()]
             if len(output) > 1:
                 raise RuntimeError(f"Calling {chars} produced more than one line of output")
