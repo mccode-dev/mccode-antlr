@@ -598,6 +598,11 @@ class Value(Struct):
         if self._shape is None:
             self._shape = ShapeType.vector if not isinstance(self._value, str) and hasattr(self._value, '__len__') else ShapeType.scalar
 
+        for prop, typ in zip(('_data', '_object', '_shape'), (DataType, ObjectType, ShapeType)):
+            if not isinstance(getattr(self, prop), typ):
+                setattr(self, prop, typ(getattr(self, prop)))
+
+
     def __int__(self):
         if self.data_type != DataType.int:
             raise RuntimeError('Non-integer data type Value; round first')
@@ -1389,3 +1394,7 @@ def op_post_init(obj, props: list[str], special: dict):
         # datatype + datatype promotion preserves A+A=A
         obj.data_type = a[0] + b[0]
 
+    # ensure that data_type is a DataType and style is an OpStyle?
+    for prop, typ in (('data_type', DataType), ('style', OpStyle)):
+        if not isinstance(p:=getattr(obj, prop), typ):
+            setattr(obj, prop, typ(p))
