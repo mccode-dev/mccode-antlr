@@ -46,3 +46,24 @@ class TestInstrParameters(TestCase):
         self.assertTrue(inst.parameter_used('par5'))
         self.assertTrue(inst.parameter_used('a4'))
         self.assertEqual(2, inst.check_instrument_parameters(), )
+
+    def test_parameter_types_parse_check(self):
+        from mccode_antlr import Flavor
+        from mccode_antlr.assembler import Assembler
+        from mccode_antlr.reader.registry import InMemoryRegistry
+        from textwrap import dedent
+        comps = InMemoryRegistry('components')
+        comps.add_comp('Only',dedent("""
+        DEFINE COMPONENT Only
+        SETTING PARAMETERS (
+          a=1., 
+          int b=2, 
+          string c="three", 
+          vector d = {4, 4, 4, 4}, 
+          int * e = 0, 
+          double * f = 0
+        )
+        END
+        """))
+        assembler = Assembler('singular', flavor=Flavor.MCSTAS, registries=[comps])
+        assembler.component('one', 'Only', at=[0,0,0])

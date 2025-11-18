@@ -109,12 +109,12 @@ class CompVisitor(McCompVisitor):
     def visitComponentParameterIntegerArray(self, ctx: Parser.ComponentParameterIntegerArrayContext):
         from ..common import Value, DataType, ShapeType
         name = str(ctx.Identifier(0))
-        if ctx.assign() is not None and ctx.initializerlist() is not None:
+        if ctx.Assign() is not None and ctx.initializerlist() is not None:
             value = self.visit(ctx.initializerlist())
             value.data_type = DataType.int
         else:
             default = None
-            if ctx.assign() is not None:
+            if ctx.Assign() is not None:
                 default = "NULL"
                 if ctx.Identifier(1) is not None:
                     default = str(ctx.Identifier(1))
