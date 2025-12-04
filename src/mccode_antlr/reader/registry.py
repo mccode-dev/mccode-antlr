@@ -519,31 +519,38 @@ REGISTRY_PRIORITY_HIGH=5
 REGISTRY_PRIORITY_HIGHEST=10
 
 
+def _get_remote_repository_version_tags(url):
+    import re
+    import git
+    g = git.cmd.Git()
+    res = g.ls_remote(url, sort='-v:refname', tags=True)
+    ex = re.compile(r'v\d+(?:\.\d+(?:\.\d+)?)?')
+    return list(dict.fromkeys(ex.findall(res)))
+
+def _source_registry_tag():
+    """This causes the confuse config directory to be created, so could fail
+    on read-only systems."""
+    from mccode_antlr.config import config
+    requested_tag = config['mccode_pooch']['tag'].as_str_expanded()
+    registry_url = config['mccode_pooch']['registry'].as_str_expanded()
+    source_url = config['mccode_pooch']['source'].as_str_expanded()
+
+    known_tags = _get_remote_repository_version_tags(registry_url)
+    if requested_tag.lower() == 'latest':
+        requested_tag = known_tags[0]
+    elif requested_tag not in known_tags:
+        raise RuntimeError(f"The specified version tag, {requested_tag}, is not available in {registry_url}")
+    return source_url, registry_url, requested_tag
+
+
+def mccode_registry_version():
+    from packaging.version import Version
+    _, _, tag = _source_registry_tag()
+    return Version(tag)
+
+
 def _mccode_pooch_registries(flavor: Flavor):
-    def get_remote_repository_version_tags(url):
-        import re
-        import git
-        g = git.cmd.Git()
-        res = g.ls_remote(url, sort='-v:refname', tags=True)
-        ex = re.compile(r'v\d+(?:\.\d+(?:\.\d+)?)?')
-        return list(dict.fromkeys(ex.findall(res)))
-
-    def source_registry_tag():
-        """This causes the confuse config directory to be created, so could fail
-        on read-only systems."""
-        from mccode_antlr.config import config
-        requested_tag = config['mccode_pooch']['tag'].as_str_expanded()
-        registry_url = config['mccode_pooch']['registry'].as_str_expanded()
-        source_url = config['mccode_pooch']['source'].as_str_expanded()
-
-        known_tags = get_remote_repository_version_tags(registry_url)
-        if requested_tag.lower() == 'latest':
-            requested_tag = known_tags[0]
-        elif requested_tag not in known_tags:
-            raise RuntimeError(f"The specified version tag, {requested_tag}, is not available in {registry_url}")
-        return source_url, registry_url, requested_tag
-
-    src, reg, tag = source_registry_tag()
+    src, reg, tag = _source_registry_tag()
 
     def make_registry(name):
         return GitHubRegistry(name, src, tag, registry=reg, priority=REGISTRY_PRIORITY_LOWEST)

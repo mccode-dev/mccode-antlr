@@ -123,7 +123,7 @@ def cogen_raytrace(source, ok_to_skip):
                 f'      // GROUP {group.name}: from {fn} [{group.first_id}] to {ln} [{1+lid}]',
                 # Skip over when SCATTERED in the group:
                 f'      if (SCATTERED) _particle->_index = {1+lid}; '
-                '// when SCATTERED in GROUP: reach exit of GROUP after {ln}',
+                f'// when SCATTERED in GROUP: reach exit of GROUP after {ln}',
                 #
             ])
             if index == lid:

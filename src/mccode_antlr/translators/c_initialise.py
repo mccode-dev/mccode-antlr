@@ -225,6 +225,10 @@ def cogen_comp_setpos(index, comp, last, instr, component_declared_parameters):
 
 
 def cogen_initialize(source, component_declared_parameters, ok_to_skip):
+    from packaging.version import Version
+    from mccode_antlr.reader.registry import mccode_registry_version
+    version = mccode_registry_version()
+
     lines = ["/* *****************************************************************************",
              f"* instrument '{source.name}' and components INITIALISE",
              "***************************************************************************** */",
@@ -244,8 +248,18 @@ def cogen_initialize(source, component_declared_parameters, ok_to_skip):
     lines.extend([
         f'int init(void) {{ /* called by mccode_main for {source.name}:INITIALIZE */',
         '  DEBUG_INSTR();',
-        '// Initialise rng',
-        '  srandom(_hash(mcseed-1));',
+    ])
+    if version > Version("3.5.40"):
+        # McCode https://github.com/mccode-dev/McCode/pull/2227#issuecomment-3613096573
+        # changed `mccode_main.c` and the code-generator to move the random number
+        # seeding before "INITIALIZE" time.
+        # The most-recent release at that time was 3.5.40, so this change is only
+        # compatible with releases after that.
+        lines.extend([
+            '// Initialise rng',
+            '  srandom(_hash(mcseed-1));',
+        ])
+    lines.extend([
         '',
         '  /* code_main/parseoptions/readparams sets instrument parameters value */',
         f'  stracpy(instrument->_name, "{source.name}", {len(source.name)+1});',
