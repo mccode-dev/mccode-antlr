@@ -244,6 +244,8 @@ def cogen_initialize(source, component_declared_parameters, ok_to_skip):
     lines.extend([
         f'int init(void) {{ /* called by mccode_main for {source.name}:INITIALIZE */',
         '  DEBUG_INSTR();',
+        '// Initialise rng',
+        '  srandom(_hash(mcseed-1));',
         '',
         '  /* code_main/parseoptions/readparams sets instrument parameters value */',
         f'  stracpy(instrument->_name, "{source.name}", {len(source.name)+1});',
