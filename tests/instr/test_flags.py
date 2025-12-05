@@ -31,7 +31,7 @@ def test_ncrystal_windows_flags():
     This test replicates `_replace_keywords` to use a fake configuration object with
     a path that previously caused an error in re.
     """
-    from re import sub, findall, PatternError
+    from re import sub, findall, error
     from mccode_antlr.config.fallback import regex_sanitized_config_fallback
     config = FakeConfig(FakeConfigItem(" /IC:\\hosted\\NCrystal.lib\n"))
 
@@ -45,7 +45,7 @@ def test_ncrystal_windows_flags():
             replacement = regex_sanitized_config_fallback(config, replace.lower()[:-5])
             try:
                 flag = sub(f'@{replace}@', replacement, flag)
-            except PatternError as per:
+            except error as per:
                 assert 'bad escape \h' in str(per)
                 raise RuntimeError(f'bad escape {replace} in {flag} persists')
         else:
