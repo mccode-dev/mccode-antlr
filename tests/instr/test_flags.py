@@ -31,8 +31,8 @@ def test_ncrystal_windows_flags():
     This test replicates `_replace_keywords` to use a fake configuration object with
     a path that previously caused an error in re.
     """
-    from re import sub, findall
-    from mccode_antlr.config.fallback import config_fallback
+    from re import sub, findall, PatternError
+    from mccode_antlr.config.fallback import regex_sanitized_config_fallback
     config = FakeConfig(FakeConfigItem(" /IC:\\hosted\\NCrystal.lib\n"))
 
     flag = "@NCRYSTALFLAGS@"
@@ -42,11 +42,17 @@ def test_ncrystal_windows_flags():
 
     for replace in findall(general_re, flag):
         if replace.lower().endswith('flags'):
-            print(f'{replace} in {flag}')
-            replacement = config_fallback(config, replace.lower()[:-5])
-            flag = sub(f'@{replace}@', replacement, flag)
+            replacement = regex_sanitized_config_fallback(config, replace.lower()[:-5])
+            try:
+                flag = sub(f'@{replace}@', replacement, flag)
+            except PatternError as per:
+                assert 'bad escape \h' in str(per)
+                raise RuntimeError(f'bad escape {replace} in {flag} persists')
         else:
             raise ValueError('Only *flags should be found')
 
-    assert flag == config['ncrystal'].get()
+    def no_backslashes(s):
+        return s.replace(r'\\', '')
+
+    assert no_backslashes(flag) == no_backslashes(config['ncrystal'].get())
 

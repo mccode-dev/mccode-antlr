@@ -3,20 +3,6 @@ from collections.abc import Callable
 from confuse import LazyConfig, Subview
 from loguru import logger
 
-def _sanitize_value(value):
-    if not isinstance(value, str):
-        return value
-    # ensure there are no unsupported escape characters in the string
-    # remove NULs which can break many APIs
-    value = value.replace('\x00', '')
-    # normalize line endings
-    value = value.replace('\r\n', '\n').replace('\r', '\n')
-    # escape backslashes so replacement strings don't contain unknown backslash escapes
-    value = value.replace('\\', '\\\\')
-    # drop other non-printable characters (keep typical whitespace)
-    value = ''.join(ch for ch in value if ch.isprintable() or ch in '\t\n')
-    return value
-
 
 def config_fallback(
         cfg: LazyConfig | Subview,
@@ -53,7 +39,7 @@ def config_fallback(
     """
     from mccode_antlr.utils import run_prog_message_output
     if key in cfg:
-        return _sanitize_value(getattr(cfg[key], method or 'get')())
+        return getattr(cfg[key], method or 'get')()
 
     prog = prog or [f'{key}-config', '--show', 'buildflags']
 
@@ -65,7 +51,23 @@ def config_fallback(
         output = failsafe(key)
         logger.warning(f'{message}, defaulting to {output}')
 
-    output = _sanitize_value(output)
     if store:
         cfg[key] = output
     return output
+
+
+def regex_sanitized_config_fallback(*args, **kwargs):
+    """Sanitized version of `config_fallback` for use with regular expressions in `re`."""
+    value = config_fallback(*args, **kwargs)
+    if not isinstance(value, str):
+        return value
+    # ensure there are no unsupported escape characters in the string
+    # remove NULs which can break many APIs
+    value = value.replace('\x00', '')
+    # normalize line endings
+    value = value.replace('\r\n', '\n').replace('\r', '\n')
+    # escape backslashes so replacement strings don't contain unknown backslash escapes
+    value = value.replace('\\', '\\\\')
+    # drop other non-printable characters (keep typical whitespace)
+    value = ''.join(ch for ch in value if ch.isprintable() or ch in '\t\n')
+    return value
