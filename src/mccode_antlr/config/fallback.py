@@ -56,12 +56,19 @@ def config_fallback(
     return output
 
 
-def regex_sanitized_config_fallback(*args, **kwargs):
+def regex_sanitized_config_fallback(
+        cfg: LazyConfig | Subview,
+        key: str,
+        method: str | None = None,
+        prog: list[str] | None = None,
+        failsafe: Callable[[str], str] | None = None,
+        store: bool = True,
+):
     """Sanitized version of `config_fallback` for use with regular expressions in `re`."""
-    value = config_fallback(*args, **kwargs)
+    value = config_fallback(cfg, key, method, prog, failsafe, store)
     if not isinstance(value, str):
         return value
-    # ensure there are no unsupported escape characters in the string
+    # escape backslashes to prevent unsupported escape sequences in regex replacements
     # remove NULs which can break many APIs
     value = value.replace('\x00', '')
     # normalize line endings

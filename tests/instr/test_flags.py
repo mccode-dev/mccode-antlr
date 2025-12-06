@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 @dataclass
 class FakeConfigItem:
@@ -26,7 +26,7 @@ class FakeConfig:
 
 def test_ncrystal_windows_flags():
     """
-    Inside mccode.instr.instr the parsing of special @XXX@ flags raises an error
+    Inside mccode_antlr.instr.instr the parsing of special @XXX@ flags raises an error
     for some Windows paths if their backslashes are not properly escaped.
     This test replicates `_replace_keywords` to use a fake configuration object with
     a path that previously caused an error in re.
@@ -43,11 +43,8 @@ def test_ncrystal_windows_flags():
     for replace in findall(general_re, flag):
         if replace.lower().endswith('flags'):
             replacement = regex_sanitized_config_fallback(config, replace.lower()[:-5])
-            try:
-                flag = sub(f'@{replace}@', replacement, flag)
-            except error as per:
-                assert 'bad escape \h' in str(per)
-                raise RuntimeError(f'bad escape {replace} in {flag} persists')
+            # This should not raise an error after the fix
+            flag = sub(f'@{replace}@', replacement, flag)
         else:
             raise ValueError('Only *flags should be found')
 
