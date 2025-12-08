@@ -312,7 +312,7 @@ class Instr(Struct):
 
     def _replace_keywords(self, flag):
         from mccode_antlr.config import config
-        from mccode_antlr.config.fallback import config_fallback
+        from mccode_antlr.config.fallback import regex_sanitized_config_fallback
         from re import sub, findall
         if '@NEXUSFLAGS@' in flag:
             flag = sub(r'@NEXUSFLAGS@', config['flags']['nexus'].as_str_expanded(), flag)
@@ -324,7 +324,7 @@ class Instr(Struct):
         for replace in findall(general_re, flag):
             # Is this replacement something like XXXFLAGS?
             if replace.lower().endswith('flags'):
-                replacement = config_fallback(config['flags'], replace.lower()[:-5])
+                replacement = regex_sanitized_config_fallback(config['flags'], replace.lower()[:-5])
                 flag = sub(f'@{replace}@', replacement, flag)
             else:
                 logger.warning(f'Unknown keyword @{replace}@ in dependency string')

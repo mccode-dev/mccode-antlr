@@ -3,6 +3,7 @@ from collections.abc import Callable
 from confuse import LazyConfig, Subview
 from loguru import logger
 
+
 def config_fallback(
         cfg: LazyConfig | Subview,
         key: str,
@@ -53,3 +54,27 @@ def config_fallback(
     if store:
         cfg[key] = output
     return output
+
+
+def regex_sanitized_config_fallback(
+        cfg: LazyConfig | Subview,
+        key: str,
+        method: str | None = None,
+        prog: list[str] | None = None,
+        failsafe: Callable[[str], str] | None = None,
+        store: bool = True,
+):
+    """Sanitized version of `config_fallback` for use with regular expressions in `re`."""
+    value = config_fallback(cfg, key, method, prog, failsafe, store)
+    if not isinstance(value, str):
+        return value
+    # escape backslashes to prevent unsupported escape sequences in regex replacements
+    # remove NULs which can break many APIs
+    value = value.replace('\x00', '')
+    # normalize line endings
+    value = value.replace('\r\n', '\n').replace('\r', '\n')
+    # escape backslashes so replacement strings don't contain unknown backslash escapes
+    value = value.replace('\\', '\\\\')
+    # drop other non-printable characters (keep typical whitespace)
+    value = ''.join(ch for ch in value if ch.isprintable() or ch in '\t\n')
+    return value
