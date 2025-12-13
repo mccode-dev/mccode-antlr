@@ -1,4 +1,5 @@
-from .compiled import compile_and_run, compiled_test
+from mccode_antlr.compiled import compiled_test
+from mccode_antlr.utils import compile_and_run
 
 @compiled_test
 def test_parameters():

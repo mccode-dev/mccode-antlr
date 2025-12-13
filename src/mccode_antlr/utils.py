@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from mccode_antlr import Flavor
 
 def run_prog_message_output(prog: list[str]):
@@ -38,3 +40,24 @@ def make_assembler(name: str, flavor: Flavor = Flavor.MCSTAS):
 def parse_instr_string(instr_source: str):
     from mccode_antlr.loader import parse_mcstas_instr
     return parse_mcstas_instr(instr_source)
+
+
+
+def compile_and_run(instr,
+                    parameters,
+                    run=True,
+                    dump_source=True,
+                    target: dict | None = None,
+                    config: dict | None = None,
+                    flavor: Flavor = Flavor.MCSTAS):
+    from pathlib import Path
+    from tempfile import TemporaryDirectory
+    from mccode_antlr.run import mccode_compile, mccode_run_compiled
+
+    kwargs = dict(target=target, config=config, dump_source=dump_source)
+
+    with TemporaryDirectory() as directory:
+        binary, target = mccode_compile(instr, directory, flavor=flavor, **kwargs)
+        # The runtime output directory used *can not* exist for McStas/McXtrace to work properly.
+        # So find a name inside this directory that doesn't exist (any name should work)
+        return mccode_run_compiled(binary, target, Path(directory).joinpath('t'), parameters) if run else (None, None)

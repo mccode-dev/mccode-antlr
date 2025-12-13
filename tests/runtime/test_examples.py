@@ -3,11 +3,12 @@ from platform import system
 from mccode_antlr.loader.loader import parse_mcstas_instr
 from textwrap import dedent
 
-from .compiled import compile_and_run, compiled_test
+from mccode_antlr.compiled import compiled_test
 
 
 @compiled_test
 def test_without_components():
+    from mccode_antlr.utils import compile_and_run
     instr = parse_mcstas_instr(dedent("""\
     DEFINE INSTRUMENT without_components(int dummy=0)
     DECLARE %{
@@ -34,6 +35,7 @@ def test_template_instr():
     """
     This test failed previously because its name is a reserved word in C++ (template)
     """
+    from mccode_antlr.utils import compile_and_run
     instr = parse_mcstas_instr(dedent("""\
     DEFINE INSTRUMENT template(Par1=1)
     DECLARE %{ %}
@@ -53,6 +55,7 @@ def test_template_instr():
     reason='This test fails to compile on Windows due to https://github.com/McStasMcXtrace/McCode/issues/1817'
 )
 def test_component_declare_variable_initialised():
+    from mccode_antlr.utils import compile_and_run
     instr = parse_mcstas_instr(dedent("""\
     DEFINE INSTRUMENT namedsomething(dummy=0)
     DECLARE %{
@@ -72,6 +75,7 @@ def test_component_declare_variable_initialised():
 
 @compiled_test
 def test_function_pointer_declare_parameter():
+    from mccode_antlr.utils import compile_and_run
     instr = parse_mcstas_instr(dedent("""\
     DEFINE INSTRUMENT with_function_pointers(int which=0)
     DECLARE %{
@@ -119,6 +123,7 @@ def test_function_pointer_declare_parameter():
 
 @compiled_test
 def test_function_pointer_component_declare_parameter():
+    from mccode_antlr.utils import compile_and_run
     from mccode_antlr.reader.registry import InMemoryRegistry
     in_memory_registry = InMemoryRegistry('test_components')
     comp_name = 'declares_function_pointer'
@@ -185,6 +190,7 @@ def test_function_pointer_component_declare_parameter():
 
 @compiled_test
 def test_struct_instance_parameter():
+    from mccode_antlr.utils import compile_and_run
     instr = parse_mcstas_instr(dedent(r"""
     DEFINE INSTRUMENT test_template_TAS(DM=3.3539)
     DECLARE
@@ -245,6 +251,7 @@ def test_struct_instance_parameter():
 
 @compiled_test
 def test_copy_extend_instance_parameter():
+    from mccode_antlr.utils import compile_and_run
     from mccode_antlr.reader.registry import InMemoryRegistry
     in_memory_registry = InMemoryRegistry('test_components')
     comp_name = 'has_parameter'

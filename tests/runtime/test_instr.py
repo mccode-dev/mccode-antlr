@@ -1,6 +1,7 @@
 from unittest import TestCase
 from loguru import logger
-from .compiled import compiled_test, mcpl_compiled_test, compile_and_run
+from mccode_antlr.compiled import compiled_test, mcpl_compiled_test
+from mccode_antlr.utils import compile_and_run
 from mccode_antlr import Flavor
 
 class TestCompiledInstr(TestCase):
