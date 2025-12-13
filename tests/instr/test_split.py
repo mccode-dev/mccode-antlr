@@ -1,5 +1,4 @@
 from unittest import TestCase
-from .utils import parse_instr_string
 
 from mccode_antlr.instr import Instr, Instance
 from mccode_antlr.common.expression import Expr
@@ -8,6 +7,8 @@ from mccode_antlr.instr.orientation import Vector
 
 class TestInstrSplit(TestCase):
     def test_mcpl_split(self):
+        from mccode_antlr.utils import parse_instr_string
+
         instr_source = """
         DEFINE INSTRUMENT test_copy()
         TRACE
@@ -52,6 +53,8 @@ class TestInstrSplit(TestCase):
         self.assertEqual(before.get_component('second').rotate_relative[1], first)
 
     def test_split_broken_reference(self):
+        from mccode_antlr.utils import parse_instr_string
+
         from textwrap import dedent
         instr = dedent("""\
         DEFINE INSTRUMENT test_tof(phase/"degree"=0)

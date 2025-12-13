@@ -1,11 +1,10 @@
 from unittest import TestCase
 from loguru import logger
-from .utils import make_assembler
-
 
 
 class TestInstrInstanceParameters(TestCase):
     def test_assemble_identifier_instance_parameter(self):
+        from mccode_antlr.utils import make_assembler
         assembler = make_assembler('fake_bifrost')
 
         parameters = [

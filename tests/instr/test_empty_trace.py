@@ -1,5 +1,4 @@
 from unittest import TestCase
-from .utils import make_assembler
 
 
 class TestInstrEmptyTrace(TestCase):
@@ -32,6 +31,7 @@ class TestInstrEmptyTrace(TestCase):
     def test_assemble_empty_trace(self):
         from mccode_antlr.instr import Instr
         from mccode_antlr.common import InstrumentParameter, Expr, Value, DataType
+        from mccode_antlr.utils import make_assembler
 
         assembler = make_assembler('test_assemble')
 

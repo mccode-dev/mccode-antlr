@@ -1,11 +1,11 @@
 from unittest import TestCase
-from .utils import parse_instr_string
 
 
 class TestInstrCopy(TestCase):
     def test_copy(self):
         from mccode_antlr.instr import Instr
-        from mccode_antlr.common import InstrumentParameter, Expr, Value, DataType
+        from mccode_antlr.common import InstrumentParameter, Expr
+        from mccode_antlr.utils import parse_instr_string
         instr_source = """
         DEFINE INSTRUMENT test_copy(par0=3.14159, double par1 = 49, int par2 =     1010110
             , string par3="this is a long string with spaces", 
