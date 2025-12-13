@@ -1,6 +1,5 @@
 from __future__ import annotations
 from functools import cache
-from mccode_antlr import Flavor
 import pytest
 
 from mccode_antlr.compiler.check import simple_instr_compiles
@@ -45,22 +44,3 @@ def mcpl_compiled_test(method):
             return method(*args, **kwargs)
     return method
 
-
-def compile_and_run(instr,
-                    parameters,
-                    run=True,
-                    dump_source=True,
-                    target: dict | None = None,
-                    config: dict | None = None,
-                    flavor: Flavor = Flavor.MCSTAS):
-    from pathlib import Path
-    from tempfile import TemporaryDirectory
-    from mccode_antlr.run import mccode_compile, mccode_run_compiled
-
-    kwargs = dict(target=target, config=config, dump_source=dump_source)
-
-    with TemporaryDirectory() as directory:
-        binary, target = mccode_compile(instr, directory, flavor=flavor, **kwargs)
-        # The runtime output directory used *can not* exist for McStas/McXtrace to work properly.
-        # So find a name inside this directory that doesn't exist (any name should work)
-        return mccode_run_compiled(binary, target, Path(directory).joinpath('t'), parameters) if run else (None, None)

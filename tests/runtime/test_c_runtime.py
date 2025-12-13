@@ -1,11 +1,12 @@
 import unittest
 from textwrap import dedent
 from mccode_antlr.loader import parse_mcstas_instr
-from .compiled import compile_and_run, compiled_test, gpu_compiled_test
+from mccode_antlr.test import compiled_test, gpu_compiled_test
 
 
 class CRuntimeTestCase(unittest.TestCase):
     def _do_trace_tests(self, with_acc):
+        from mccode_antlr.utils import compile_and_run
         instr = parse_mcstas_instr(dedent(
             """\
             DEFINE INSTRUMENT test_component_traces_visited()
@@ -37,6 +38,7 @@ class CRuntimeTestCase(unittest.TestCase):
         self._do_trace_tests(with_acc=True)
 
     def _do_jump_tests(self, contents: str, jumps: int):
+        from mccode_antlr.utils import compile_and_run
         instr = parse_mcstas_instr(contents)
         results, data = compile_and_run(instr, f"-n 1 jumps={jumps}")
         lines = results.decode('utf-8').splitlines()
@@ -77,6 +79,7 @@ class CRuntimeTestCase(unittest.TestCase):
 
     @compiled_test
     def test_split(self):
+        from mccode_antlr.utils import compile_and_run
         contents = dedent("""\
                           define instrument test_split(int splits) trace
                           component a = Arm() AT (0,0,0) ABSOLUTE EXTEND %{printf("a\\n");%}
@@ -98,6 +101,7 @@ class CRuntimeTestCase(unittest.TestCase):
 
     @compiled_test
     def test_when(self):
+        from mccode_antlr.utils import compile_and_run
         instr = parse_mcstas_instr(dedent("""\
             define instrument test_when(dummy) 
             declare %{int count;%}
@@ -117,6 +121,7 @@ class CRuntimeTestCase(unittest.TestCase):
 
     @compiled_test
     def test_group(self):
+        from mccode_antlr.utils import compile_and_run
         instr = parse_mcstas_instr(dedent("""\
             define instrument test_group(dummy)
             declare %{int count;%}

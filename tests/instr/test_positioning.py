@@ -1,5 +1,4 @@
 from unittest import TestCase
-from .utils import make_assembler, parse_instr_string
 
 
 class TestInstrPositioning(TestCase):
@@ -38,6 +37,8 @@ class TestInstrPositioning(TestCase):
         self.assertEqual(v5, last.orientation.position() - up.orientation.position())
 
     def test_assemble_positioning(self):
+        from mccode_antlr.utils import make_assembler
+
         """Equivalent test to `test_read_positioning` but using an assembled instrument"""
         assembler = make_assembler('orientation_test')
         origin = assembler.component("origin", "Progress_bar", at=[0, 0, 0])
@@ -47,6 +48,8 @@ class TestInstrPositioning(TestCase):
         self._positioning_evaluator(assembler.instrument)
 
     def test_read_positioning(self):
+        from mccode_antlr.utils import parse_instr_string
+
         """Equivalent test to `test_assemble_positioning` but using a parsed instrument"""
         instr_source = """DEFINE INSTRUMENT orientation_test() TRACE
         COMPONENT origin = Arm() AT (0, 0, 0) ABSOLUTE
@@ -66,6 +69,7 @@ class TestInstrPositioning(TestCase):
             self.assertEqual(positions[instance.name], instance.orientation.position('coordinates'))
 
     def test_simple_positioning(self):
+        from mccode_antlr.utils import parse_instr_string
 
         from math import pi, cos, sin
         instr_source = """DEFINE INSTRUMENT simple_test() TRACE
