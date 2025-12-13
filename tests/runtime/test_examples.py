@@ -3,7 +3,7 @@ from platform import system
 from mccode_antlr.loader.loader import parse_mcstas_instr
 from textwrap import dedent
 
-from mccode_antlr.compiled import compiled_test
+from mccode_antlr.test import compiled_test
 
 
 @compiled_test

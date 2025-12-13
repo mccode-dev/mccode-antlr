@@ -1,7 +1,7 @@
 import unittest
 from textwrap import dedent
 from mccode_antlr.loader import parse_mcstas_instr
-from mccode_antlr.compiled import compiled_test, gpu_compiled_test
+from mccode_antlr.test import compiled_test, gpu_compiled_test
 
 
 class CRuntimeTestCase(unittest.TestCase):

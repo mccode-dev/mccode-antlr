@@ -1,6 +1,6 @@
 from textwrap import dedent
 from mccode_antlr.loader import parse_mcstas_instr
-from mccode_antlr.compiled import gpu_compiled_test
+from mccode_antlr.test import gpu_compiled_test
 from mccode_antlr.utils import compile_and_run
 from mccode_antlr.reader.registry import InMemoryRegistry
 

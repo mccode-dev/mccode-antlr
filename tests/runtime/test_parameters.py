@@ -1,4 +1,4 @@
-from mccode_antlr.compiled import compiled_test
+from mccode_antlr.test import compiled_test
 from mccode_antlr.utils import compile_and_run
 
 @compiled_test

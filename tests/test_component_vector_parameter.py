@@ -1,6 +1,6 @@
 import unittest
 
-from mccode_antlr.compiled import compiled_test
+from mccode_antlr.test import compiled_test
 
 FAKE_COMPONENTS = dict(component_with_vector_parameter="""
 DEFINE COMPONENT component_with_vector_parameter
