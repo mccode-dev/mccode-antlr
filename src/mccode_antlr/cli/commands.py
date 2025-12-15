@@ -57,6 +57,9 @@ def mccode(flavor: Flavor):
     if args.filename.suffix.lower() == '.h5':
         from mccode_antlr.io import load_hdf5
         instrument = load_hdf5(args.filename)
+    elif args.filename.suffix.lower() == '.json':
+        from mccode_antlr.io.json import load_json
+        instrument = load_json(args.filename)
     else:
         # Construct the object which will read the instrument and component files, producing Python objects
         reader = Reader(registries=collect_local_registries(flavor, args.search_dir))
