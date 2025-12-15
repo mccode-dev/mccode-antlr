@@ -147,12 +147,12 @@ class RemoteRegistry(Registry):
     def known(self, name: str, ext: str = None, strict: bool = False):
         compare = _name_plus_suffix(name, ext)
         # the files *in* the registry are already posix paths, so that makes life easier
-        if any(x.endswith(compare) for x in self.pooch.registry_files):
+        if any(Path(x).name == compare for x in self.pooch.registry_files):
             return True
         if strict:
             return False
         # fall back to matching without the extension:
-        if any(Path(x).with_suffix('').as_posix().endswith(compare) for x in self.pooch.registry_files):
+        if any(Path(x).stem == compare for x in self.pooch.registry_files):
             return True
         # Or matching *any* file that contains name
         return any(name in x for x in self.pooch.registry_files)
