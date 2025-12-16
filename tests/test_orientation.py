@@ -38,6 +38,20 @@ def _random_vector(minimum: float = 0, maximum: float = 1):
 
 
 class TestOrientation(TestCase):
+    def test_simplifications_in_trig_functions(self):
+        from mccode_antlr.instr.orientation import sin_value, cos_value
+        from mccode_antlr.common import Expr
+        self.assertEqual(sin_value(Expr.float(0)), Expr.float(0))
+        self.assertEqual(sin_value(Expr.float(90)), Expr.float(1))
+        self.assertEqual(sin_value(Expr.float(-90)), Expr.float(-1))
+        self.assertEqual(sin_value(Expr.float(180)), Expr.float(0))
+
+        self.assertEqual(cos_value(Expr.float(0)), Expr.float(1))
+        self.assertEqual(cos_value(Expr.float(90)), Expr.float(0))
+        self.assertEqual(cos_value(Expr.float(-90)), Expr.float(0))
+        self.assertEqual(cos_value(Expr.float(180)), Expr.float(-1))
+
+
     def test_matrix_vector_multiply(self):
         from mccode_antlr.instr.orientation import Vector, Matrix
         from mccode_antlr.common import Expr
