@@ -405,6 +405,8 @@ def cos_value(v: Expr, degrees=True):
         return Expr.float(0)
     if (degrees and v.is_value(Expr.float(180))) or (not degrees and v.is_value(pi)):
         return Expr.float(-1)
+    if (degrees and v.is_value(Expr.float(-90))) or (not degrees and v.is_value(-pi/Expr.float(2))):
+        return Expr.float(0)
     return unary_expr(cos_degree if degrees else cos, 'cos', v)
 
 
@@ -416,6 +418,8 @@ def sin_value(v: Expr, degrees=True):
     if (degrees and v.is_value(Expr.float(90))) or (not degrees and v.is_value(pi / Expr.float(2))):
         return Expr.float(1)
     if (degrees and v.is_value(Expr.float(180))) or (not degrees and v.is_value(-pi / Expr.float(2))):
+        return Expr.float(0)
+    if (degrees and v.is_value(Expr.float(-90))) or (not degrees and v.is_value(-pi / Expr.float(2))):
         return Expr.float(-1)
     return unary_expr(sin_degree if degrees else sin, 'sin', v)
 
@@ -518,7 +522,7 @@ class Part(Struct):
         # The first condition _should_ always be true -- the second is only true if this is not the identity matrix
         if round((self._axes.inverse() * self._axes).trace(), 12) == Expr.float(3.):
             return round(self._axes.trace(), 12) != Expr.float(3.)
-        logger.info(f'Not a rotation matrix: {self._axes}')
+        logger.info(f'Not a rotation matrix: {self._axes} since trace is {round((self._axes.inverse() * self._axes).trace(), 12)}')
         return False
 
     @property
