@@ -36,17 +36,81 @@ def config_get(key, verbose):
     print(config_dump(d))
 
 
-def config_set(key, value):
-    from mccode_antlr.config import config as c
+def _get_config_yaml(path):
+    from pathlib import Path
+    from yaml import safe_load
+    from mccode_antlr.config import config
+
+    config_file = Path(path or config.config_dir()) / 'config.yaml'
+    if config_file.exists():
+        with config_file.open('r') as f:
+            return safe_load(f) or {}
+    return {}
+
+
+def _save_config_yaml(config_dict, path):
+    from pathlib import Path
+    from mccode_antlr.config import config
+
+    config_file = Path(path or config.config_dir()) / 'config.yaml'
+    with config_file.open('w') as f:
+        f.write(config_dump(config_dict))
+
+
+def config_set(key, value, path):
+    """
+    Set a configuration value both in the file and in memory.
+    This function updates the existing configuration file to preserve
+    other keys and only modify the specified key.
+    """
+    from mccode_antlr.config import config
+    # Load existing file config if it exists
+    existing_config = _get_config_yaml(path)
+
+    # Navigate to the nested key and set the value
     levels = key.split('.')
+    current = existing_config
+    for level in levels[:-1]:
+        if level not in current:
+            current[level] = {}
+        current = current[level]
+    current[levels[-1]] = value
+
+    # Save the complete config
+    _save_config_yaml(existing_config, path)
+
+    # Also update the in-memory config
+    c = config
     for level in levels:
         c = c[level]
     c.set(value)
 
 
-def config_unset(key):
-    from mccode_antlr.config import config as c
+def config_unset(key, path):
+    """
+    Unset a configuration value both in the file and in memory.
+    This function updates the existing configuration file to preserve
+    other keys and only remove the specified key.
+    """
+    from mccode_antlr.config import config
+    existing_config = _get_config_yaml(path)
+
+    # Navigate to the nested key and delete it
     levels = key.split('.')
+    current = existing_config
+    try:
+        for level in levels[:-1]:
+            current = current[level]
+        del current[levels[-1]]
+    except (KeyError, TypeError):
+        # Key doesn't exist in file config, that's okay
+        pass
+
+    # Save the complete config
+    _save_config_yaml(existing_config, path)
+
+    # Also update the in-memory config
+    c = config
     for level in levels:
         c = c[level]
     del c
@@ -79,10 +143,12 @@ def add_config_management_parser(modes):
     s = actions.add_parser(name='set', help='Update or insert one configuration value')
     s.add_argument('key', type=str, default=None)
     s.add_argument('value', type=str, default=None)
+    s.add_argument('path', type=str, nargs='?')
     s.set_defaults(action=config_set)
 
     u = actions.add_parser(name='unset', help='Remove one configuration value')
     u.add_argument('key', type=str, default=None)
+    u.add_argument('path', type=str, nargs='?')
     u.set_defaults(action=config_unset)
 
     v = actions.add_parser(name='save', help='Create or update the configuration file')
