@@ -8,6 +8,40 @@ from mccode_antlr.version import version as mccode_antlr_version
 from mccode_antlr import Flavor
 from typing import Type, Any
 from msgspec import Struct
+import requests
+from time import sleep
+
+
+def _fetch_registry_with_retry(url, max_retries=3, timeout=10):
+    """Fetch a registry file with retry logic for gateway timeouts"""
+    for attempt in range(max_retries):
+        try:
+            r = requests.get(url, timeout=timeout)
+            if r.ok:
+                return r
+            # If we get a gateway timeout (502, 503, 504), retry
+            if r.status_code in (502, 503, 504) and attempt < max_retries - 1:
+                wait_time = 2 ** attempt  # exponential backoff: 1s, 2s, 4s
+                logger.warning(f"Gateway timeout ({r.status_code}), retrying in {wait_time}s...")
+                sleep(wait_time)
+                continue
+            return r
+        except requests.exceptions.Timeout:
+            if attempt < max_retries - 1:
+                wait_time = 2 ** attempt
+                logger.warning(f"Request timeout, retrying in {wait_time}s...")
+                sleep(wait_time)
+                continue
+            raise
+        except requests.exceptions.RequestException as e:
+            if attempt < max_retries - 1:
+                wait_time = 2 ** attempt
+                logger.warning(f"Request failed: {e}, retrying in {wait_time}s...")
+                sleep(wait_time)
+                continue
+            raise
+
+    raise RuntimeError(f"Failed to retrieve {url} after {max_retries} attempts")
 
 
 def ensure_regex_pattern(pattern):
@@ -250,11 +284,10 @@ class GitHubRegistry(RemoteRegistry):
             with registry_file_path.open('r') as file:
                 registry = {k: v for k, v in [x.strip().split(maxsplit=1) for x in file.readlines() if len(x)]}
         else:
-            import requests
             # We allow a full-dictionary to be provided, otherwise we expect the registry file to be available from the
             # base_url where all subsequent files are also expected to be available
             if not isinstance(registry, dict):
-                r = requests.get((registry or base_url) + registry_file)
+                r = _fetch_registry_with_retry((registry or base_url) + registry_file)
                 if not r.ok:
                     raise RuntimeError(f"Could not retrieve {r.url} because {r.reason}")
                 registry = {k: v for k, v in [x.split(maxsplit=1) for x in r.text.split('\n') if len(x)]}
