@@ -36,7 +36,7 @@ def config_get(key, verbose):
     print(config_dump(d))
 
 
-def _get_config_yaml(path):
+def _get_config_yaml(path: str | None = None):
     from pathlib import Path
     from yaml import safe_load
     from mccode_antlr.config import config
@@ -48,51 +48,63 @@ def _get_config_yaml(path):
     return {}
 
 
-def _save_config_yaml(config_dict, path):
+def _save_config_yaml(config_dict, path: str | None = None):
     from pathlib import Path
     from mccode_antlr.config import config
 
     config_file = Path(path or config.config_dir()) / 'config.yaml'
+    config_file.parent.mkdir(parents=True, exist_ok=True)
     with config_file.open('w') as f:
         f.write(config_dump(config_dict))
 
 
-def config_set(key, value, path):
+def config_set(key, value, path: str | None = None):
     """
     Set a configuration value both in the file and in memory.
     This function updates the existing configuration file to preserve
     other keys and only modify the specified key.
     """
     from mccode_antlr.config import config
+    from pathlib import Path
     # Load existing file config if it exists
     existing_config = _get_config_yaml(path)
 
     # Navigate to the nested key and set the value
     levels = key.split('.')
-    current = existing_config
-    for level in levels[:-1]:
-        if level not in current:
-            current[level] = {}
-        current = current[level]
-    current[levels[-1]] = value
+    try:
+        current = existing_config
+        for level in levels[:-1]:
+            if level not in current:
+                current[level] = {}
+            current = current[level]
+        current[levels[-1]] = value
+    except (KeyError, TypeError):
+        print(f"Error setting key {key} in configuration.")
+        return
 
     # Save the complete config
     _save_config_yaml(existing_config, path)
 
-    # Also update the in-memory config
-    c = config
-    for level in levels:
-        c = c[level]
-    c.set(value)
+    # Also update the in-memory config if we're not modifying a different path
+    if path is None or Path(path) == Path(config.config_dir()):
+        try:
+            c = config
+            for level in levels[:-1]:
+                c = c[level]
+            c[levels[-1]] = value
+        except (KeyError, TypeError):
+            print(f"Error setting key {key} in in-memory configuration.")
+            return
 
 
-def config_unset(key, path):
+def config_unset(key, path: str | None = None):
     """
     Unset a configuration value both in the file and in memory.
     This function updates the existing configuration file to preserve
     other keys and only remove the specified key.
     """
     from mccode_antlr.config import config
+    from pathlib import Path
     existing_config = _get_config_yaml(path)
 
     # Navigate to the nested key and delete it
@@ -109,14 +121,18 @@ def config_unset(key, path):
     # Save the complete config
     _save_config_yaml(existing_config, path)
 
-    # Also update the in-memory config
-    c = config
-    for level in levels:
-        c = c[level]
-    del c
+    # Also update the in-memory config if we're not modifying a different path
+    if path is None or Path(path) == Path(config.config_dir()):
+        try:
+            c = config
+            for level in levels[:-1]:
+                c = c[level]
+            del c[levels[-1]]
+        except (KeyError, TypeError):
+            pass
 
 
-def config_save(path, verbose):
+def config_save(path: str | None = None, verbose: bool = False):
     from pathlib import Path
     from mccode_antlr.config import config as c
     config_dir = Path(path or c.config_dir())

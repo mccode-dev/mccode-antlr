@@ -264,7 +264,6 @@ class TestCacheManagement:
 
             # Mock the cache_path function
             from mccode_antlr.cli import management
-            original_cache_path = management.cache_path
             monkeypatch.setattr(management, 'cache_path', lambda: cache_path)
 
             # Create some test cache structure
