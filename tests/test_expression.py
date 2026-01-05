@@ -267,6 +267,15 @@ class TestExpression(TestCase):
         not_val.style = OpStyle.PYTHON
         self.assertEqual(str(not_val), 'not val')
 
+    def test_UnaryOp_as_type(self):
+        uop = UnaryOp(DataType.undefined, OpStyle.C, '__not__', Value.id('val'))
+        self.assertEqual(str(uop), '!val')
+        iop = uop.as_type(DataType.int)
+        self.assertEqual(str(iop), '!val')
+        fop = uop.as_type(DataType.float)
+        self.assertEqual(str(fop), '!val')
+
+
     def test_numeric_BinaryOp(self):
         f = [Value.float(x) for x in range(3)]
         i = [Value.float(x) for x in range(3)]
