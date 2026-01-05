@@ -500,7 +500,7 @@ class UnaryOp(Op):
 
     def as_type(self, pdt):
         value = [x.as_type(pdt) for x in self.value]
-        return UnaryOp(self.op, value)
+        return UnaryOp(data_type=self.data_type, style=self.style, op=self.op, value=value)
 
     def _str_repr_(self, vstr):
         c_style = self.style == OpStyle.C
