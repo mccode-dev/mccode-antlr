@@ -3,7 +3,37 @@ from __future__ import annotations
 from typing import Union
 
 
-class MRange:
+def has_len(x):
+    try:
+        my_length = len(x)
+    except TypeError:
+        return False
+    except NotImplementedError:
+        return False
+    return True
+
+
+class ParameterValues:
+    @property
+    def min(self):
+        raise NotImplementedError()
+
+    @property
+    def max(self):
+        raise NotImplementedError()
+
+    @classmethod
+    def from_str(cls, string):
+        raise NotImplementedError()
+
+    def __len__(self):
+        raise NotImplementedError()
+
+    def __getitem__(self, index):
+        raise NotImplementedError()
+
+
+class MRange(ParameterValues):
     """A range of values for a parameter in a MATLAB style.
     The range is inclusive of the start and stop values, and the step is the difference between items in the range.
     """
@@ -18,6 +48,8 @@ class MRange:
             raise ZeroDivisionError('MRange step cannot be zero')
 
     def __eq__(self, other):
+        if not isinstance(other, MRange):
+            return NotImplemented
         return self.start == other.start and self.stop == other.stop and self.step == other.step
 
     @property
@@ -76,7 +108,7 @@ class MRange:
         return cls(float_or_int(start), float_or_int(stop), float_or_int(step))
 
 
-class Singular:
+class Singular(ParameterValues):
     """A singular range parameter for use with other range parameters in, e.g., a zip.
 
     Note:
@@ -90,6 +122,8 @@ class Singular:
         self.maximum = maximum
 
     def __eq__(self, other):
+        if not isinstance(other, Singular):
+            return NotImplemented
         return self.value == other.value and self.maximum == other.maximum
 
     def __str__(self):
@@ -122,6 +156,11 @@ class Singular:
     def __len__(self):
         return self.maximum
 
+    def __getitem__(self, index: int):
+        if index < 0 or (self.maximum and index >= self.maximum):
+            raise IndexError(f'Index {index} out of range')
+        return self.value
+
     @classmethod
     def from_str(cls, string):
         def float_or_int_or_str(s):
@@ -138,12 +177,14 @@ class Singular:
             raise ValueError(f'Singular string {string} contains a colon')
         return cls(float_or_int_or_str(string))
 
-class EList:
+class EList(ParameterValues):
     """An explicit list of values for a parameter."""
     def __init__(self, values: list):
         self.values = values
 
-    def __eq__(self, other: 'EList'):
+    def __eq__(self, other):
+        if not isinstance(other, EList):
+            return NotImplemented
         return all(v == o for v, o in zip(self.values, other.values, strict=True))
 
     def __iter__(self):
@@ -162,6 +203,14 @@ class EList:
 
     def __len__(self):
         return len(self.values)
+
+    @property
+    def min(self):
+        return min(self.values)
+
+    @property
+    def max(self):
+        return max(self.values)
 
     @classmethod
     def from_str(cls, string):
@@ -217,14 +266,15 @@ def parameters_to_scan(parameters: dict[str, Union[list, MRange, EList, Singular
         return n_pts, names, product(*values)
     else:
         # replace singular MRange entries with Singular iterators, to avoid stopping the zip early:
-        n_max = max([len(v) for v in values])
+        n_max = max([len(v) if has_len(v) else -1 for v in values])
         for i, v in enumerate(values):
-            if len(v) > 1 and len(v) != n_max:
+            if has_len(v) and len(v) > 1 and len(v) != n_max:
                 oth = [names[i] for i, n in enumerate(values) if len(n) == n_max]
                 par = 'parameters' if len(oth) > 1 else 'parameter'
                 have = 'have' if len(oth) > 1 else 'has'
                 raise ValueError(f'Parameter {names[i]} has {len(v)} values, but {par} {", ".join(oth)} {have} {n_max}')
-        return n_max, names, zip(*[v if len(v) > 1 else Singular(v[0] if isinstance(v, MRange) else v.value, n_max) for v in values])
+        values = [v if has_len(v) and len(v) > 1 else Singular(v[0], n_max) for v in values]
+        return n_max, names, zip(*values)
 
 
 def _make_scanned_parameter(s: str):

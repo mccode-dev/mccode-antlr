@@ -1,5 +1,5 @@
 import pytest
-from mccode_antlr.run.range import MRange, EList, Singular, parse_scan_parameters
+from mccode_antlr.run.range import MRange, EList, Singular, parse_scan_parameters, parameters_to_scan
 
 
 class TestParseScanParameters:
@@ -125,6 +125,17 @@ class TestParseScanParameters:
         assert isinstance(result['c'], Singular)
         max_len = max(len(result['a']), len(result['b']))
         assert result['c'].maximum == max_len
+
+
+class TestSingular:
+    def test_singular_getitem(self):
+        s = Singular(5)
+        assert s[0] == 5
+        assert s[1000000000] == 5
+        s = Singular(10, 1)
+        assert s[0] == 10
+        with pytest.raises(IndexError):
+            s1000 = s[1000]
 
 
 class TestEList:
@@ -358,3 +369,238 @@ class TestEList:
         """Test EList with negative values in scientific notation."""
         result = EList.from_str('-1e-3,-2.5e2,-3e10')
         assert result.values == [-1e-3, -2.5e2, -3e10]
+
+
+class TestRangeProperties:
+    def test_mrange_properties(self):
+        r = MRange.from_str('1:0.1:10')
+        assert r.min == 1
+        assert r.max == 10
+
+        r = MRange.from_str('10:-0.5:1')
+        assert r.min == 10
+        assert r.max == 1
+
+    def test_singular_properties(self):
+        r = Singular.from_str('100')
+        assert r.min == 100
+        assert r.max == 100
+
+    def test_elist_properties(self):
+        r = EList.from_str('1,2,3')
+        assert r.min == 1
+        assert r.max == 3
+
+
+class TestParametersToScan:
+    """Tests for the parameters_to_scan function."""
+
+    def test_empty_parameters(self):
+        """Test parameters_to_scan with empty dictionary."""
+        n_pts, names, values = parameters_to_scan({})
+        assert n_pts == 0
+        assert names == []
+        assert list(values) == []
+
+    def test_single_mrange_linear(self):
+        """Test parameters_to_scan with a single MRange in linear mode."""
+        params = {'a': MRange(1, 5, 1)}
+        n_pts, names, values = parameters_to_scan(params)
+        assert n_pts == 5
+        assert names == ['a']
+        values_list = list(values)
+        assert values_list == [(1,), (2,), (3,), (4,), (5,)]
+
+    def test_single_elist_linear(self):
+        """Test parameters_to_scan with a single EList in linear mode."""
+        params = {'a': EList([10, 20, 30])}
+        n_pts, names, values = parameters_to_scan(params)
+        assert n_pts == 3
+        assert names == ['a']
+        values_list = list(values)
+        assert values_list == [(10,), (20,), (30,)]
+
+    def test_single_singular_linear(self):
+        """Test parameters_to_scan with a single Singular in linear mode."""
+        params = {'a': Singular(42, 3)}
+        n_pts, names, values = parameters_to_scan(params)
+        assert n_pts == 3
+        assert names == ['a']
+        values_list = list(values)
+        assert values_list == [(42,), (42,), (42,)]
+
+    def test_multiple_mranges_linear_same_length(self):
+        """Test parameters_to_scan with multiple MRanges of same length in linear mode."""
+        params = {'a': MRange(1, 3, 1), 'b': MRange(10, 30, 10)}
+        n_pts, names, values = parameters_to_scan(params)
+        assert n_pts == 3
+        assert 'a' in names
+        assert 'b' in names
+        values_list = list(values)
+        assert len(values_list) == 3
+        assert values_list == [(1, 10), (2, 20), (3, 30)]
+
+    def test_mrange_and_elist_linear_same_length(self):
+        """Test parameters_to_scan with MRange and EList of same length."""
+        params = {'a': MRange(1, 3, 1), 'b': EList([10, 200, 3000])}
+        n_pts, names, values = parameters_to_scan(params)
+        assert n_pts == 3
+        values_list = list(values)
+        assert len(values_list) == 3
+        assert values_list == [(1, 10), (2, 200), (3, 3000)]
+
+    def test_mrange_with_singular_linear(self):
+        """Test parameters_to_scan with MRange and Singular in linear mode."""
+        params = {'a': MRange(1, 5, 1), 'b': Singular(99, 5)}
+        n_pts, names, values = parameters_to_scan(params)
+        assert n_pts == 5
+        values_list = list(values)
+        assert len(values_list) == 5
+        # All b values should be 99
+        a_idx = names.index('a')
+        b_idx = names.index('b')
+        for v in values_list:
+            assert v[b_idx] == 99
+
+    def test_elist_with_singular_linear(self):
+        """Test parameters_to_scan with EList and Singular in linear mode."""
+        params = {'a': EList([1, 2, 3]), 'b': Singular(42, 3)}
+        n_pts, names, values = parameters_to_scan(params)
+        assert n_pts == 3
+        values_list = list(values)
+        a_idx = names.index('a')
+        b_idx = names.index('b')
+        assert [v[a_idx] for v in values_list] == [1, 2, 3]
+        assert [v[b_idx] for v in values_list] == [42, 42, 42]
+
+    def test_mismatched_lengths_raises_error(self):
+        """Test that mismatched lengths raise ValueError."""
+        params = {'a': MRange(1, 5, 1), 'b': MRange(1, 3, 1)}
+        with pytest.raises(ValueError, match='has 3 values'):
+            parameters_to_scan(params)
+
+    def test_elist_mrange_mismatched_lengths_raises_error(self):
+        """Test that mismatched EList and MRange lengths raise ValueError."""
+        params = {'a': MRange(1, 5, 1), 'b': EList([10, 20])}
+        with pytest.raises(ValueError, match='has 2 values'):
+            parameters_to_scan(params)
+
+    def test_grid_mode_single_mrange(self):
+        """Test parameters_to_scan with single MRange in grid mode."""
+        params = {'a': MRange(1, 3, 1)}
+        n_pts, names, values = parameters_to_scan(params, grid=True)
+        assert n_pts == 3
+        assert names == ['a']
+        values_list = list(values)
+        assert values_list == [(1,), (2,), (3,)]
+
+    def test_grid_mode_single_elist(self):
+        """Test parameters_to_scan with single EList in grid mode."""
+        params = {'a': EList([10, 20, 30])}
+        n_pts, names, values = parameters_to_scan(params, grid=True)
+        assert n_pts == 3
+        values_list = list(values)
+        assert values_list == [(10,), (20,), (30,)]
+
+    def test_grid_mode_multiple_mranges(self):
+        """Test parameters_to_scan with multiple MRanges in grid mode."""
+        params = {'a': MRange(1, 2, 1), 'b': MRange(10, 20, 10)}
+        n_pts, names, values = parameters_to_scan(params, grid=True)
+        # 2 * 2 = 4 grid points
+        assert n_pts == 4
+        values_list = list(values)
+        assert len(values_list) == 4
+
+    def test_grid_mode_mrange_and_elist(self):
+        """Test parameters_to_scan with MRange and EList in grid mode."""
+        params = {'a': MRange(1, 2, 1), 'b': EList([100, 200])}
+        n_pts, names, values = parameters_to_scan(params, grid=True)
+        # 2 * 2 = 4 grid points
+        assert n_pts == 4
+        values_list = list(values)
+        assert len(values_list) == 4
+
+    def test_grid_mode_with_singular(self):
+        """Test parameters_to_scan with Singular in grid mode."""
+        params = {'a': MRange(1, 2, 1), 'b': Singular(99)}
+        n_pts, names, values = parameters_to_scan(params, grid=True)
+        # 2 * 1 = 2 grid points (singular has maximum=1 in grid mode)
+        assert n_pts == 2
+        values_list = list(values)
+        assert len(values_list) == 2
+
+    def test_names_are_lowercased(self):
+        """Test that parameter names are lowercased."""
+        params = {'MyParam': MRange(1, 3, 1), 'ANOTHER': EList([1, 2, 3])}
+        n_pts, names, values = parameters_to_scan(params)
+        assert 'myparam' in names
+        assert 'another' in names
+
+    def test_list_input_as_parameter(self):
+        """Test parameters_to_scan with plain list as parameter value."""
+        params = {'a': [1, 2, 3]}
+        n_pts, names, values = parameters_to_scan(params)
+        assert n_pts == 3
+        values_list = list(values)
+        assert len(values_list) == 3
+
+    def test_grid_mode_three_parameters(self):
+        """Test grid mode with three parameters."""
+        params = {'a': MRange(1, 2, 1), 'b': MRange(10, 20, 10), 'c': EList([100, 200])}
+        n_pts, names, values = parameters_to_scan(params, grid=True)
+        # 2 * 2 * 2 = 8 grid points
+        assert n_pts == 8
+        values_list = list(values)
+        assert len(values_list) == 8
+
+    def test_linear_mode_preserves_order(self):
+        """Test that linear mode preserves iteration order."""
+        params = {'a': MRange(1, 3, 1), 'b': EList([10, 20, 30])}
+        n_pts, names, values = parameters_to_scan(params)
+        values_list = list(values)
+        a_idx = names.index('a')
+        b_idx = names.index('b')
+        assert [v[a_idx] for v in values_list] == [1, 2, 3]
+        assert [v[b_idx] for v in values_list] == [10, 20, 30]
+
+    def test_elist_only_parameters_linear(self):
+        """Test parameters_to_scan with only EList parameters in linear mode."""
+        params = {'x': EList([1, 2, 3]), 'y': EList([10, 20, 30])}
+        n_pts, names, values = parameters_to_scan(params)
+        assert n_pts == 3
+        values_list = list(values)
+        assert len(values_list) == 3
+
+    def test_elist_only_parameters_grid(self):
+        """Test parameters_to_scan with only EList parameters in grid mode."""
+        params = {'x': EList([1, 2]), 'y': EList([10, 20, 30])}
+        n_pts, names, values = parameters_to_scan(params, grid=True)
+        # 2 * 3 = 6 grid points
+        assert n_pts == 6
+        values_list = list(values)
+        assert len(values_list) == 6
+
+    def test_float_values_in_elist(self):
+        """Test parameters_to_scan with float values in EList."""
+        params = {'a': EList([1.5, 2.5, 3.5])}
+        n_pts, names, values = parameters_to_scan(params)
+        assert n_pts == 3
+        values_list = list(values)
+        assert values_list == [(1.5,), (2.5,), (3.5,)]
+
+    def test_mixed_int_float_in_elist(self):
+        """Test parameters_to_scan with mixed int and float in EList."""
+        params = {'a': EList([1, 2.5, 3])}
+        n_pts, names, values = parameters_to_scan(params)
+        assert n_pts == 3
+        values_list = list(values)
+        assert values_list == [(1,), (2.5,), (3,)]
+
+    def test_singular_infinite_range(self):
+        params = {'a': Singular(1), 'b': EList([10, 20, 30])}
+        n_pts, names, values = parameters_to_scan(params)
+        values_list = list(values)
+        a_idx = names.index('a')
+        b_idx = names.index('b')
+        assert [v[a_idx] for v in values_list] == [1, 1, 1]
+        assert [v[b_idx] for v in values_list] == [10, 20, 30]
