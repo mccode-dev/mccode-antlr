@@ -373,28 +373,22 @@ class TestExpression(TestCase):
         pi = Expr.id('PI')
         x = Expr.id('x')
         sin = Value('sin', _object=ObjectType.function)
-        # These two expressions should be identical, but details of the Lexer/Parser pick the second
-        equiv_expr = BinaryOp(
-            DataType.undefined, OpStyle.C, '__call__', [sin], [
-                BinaryOp(
-                    DataType.undefined, OpStyle.C, '/', [
-                        BinaryOp(DataType.undefined, OpStyle.C, '*', [
-                            UnaryOp(DataType.undefined, OpStyle.C, '-', pi)
-                        ], [x])
-                    ], [Value.float(2)]
-                )
-            ]
-        )
-        expr = BinaryOp(DataType.undefined, OpStyle.C, '__call__', [sin],[
-            UnaryOp(DataType.undefined, OpStyle.C, '-', [
-                BinaryOp(DataType.undefined, OpStyle.C, '/', [
-                    BinaryOp(DataType.undefined, OpStyle.C, '*', [pi], [x])], [Value.float(2)])
-            ])
+        uop, bop, u, c = UnaryOp, BinaryOp, DataType.undefined, OpStyle.C
+        two = Value.float(2)
+        # These two expressions have identical string representations,
+        # but an error in the grammar caused the Lexer/Parser pick the second.
+        # Now that the error is fixed, the Unary operation of negation has higher
+        # precedence than either the multiplication or division.
+        expr = bop(u, c, '__call__', [sin], [
+            bop(u, c, '/', [bop(u, c, '*', [uop(u, c, '-', pi)], [x])], [two])
+        ])
+        wrong_precedence_expr = bop(u, c, '__call__', [sin], [
+            uop(u, c, '-', [bop(u, c, '/', [bop(u, c, '*', [pi], [x])], [two])])
         ])
 
         self.assertEqual(sin_minus_pi_x_over_2, expr)
         self.assertEqual(str(sin_minus_pi_x_over_2), str(expr))
-        self.assertEqual(str(sin_minus_pi_x_over_2), str(equiv_expr))
+        self.assertEqual(str(sin_minus_pi_x_over_2), str(wrong_precedence_expr))
 
         # One reason that Expr has a list of expressions:
         atan2_y_x = Expr.parse('arctan2(y, x)')
