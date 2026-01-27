@@ -37,6 +37,34 @@ def _random_vector(minimum: float = 0, maximum: float = 1):
     return Vector(_random(), _random(), _random())
 
 
+def _mcstas_verified_rotations():
+    from mccode_antlr.instr.orientation import Rotation
+    from mccode_antlr.common import Expr
+    o, z = [Expr.float(x) for x in (1, 0)]
+    # Verified from McStas compile instrument _*_var.rotation_absolute via --trace output:
+    mc = {'zpz': Rotation(z, z, -o, z, o, z, o, z, z),
+          'pzz': Rotation(o, z, z, z, z, o, z, -o, z),
+          'zzp': Rotation(z, o, z, -o, z, z, z, z, o),
+          'pzp': Rotation(z, z, o, -o, z, z, z, -o, z),
+          'mzp': Rotation(z, z, -o, -o, z, z, z, o, z),
+          'pzm': Rotation(z, z, -o, o, z, z, z, -o, z),
+          'mzm': Rotation(z, z, o, o, z, z, z, o, z),
+          'zpp': Rotation(z, o, z, z, z, o, o, z, z),
+          'zmp': Rotation(z, o, z, z, z, -o, -o, z, z),
+          'zmm': Rotation(z, -o, z, z, z, o, -o, z, z),
+          'zpm': Rotation(z, -o, z, z, z, -o, o, z, z),
+          'ppz': Rotation(z, o, z, z, z, o, o, z, z),
+          'ppp': Rotation(z, z, o, z, -o, z, o, z, z),
+          'mpp': Rotation(z, z, -o, z, o, z, o, z, z),
+          'pmp': Rotation(z, z, o, z, o, z, -o, z, z),
+          'ppm': Rotation(z, z, -o, z, o, z, o, z, z),
+          'mmp': Rotation(z, z, -o, z, -o, z, -o, z, z),
+          'mpm': Rotation(z, z, o, z, -o, z, o, z, z),
+          'pmm': Rotation(z, z, -o, z, -o, z, -o, z, z),
+          'mmm': Rotation(z, z, o, z, o, z, -o, z, z)}
+    return mc
+
+
 class TestOrientation(TestCase):
     def test_simplifications_in_trig_functions(self):
         from mccode_antlr.instr.orientation import sin_value, cos_value
@@ -147,31 +175,25 @@ class TestOrientation(TestCase):
                   'mmm': Rotation.from_angles(Angles(m, m, m))}
 
         # Verified from McStas compile instrument _*_var.rotation_absolute via --trace output:
-        mc = {'zpz': Rotation(z, z, -o, z, o, z, o, z, z),
-              'pzz': Rotation(o, z, z, z, z, o, z, -o, z),
-              'zzp': Rotation(z, o, z, -o, z, z, z, z, o),
-              'pzp': Rotation(z, z, o, -o, z, z, z, -o, z),
-              'mzp': Rotation(z, z, -o, -o, z, z, z, o, z),
-              'pzm': Rotation(z, z, -o, o, z, z, z, -o, z),
-              'mzm': Rotation(z, z, o, o, z, z, z, o, z),
-              'zpp': Rotation(z, o, z, z, z, o, o, z, z),
-              'zmp': Rotation(z, o, z, z, z, -o, -o, z, z),
-              'zmm': Rotation(z, -o, z, z, z, o, -o, z, z),
-              'zpm': Rotation(z, -o, z, z, z, -o, o, z, z),
-              'ppz': Rotation(z, o, z, z, z, o, o, z, z),
-              'ppp': Rotation(z, z, o, z, -o, z, o, z, z),
-              'mpp': Rotation(z, z, -o, z, o, z, o, z, z),
-              'pmp': Rotation(z, z, o, z, o, z, -o, z, z),
-              'ppm': Rotation(z, z, -o, z, o, z, o, z, z),
-              'mmp': Rotation(z, z, -o, z, -o, z, -o, z, z),
-              'mpm': Rotation(z, z, o, z, -o, z, o, z, z),
-              'pmm': Rotation(z, z, -o, z, -o, z, -o, z, z),
-              'mmm': Rotation(z, z, o, z, o, z, -o, z, z)}
-
+        mc = _mcstas_verified_rotations()
         # constructing the Rotation matrix may have small numerical errors, so we round to 14 decimal places
         # and compare to the zero Matrix
         for key in angles:
             self.assertEqual(round(abs(angles[key] - mc[key]), 14), Matrix())
+
+    def test_rotation_parts(self):
+        from mccode_antlr.instr.orientation import RotationX, RotationY, RotationZ
+        from mccode_antlr.common import Expr
+        p = Expr.float(90.)
+        mc = _mcstas_verified_rotations()
+        parts = {
+            'pzz': RotationX(v=p, degrees=True),
+            'zpz': RotationY(v=p, degrees=True),
+            'zzp': RotationZ(v=p, degrees=True),
+        }
+        for key, part in parts.items():
+            self.assertEqual(part.rotation(), mc[key])
+
 
     def test_seitz_multiply_identity(self):
         from numpy import random

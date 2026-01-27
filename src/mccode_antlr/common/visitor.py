@@ -37,9 +37,9 @@ def visitExpressionIdentifier(obj, ctx):
     # check if this identifier is an InstrumentParameter name:
     name = str(ctx.Identifier())
     inst_par = obj.state.get_parameter(name, None)
-    obj = ObjectType.parameter if inst_par is not None else ObjectType.identifier
+    obj_type = ObjectType.parameter if inst_par is not None else ObjectType.identifier
     dat = inst_par.value.data_type if inst_par is not None else DataType.undefined
-    return Expr(Value(name, _data=dat, _object=obj))
+    return Expr(Value(name, _data=dat, _object=obj_type))
 
 def visitExpressionInteger(obj, ctx):
     return Expr.int(str(ctx.IntegerLiteral()))

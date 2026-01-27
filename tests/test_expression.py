@@ -394,7 +394,7 @@ class TestExpression(TestCase):
         atan2_y_x = Expr.parse('arctan2(y, x)')
         atan2 = Value('arctan2', _object=ObjectType.function)
         y = Expr.id('y')
-        expr = BinaryOp(DataType.undefined, OpStyle.C, '__call__', [atan2], Expr([y, x]).expr)
+        expr = BinaryOp(DataType.undefined, OpStyle.C, '__call__', [atan2], [y, x])
         self.assertEqual(atan2_y_x, expr)
 
     def test_instrument_parameter(self):
