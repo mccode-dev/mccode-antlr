@@ -30,7 +30,7 @@ expr
   : '0'                                             #ExpressionZero
   | IntegerLiteral                                  #ExpressionInteger
   | FloatingLiteral                                 #ExpressionFloat
-  | (args+=StringLiteral)*                          #ExpressionString
+  | (args+=StringLiteral)+                          #ExpressionString
   | Identifier '->' expr                            #ExpressionPointerAccess
   | Identifier '.' expr                             #ExpressionStructAccess
   | Identifier '[' expr ']'                         #ExpressionArrayAccess
