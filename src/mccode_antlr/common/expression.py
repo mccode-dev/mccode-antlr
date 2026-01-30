@@ -324,13 +324,16 @@ class TrinaryOp(Op):
         f, s, t = [[x.simplify() for x in y] for y in (self.first, self.second, self.third)]
         if self.op == '__trinary__' and len(f) == 1:
             if f[0].is_value(True) and not f[0].is_value(False):
-                return Expr(s)
+                return s
             if f[0].is_value(False) and not f[0].is_value(True):
-                return Expr(t)
+                return t
         return TrinaryOp(self.data_type, self.style, self.op, f, s, t)
 
     def evaluate(self, known: dict):
-        first, second, third = [[x.evaluate(known) for x in y] for y in (self.first, self.second, self.third)]
+        def evaluate_to_single(node):
+            v = node.evaluate(known)
+            return v[0] if hasattr(v, '__len__') and len(v) == 1 else v
+        first, second, third = [[evaluate_to_single(x) for x in y] for y in (self.first, self.second, self.third)]
         return TrinaryOp(self.data_type, self.style, self.op, first, second, third).simplify()
 
     def depends_on(self, name: str):
@@ -451,14 +454,13 @@ class BinaryOp(Op):
         left = [x.simplify() for x in self.left]
         right = [x.simplify() for x in self.right]
         if len(left) == 1 and ((left[0].is_zero and self.op == '+') or (left[0].is_value(1) and self.op == '*')):
-            return Expr(right)
+            return right
         if len(right) == 1 and (
                 (right[0].is_zero and any(x == self.op for x in '+-')) or
                 (right[0].is_value(1) and any(x == self.op for x in '*/'))
         ):
-            return Expr(left)
-        if len(left) == 1 and len(right) == 1 and left[0].is_constant and right[0].is_constant\
-                and self.op in ('+', '-', '*', '/'):
+            return left
+        if len(left) == 1 and len(right) == 1 and left[0].is_constant and right[0].is_constant:
             if self.op == '+':
                 return left[0] + right[0]
             if self.op == '-':
@@ -467,11 +469,16 @@ class BinaryOp(Op):
                 return left[0] * right[0]
             if self.op == '/':
                 return left[0] / right[0]
+            if self.op == '__pow__':
+                return left[0] ** right[0]
         # punt!
         return BinaryOp(self.data_type, self.style, self.op, left, right)
 
     def evaluate(self, known: dict):
-        left, right = [[x.evaluate(known) for x in y] for y in (self.left, self.right)]
+        def evaluate_to_single(node):
+            v = node.evaluate(known)
+            return v[0] if hasattr(v, '__len__') and len(v) == 1 else v
+        left, right = [[evaluate_to_single(x) for x in y] for y in (self.left, self.right)]
         return BinaryOp(self.data_type, self.style, self.op, left, right).simplify()
 
     def depends_on(self, name: str):
@@ -564,10 +571,17 @@ class UnaryOp(Op):
         value = [v.simplify() for v in self.value]
         if self.op == '__group__' and len(value) == 1 and isinstance(value[0], Value):
             return value[0]  # Expr(value)
+        elif self.op == '-' and len(value) == 1 and isinstance(value[0], Value):
+            return -value[0]
+        elif self.op == '+' and len(value) == 1 and isinstance(value[0], Value):
+            return value[0]
         return UnaryOp(self.data_type, self.style, self.op, value)
 
     def evaluate(self, known: dict):
-        value = [x.evaluate(known) for x in self.value]
+        def evaluate_to_single(node):
+            v = node.evaluate(known)
+            return v[0] if hasattr(v, '__len__') and len(v) == 1 else v
+        value = [evaluate_to_single(x) for x in self.value]
         return UnaryOp(self.data_type, self.style, self.op, value).simplify()
 
     def depends_on(self, name: str):
@@ -839,6 +853,18 @@ class Value(Struct):
             return BinaryOp(self.data_type, OpStyle.C, '*', [self], [other])
         return BinaryOp(self.data_type, OpStyle.C, '*', [self], [other]) if pdt.is_str else Value(self.value * other.value, pdt)
 
+    def __mod__(self, other):
+        other = other if isinstance(other, (Value, Op)) else Value.best(other)
+        pdt = self.data_type
+        if other.is_op or self.is_id or other.is_id or pdt.is_str:
+            return BinaryOp(self.data_type, OpStyle.C, '%', [self], [other])
+        # This is neither consistent with the Python or C definition
+        #   Python -- the result takes the sign of the divisor
+        #   C      -- the sign is always positive for positive numerator
+        #             but compiler-dependent for negative numerator
+        # return Value(self.value - (self.value // other.value) * other.value, pdt)
+        return Value(self.value % other.value, pdt)
+
     def __truediv__(self, other):
         other = other if isinstance(other, (Value, Op)) else Value.best(other)
         pdt = self.data_type / other.data_type
@@ -919,6 +945,8 @@ class Value(Struct):
             return self
         if power.is_zero:
             return Value(1, self.data_type)
+        if self.is_constant and power.is_constant:
+            return Value(_value=self.value ** power.value, _data=self.data_type)
         return BinaryOp(self.data_type, OpStyle.C, '__pow__', [self], [power])
 
     @property
@@ -991,6 +1019,9 @@ class Expr(Struct):
     def __post_init__(self):
         if not isinstance(self.expr, list):
             self.expr = [self.expr]
+        if any(not isinstance(node, ExprNodeSingular) for node in self.expr):
+            types = list(dict.fromkeys(type(node) for node in self.expr).keys())
+            raise ValueError(f"An Expr can not be a list of {types}")
 
     def __str__(self):
         return ','.join(str(x) for x in self.expr)
@@ -1157,6 +1188,9 @@ class Expr(Struct):
     def __mul__(self, other):
         return Expr(self.expr[0] * self._prep_numeric_operation('multiply', other))
 
+    def __mod__(self, other):
+        return Expr(self.expr[0] % self._prep_numeric_operation('mod', other))
+
     def __truediv__(self, other):
         return Expr(self.expr[0] / self._prep_numeric_operation('divide', other))
 
@@ -1293,10 +1327,16 @@ class Expr(Struct):
 
     def simplify(self):
         """Perform a very basic analysis to reduce the expression complexity"""
-        return Expr([x.simplify() for x in self.expr])
+        def simplify_to_single_or_list(node):
+            s = node.simplify()
+            return s[0] if hasattr(s, '__len__') and len(s) == 1 else s
+        return Expr([simplify_to_single_or_list(x) for x in self.expr])
 
     def evaluate(self, known: dict):
-        return Expr([x.evaluate(known) for x in self.expr]).simplify()
+        def evaluate_to_single_or_list(node):
+            s = node.evaluate(known)
+            return s[0] if hasattr(s, '__len__') and len(s) == 1 else s
+        return Expr([evaluate_to_single_or_list(x) for x in self.expr]).simplify()
 
     def depends_on(self, name: str):
         return any(x.depends_on(name) for x in self.expr)

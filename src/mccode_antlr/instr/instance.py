@@ -109,6 +109,12 @@ class Instance(Struct):
                    mode=ref.mode)
 
     def __post_init__(self):
+        # TODO: Enhancement idea. Instead of building independent orientation chains
+        #       for each instance, as is done in the non-minimal Mode. The Instr
+        #       could hold a directed graph defining the chains, with nodes as instances
+        #       or instance names, and edges as the the chained operations linking
+        #       the dependency. This should make it easier to re-use relative
+        #       orientation information in other tools, e.g., moreniius.
         if self.mode != Mode.minimal and self.orientation is None:
             ar, rr = self.at_relative, self.rotate_relative
             if not isinstance(ar[0], Vector) or not isinstance(rr[0], Angles):

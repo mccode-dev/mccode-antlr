@@ -922,6 +922,9 @@ class Parts(Struct):
         """
         return Parts(tuple(x.inverse() for x in reversed(self._stack)))
 
+    def __neg__(self):
+        return self.inverse()
+
     def reduce(self):
         """Combine all successive constant projective-transformation parts in the chain
         If there are parts X(x), Y(y), Z(z) that functions of an unknown (runtime defined)
@@ -1057,7 +1060,8 @@ class Orient(Struct):
 
     def __add__(self, other):
         if isinstance(other, Orient):
-            return Orient(self._position + other._position, self._rotation + other._rotation)
+            pos = self._position + other._position
+            return Orient(-other._rotation + pos, self._rotation + other._rotation)
         elif isinstance(other, (Part, Parts)):
             return Orient(self._position + other, self._rotation + other)
         else:

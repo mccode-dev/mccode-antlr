@@ -250,9 +250,8 @@ class HTMLWrapper(BaseWrapper):
     def lines(self, items: list[str]) -> str:
         return '<br>'.join('<br>'.join(self.wrap(line)) for line in items)
 
-    @staticmethod
-    def metadata_group(name: str, mimetype: str, item: str, value: str) -> str:
-        return f'<b>{name}</b> <code>"{mimetype}"</code>" <var>{item}</var> %{{<pre>{value}</pre>%}}'
+    def metadata_group(self, name: str, mimetype: str, item: str, value: str) -> str:
+        return f'<b>{name}</b> <code>{mimetype}</code> <var>{item}</var>' + ' %{' + self.hide(f'<pre>{value}</pre>') +'%}'
 
     @staticmethod
     def datatype(data_type: str) -> str:
