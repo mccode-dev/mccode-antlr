@@ -104,11 +104,11 @@ class Instr(Struct):
             print(wrapper.quoted_line('DEPENDENCY ', list(self.flags)), file=output)
 
         if self.declare:
-            print(wrapper.block('DECLARE', _join_rawc_tuple(self.declare)), file=output)
+            print(wrapper.block('DECLARE', _join_raw_tuple(self.declare)), file=output)
         if self.user:
-            print(wrapper.block('USERVARS', _join_rawc_tuple(self.user)), file=output)
+            print(wrapper.block('USERVARS', _join_raw_tuple(self.user)), file=output)
         if self.initialize:
-            print(wrapper.block('INITIALIZE', _join_rawc_tuple(self.initialize)), file=output)
+            print(wrapper.block('INITIALIZE', _join_raw_tuple(self.initialize)), file=output)
 
         print(wrapper.start_list('TRACE'), file=output)
         for instance in self.components:
@@ -116,9 +116,9 @@ class Instr(Struct):
             instance.to_file(output, wrapper)
             print(wrapper.end_list_item(), file=output)
         if self.save:
-            print(wrapper.block('SAVE', _join_rawc_tuple(self.save)), file=output)
+            print(wrapper.block('SAVE', _join_raw_tuple(self.save)), file=output)
         if self.final:
-            print(wrapper.block('FINALLY', _join_rawc_tuple(self.final)), file=output)
+            print(wrapper.block('FINALLY', _join_raw_tuple(self.final)), file=output)
         print(wrapper.end_list('END'), file=output)
 
     def to_string(self, wrapper):
@@ -546,5 +546,5 @@ class Instr(Struct):
         return expr
 
 
-def _join_rawc_tuple(rawc_tuple: tuple[RawC]):
-    return '\n'.join([str(rc) for rc in rawc_tuple])
+def _join_raw_tuple(raw_tuple: tuple[RawC, ...]):
+    return '\n'.join([str(rc) for rc in raw_tuple])
