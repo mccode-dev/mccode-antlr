@@ -224,7 +224,7 @@ def cogen_comp_setpos(index, comp, last, instr, component_declared_parameters):
     return lines
 
 
-def cogen_initialize(source, component_declared_parameters, ok_to_skip):
+def cogen_initialize(source, component_declared_parameters, ok_to_skip, line_directives: bool = False):
     from packaging.version import Version
     from mccode_antlr.reader.registry import mccode_registry_version
     version = mccode_registry_version()
@@ -242,7 +242,7 @@ def cogen_initialize(source, component_declared_parameters, ok_to_skip):
 
     # generate class functions
     for comp in source.component_types():
-        lines.extend(cogen_comp_initialize_class(comp, component_declared_parameters[comp.name]))
+        lines.extend(cogen_comp_initialize_class(comp, component_declared_parameters[comp.name], line_directives))
 
     # write the instrument main code, which calls component ones
     lines.extend([
@@ -277,7 +277,7 @@ def cogen_initialize(source, component_declared_parameters, ok_to_skip):
             # ensure there's no conflict of names
             lines.append(f'  #define {par.name} (instrument->_parameters.{par.name})')
         for block in source.initialize:
-            lines.append(block.to_c())
+            lines.append(block.to_c(line_directives))
         for par in source.parameters:
             lines.append(f'  #undef {par.name}')
     else:
@@ -312,7 +312,7 @@ def cogen_initialize(source, component_declared_parameters, ok_to_skip):
     return '\n'.join(lines)
 
 
-def cogen_comp_initialize_class(comp, declared_parameters):
+def cogen_comp_initialize_class(comp, declared_parameters, line_directives: bool = False):
     from .c_defines import cogen_parameter_define, cogen_parameter_undef
     if not len(comp.initialize):
         return []
@@ -327,7 +327,7 @@ def cogen_comp_initialize_class(comp, declared_parameters):
     lines.append(f'SIG_MESSAGE("[_{comp.name}_initialize] component NULL={comp.name}() [{f}:{n}]");')
 
     for block in comp.initialize:
-        lines.append(block.to_c())
+        lines.append(block.to_c(line_directives))
 
     lines.extend([
         cogen_parameter_undef(comp, declared_parameters),

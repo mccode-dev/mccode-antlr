@@ -12,12 +12,14 @@ CONFIG = dict(default_main=True, enable_trace=True, portable=True, include_runti
 
 # Follow the logic of codegen.c(.in) from McCode-3, but make use of visitor semantics for possible alternate runtimes
 class TargetVisitor:
-    def __init__(self, instr: Instr, flavor: Flavor = Flavor.MCSTAS, config: dict = None, verbose=False):
+    def __init__(self, instr: Instr, flavor: Flavor = Flavor.MCSTAS, config: dict = None, verbose=False,
+                 line_directives: bool = False):
         self.flavor = flavor
         self.config = CONFIG if config is None else config
         self.source = instr
         self.output = None
         self.verbose = verbose
+        self.line_directives = line_directives
         self.warnings = 0
         self.instrument_uservars = ()
         self.component_uservars = dict()
