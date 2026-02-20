@@ -1,4 +1,4 @@
-from .reader import Reader
+from .reader import Reader, component_cache
 from .registry import (
     Registry,
     LocalRegistry, RemoteRegistry, ModuleRemoteRegistry, GitHubRegistry,

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pooch
+from functools import cache
 from pathlib import Path
 from re import Pattern
 from loguru import logger
@@ -560,9 +561,16 @@ def _get_remote_repository_version_tags(url):
     ex = re.compile(r'v\d+(?:\.\d+(?:\.\d+)?)?')
     return list(dict.fromkeys(ex.findall(res)))
 
+@cache
 def _source_registry_tag():
-    """This causes the confuse config directory to be created, so could fail
-    on read-only systems."""
+    """Resolve (source_url, registry_url, tag) from config, cached per process.
+
+    The resolved tag is stable for the lifetime of the process: a restart is
+    required to pick up a newly released McCode version.  Caching avoids a
+    ~300 ms ``git ls-remote`` network round-trip on every
+    ``ensure_registries()`` call.  This also allows offline use once the tag
+    has been resolved at least once.
+    """
     from mccode_antlr.config import config
     requested_tag = config['mccode_pooch']['tag'].as_str_expanded()
     registry_url = config['mccode_pooch']['registry'].as_str_expanded()
