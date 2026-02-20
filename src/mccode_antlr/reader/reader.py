@@ -10,6 +10,94 @@ from ..common import Mode
 
 from mccode_antlr import Flavor
 
+
+# ---------------------------------------------------------------------------
+# Process-level in-memory + disk component cache
+# ---------------------------------------------------------------------------
+
+class _ComponentCache:
+    """Singleton two-level cache for parsed :class:`~mccode_antlr.comp.Comp` objects.
+
+    **Level 1 – in-memory dict** (per process):
+    Maps absolute ``.comp`` path → ``(mtime_ns, Comp)``.  Hits cost nothing
+    beyond a dict lookup and a ``stat()`` call.
+
+    **Level 2 – disk JSON cache** (persists across process restarts):
+    A ``{name}.comp.json`` file is written alongside every ``.comp`` file the
+    first time it is parsed.  On subsequent loads the JSON is decoded by
+    :func:`mccode_antlr.io.json.from_json` in ~0.1 ms instead of running the
+    ANTLR parser (~10–25 ms per component).  The JSON file's mtime is compared
+    to the ``.comp`` file's mtime; a stale JSON is discarded and the component
+    is re-parsed.  If the cache directory is not writable the disk level is
+    silently skipped.
+
+    Use :meth:`clear` to flush in-memory entries (disk files are left intact
+    and will be reloaded on the next access).
+    """
+    _instance: '_ComponentCache | None' = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            cls._instance._store: dict[str, tuple[int, Comp]] = {}
+        return cls._instance
+
+    @staticmethod
+    def _json_path(comp_path: Path) -> Path:
+        return comp_path.with_suffix(comp_path.suffix + '.json')
+
+    def get(self, path: Path) -> Comp | None:
+        key = str(path)
+        try:
+            comp_mtime = path.stat().st_mtime_ns
+        except OSError:
+            return None
+
+        # Level 1: in-memory
+        if key in self._store:
+            cached_mtime, comp = self._store[key]
+            if cached_mtime == comp_mtime:
+                return comp
+            del self._store[key]
+
+        # Level 2: disk JSON
+        json_path = self._json_path(path)
+        try:
+            if json_path.exists() and json_path.stat().st_mtime_ns >= comp_mtime:
+                from mccode_antlr.io.json import from_json
+                comp = from_json(json_path.read_bytes())
+                if isinstance(comp, Comp):
+                    self._store[key] = (comp_mtime, comp)
+                    return comp
+        except Exception:
+            pass  # corrupt or unreadable JSON — fall through to ANTLR parse
+
+        return None
+
+    def put(self, path: Path, comp: Comp) -> None:
+        try:
+            mtime = path.stat().st_mtime_ns
+            self._store[str(path)] = (mtime, comp)
+        except OSError:
+            return
+        # Write disk JSON cache alongside the .comp file (best-effort)
+        json_path = self._json_path(path)
+        try:
+            from mccode_antlr.io.json import to_json
+            json_path.write_bytes(to_json(comp))
+        except Exception:
+            pass
+
+    def clear(self) -> None:
+        """Flush all in-memory entries (disk JSON files are preserved)."""
+        self._store.clear()
+
+    def __len__(self) -> int:
+        return len(self._store)
+
+
+component_cache = _ComponentCache()
+
 def make_reader_error_listener(super_class, filetype, name, source, pre=5, post=2):
     class ReaderErrorListener(super_class):
         def __init__(self):
@@ -122,23 +210,28 @@ class Reader(Struct):
         from antlr4 import InputStream
         from ..grammar import McComp_ErrorListener, McComp_parse
         from ..comp import CompVisitor
-        source = self.contents(name, ext='.comp', strict=True)
+
         filename = str(self.locate(name, ext='.comp', strict=True))
+        abs_path = Path(filename).resolve()
 
-        stream = InputStream(source)
-        error_listener = make_reader_error_listener(McComp_ErrorListener, 'Component', name, source)
-        tree = McComp_parse(stream, 'prog', error_listener)
-
-        visitor = CompVisitor(self, filename, instance_name=current_instance_name)  # The visitor needs to be able to call *this* method
-        res = visitor.visitProg(tree)
-        if not isinstance(res, Comp):
-            raise RuntimeError(f'Parsing component file {filename} did not produce a component object!')
-        if res.category is None:
-            # guess the component category from the registered filename (not fully resolved path)
-            fullname = self.fullname(name, ext='.comp', strict=True)
-            fullname = fullname if isinstance(fullname, Path) else Path(fullname)
-            # if fullname is an absolute path, it comes from a local repository -- so we don't know what to do
-            res.category = 'UNKNOWN' if fullname.is_absolute() else fullname.parts[0]
+        # Check the process-level cache before running the ANTLR parser.
+        res = component_cache.get(abs_path)
+        if res is None:
+            source = self.contents(name, ext='.comp', strict=True)
+            stream = InputStream(source)
+            error_listener = make_reader_error_listener(McComp_ErrorListener, 'Component', name, source)
+            tree = McComp_parse(stream, 'prog', error_listener)
+            visitor = CompVisitor(self, filename, instance_name=current_instance_name)
+            res = visitor.visitProg(tree)
+            if not isinstance(res, Comp):
+                raise RuntimeError(f'Parsing component file {filename} did not produce a component object!')
+            if res.category is None:
+                fullname = self.fullname(name, ext='.comp', strict=True)
+                fullname = fullname if isinstance(fullname, Path) else Path(fullname)
+                res.category = 'UNKNOWN' if fullname.is_absolute() else fullname.parts[0]
+            component_cache.put(abs_path, res)
+        else:
+            logger.debug('Component cache hit: %s', abs_path)
         self.components[name] = res
 
     def get_component(self, name: str, current_instance_name=None):
