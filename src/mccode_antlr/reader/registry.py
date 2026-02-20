@@ -555,11 +555,31 @@ REGISTRY_PRIORITY_HIGHEST=10
 
 def _get_remote_repository_version_tags(url):
     import re
-    import git
-    g = git.cmd.Git()
-    res = g.ls_remote(url, sort='-v:refname', tags=True)
-    ex = re.compile(r'v\d+(?:\.\d+(?:\.\d+)?)?')
-    return list(dict.fromkeys(ex.findall(res)))
+    from importlib.util import find_spec
+    if find_spec('git'):
+        import git
+        g = git.cmd.Git()
+        try:
+            res = g.ls_remote(url, sort='-v:refname', tags=True)
+            ex = re.compile(r'v\d+(?:\.\d+(?:\.\d+)?)?')
+            return list(dict.fromkeys(ex.findall(res)))
+        except git.exc.GitCommandError:
+            pass
+    return None
+
+
+def _get_local_version_tags():
+    from packaging.version import Version, InvalidVersion
+    cache_path = pooch.os_cache(f'mccodeantlr/libc')
+    versions = []
+    for obj in cache_path.glob('v*'):
+        if obj.is_dir():
+            try:
+                versions.append(Version(obj.name))
+            except InvalidVersion:
+                pass
+    return list(sorted(versions, reverse=True))
+
 
 @cache
 def _source_registry_tag():
@@ -577,6 +597,8 @@ def _source_registry_tag():
     source_url = config['mccode_pooch']['source'].as_str_expanded()
 
     known_tags = _get_remote_repository_version_tags(registry_url)
+    if known_tags is None:
+        known_tags = _get_local_version_tags()
     if requested_tag.lower() == 'latest':
         requested_tag = known_tags[0]
     elif requested_tag not in known_tags:
