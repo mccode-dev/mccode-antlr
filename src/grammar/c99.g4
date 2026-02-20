@@ -236,5 +236,5 @@ UserDefinedCharacterLiteral: CharacterLiteral Udsuffix;
 fragment Udsuffix: Identifier;
 Whitespace: [ \t]+ -> skip;
 Newline: ('\r' '\n'? | '\n') -> skip;
-BlockComment: '/*' .*? '*/' -> skip;
-LineComment: '//' ~ [\r\n]* -> skip;
+BlockComment: '/*' .*? '*/' -> channel(HIDDEN);
+LineComment: '//' ~ [\r\n]* -> channel(HIDDEN);
