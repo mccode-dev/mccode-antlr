@@ -53,6 +53,7 @@ mcxtrace-antlr = "mccode_antlr.cli.commands:mcxtrace"
 mcrun-antlr = "mccode_antlr.run.runner:mcstas_cmd"
 mxrun-antlr = "mccode_antlr.run.runner:mcxtrace_cmd"
 mccode-antlr = "mccode_antlr.cli.management:mccode_management"
+mcfmt = "mccode_antlr.cli.format:mcfmt"
 
 [tool.setuptools_scm]
 

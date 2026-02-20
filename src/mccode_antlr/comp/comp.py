@@ -129,3 +129,79 @@ class Comp(Struct):
 
     def collect_metadata(self):
         return self.metadata
+
+    def to_file(self, output=None, wrapper=None):
+        from io import StringIO
+        if output is None:
+            output = StringIO()
+        if wrapper is None:
+            from mccode_antlr.common import TextWrapper
+            wrapper = TextWrapper(width=120)
+
+        def _join(raw_tuple):
+            return '\n'.join(str(rc) for rc in raw_tuple)
+
+        # Build the parameter type prefix for define/setting/output parameters
+        def _param_type(p):
+            from mccode_antlr.common.expression import DataType, ShapeType
+            v = p.value
+            if v.is_str:
+                return 'string '
+            if v.is_vector and getattr(v, 'data_type', None) == DataType.float and \
+                    getattr(v, '_shape', None) is not None:
+                return 'vector '
+            if hasattr(v, 'data_type') and v.data_type == DataType.int:
+                return 'int '
+            return ''
+
+        def _params_str(params):
+            parts = []
+            for p in params:
+                s = _param_type(p) + p.name
+                if p.value.has_value:
+                    s += '=' + str(p.value)
+                parts.append(s)
+            return ', '.join(parts)
+
+        name_line = f'DEFINE COMPONENT {self.name}'
+        if self.dependency:
+            name_line += f'\nDEPENDENCY "{self.dependency}"'
+        print(name_line, file=output)
+
+        if self.define:
+            print(f'DEFINITION PARAMETERS ({_params_str(self.define)})', file=output)
+        if self.setting:
+            print(f'SETTING PARAMETERS ({_params_str(self.setting)})', file=output)
+        if self.output:
+            print(f'OUTPUT PARAMETERS ({_params_str(self.output)})', file=output)
+
+        for metadata in self.metadata:
+            metadata.to_file(output=output, wrapper=wrapper)
+
+        if self.share:
+            print(wrapper.block('SHARE', _join(self.share)), file=output)
+        if self.user:
+            print(wrapper.block('USERVARS', _join(self.user)), file=output)
+        if self.declare:
+            print(wrapper.block('DECLARE', _join(self.declare)), file=output)
+        if self.initialize:
+            print(wrapper.block('INITIALIZE', _join(self.initialize)), file=output)
+        if self.trace:
+            print(wrapper.block('TRACE', _join(self.trace)), file=output)
+        if self.save:
+            print(wrapper.block('SAVE', _join(self.save)), file=output)
+        if self.final:
+            print(wrapper.block('FINALLY', _join(self.final)), file=output)
+        if self.display:
+            print(wrapper.block('MCDISPLAY', _join(self.display)), file=output)
+
+        print('END', file=output)
+
+    def to_string(self, wrapper=None):
+        from io import StringIO
+        output = StringIO()
+        self.to_file(output, wrapper)
+        return output.getvalue()
+
+    def __str__(self):
+        return self.to_string()

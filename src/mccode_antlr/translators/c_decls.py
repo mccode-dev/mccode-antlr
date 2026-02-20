@@ -13,7 +13,8 @@ from loguru import logger
 """
 
 
-def declarations_pre_libraries(source, typedefs: list, component_declared_parameters: dict):
+def declarations_pre_libraries(source, typedefs: list, component_declared_parameters: dict,
+                               line_directives: bool = False):
     warnings = 0
 
     def instrument_parameters_struct():
@@ -100,7 +101,7 @@ def declarations_pre_libraries(source, typedefs: list, component_declared_parame
         for comp in sharers:
             lines.append(f"/* Shared user declarations for all components types '{comp.name}'. */")
             # TODO FIXME to_c includes the `#line` preprocessor directive -- which was removed from McCode3??
-            lines.extend([share.to_c() for share in comp.share])
+            lines.extend([share.to_c(line_directives) for share in comp.share])
         lines.extend([
             "/* ************************************************************************** */",
             "/*             End of SHARE user declarations for all components              */",

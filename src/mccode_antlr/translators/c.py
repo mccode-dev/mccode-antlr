@@ -355,7 +355,8 @@ class CTargetVisitor(TargetVisitor, target_language='c'):
             self.include_header(include)
 
         self.info('Pre library declarations')
-        contents, warnings = declarations_pre_libraries(self.source, self.typedefs, self.component_declared_parameters)
+        contents, warnings = declarations_pre_libraries(self.source, self.typedefs, self.component_declared_parameters,
+                                                        line_directives=self.line_directives)
         self.out(contents)
 
         self.info('Include runtime / list dependencies')
@@ -367,7 +368,7 @@ class CTargetVisitor(TargetVisitor, target_language='c'):
                 print(f'Dependency: {include.name}.o')
 
         self.out("/* User declarations from instrument definition. Can define functions. */")
-        self.out('\n'.join([dec.to_c() for dec in self.source.declare]))
+        self.out('\n'.join([dec.to_c(self.line_directives) for dec in self.source.declare]))
         # FIXME I _think_ these macro undefines are not used (that is, they're never defined in the first place)
         self.out('#undef compcurname\n#undef compcurtype\n#undef compcurindex')
         self.out(f"/* end of instrument '{self.source.name}' and components DECLARE */")
@@ -376,13 +377,15 @@ class CTargetVisitor(TargetVisitor, target_language='c'):
 
     def visit_initialize(self):
         from .c_initialise import cogen_initialize
-        self.out(cogen_initialize(self.source, self.component_declared_parameters, self.ok_to_skip))
+        self.out(cogen_initialize(self.source, self.component_declared_parameters, self.ok_to_skip,
+                                  line_directives=self.line_directives))
 
     def enter_trace(self):
         from .c_trace import def_trace_section, cogen_trace_section
         self.out(def_trace_section(self.flavor))
         self.out(cogen_trace_section(self.flavor, self.source, self.component_declared_parameters,
-                                     self.instrument_uservars, self.component_uservars))
+                                     self.instrument_uservars, self.component_uservars,
+                                     line_directives=self.line_directives))
 
     def leave_trace(self):
         from .c_trace import undef_trace_section
@@ -408,15 +411,18 @@ class CTargetVisitor(TargetVisitor, target_language='c'):
 
     def visit_save(self):
         from .c_save import cogen_save
-        self.out(cogen_save(self.source, self.component_declared_parameters))
+        self.out(cogen_save(self.source, self.component_declared_parameters,
+                            line_directives=self.line_directives))
 
     def visit_finally(self):
         from .c_finally import cogen_finally
-        self.out(cogen_finally(self.source, self.component_declared_parameters))
+        self.out(cogen_finally(self.source, self.component_declared_parameters,
+                               line_directives=self.line_directives))
 
     def visit_display(self):
         from .c_display import cogen_display
-        self.out(cogen_display(self.source, self.component_declared_parameters))
+        self.out(cogen_display(self.source, self.component_declared_parameters,
+                               line_directives=self.line_directives))
 
     def visit_macros(self):
         from .c_macros import cogen_getvarpars_fct, cogen_getcompindex_fct, cogen_getparticlevar_fct

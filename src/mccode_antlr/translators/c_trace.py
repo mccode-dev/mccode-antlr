@@ -85,6 +85,7 @@ def cogen_trace_section(
         declared_parameters: dict[str, list[CDeclarator]],
         instrument_uservars: list[CDeclarator],
         component_uservars: dict[str, list[CDeclarator]],
+        line_directives: bool = False,
 ) -> str:
     return '\n'.join([
         cogen_comp_trace_class(
@@ -93,7 +94,8 @@ def cogen_trace_section(
             source,
             declared_parameters[component_type.name],
             instrument_uservars,
-            component_uservars[component_type.name]
+            component_uservars[component_type.name],
+            line_directives,
         ) for component_type in source.component_types()
     ])
 
@@ -105,6 +107,7 @@ def cogen_comp_trace_class(
         declared_parameters: list[CDeclarator],
         instr_uservars: list[CDeclarator],
         comp_uservars: list[CDeclarator],
+        line_directives: bool = False,
 ) -> str:
     from .c_defines import cogen_parameter_define, cogen_parameter_undef
     # count matching component type instances which define an EXTEND block:
@@ -149,7 +152,7 @@ def cogen_comp_trace_class(
 
     # output the actual TRACE block(s)
     for block in comp.trace:
-        lines.append(block.to_c())
+        lines.append(block.to_c(line_directives))
 
     # instr files do not produce a code block to output here.
     pars = _runtime_kv_parameters(flavor)
@@ -175,7 +178,7 @@ def cogen_comp_trace_class(
         for index, inst in extended:
             lines.append(f'if (_comp->_index == {1+index}) {{ // EXTEND {inst.name}')
             for ext in inst.extend:
-                lines.append(ext.to_c())
+                lines.append(ext.to_c(line_directives))
             lines.append("}")
         lines.extend(f'  #undef {x.name}' for x in uvs)
 

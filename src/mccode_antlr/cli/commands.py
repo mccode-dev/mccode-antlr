@@ -20,6 +20,8 @@ def mccode_script_parse(prog: str):
     parser.add_argument('--main', action=BooleanOptionalAction, default=True, help='Create main(), --no-main for external embedding')
     parser.add_argument('--runtime', action=BooleanOptionalAction, default=True, help='Embed run-time libraries')
     parser.add_argument('--verbose', action=BooleanOptionalAction, default=False, help='Verbose output during conversion')
+    parser.add_argument('-L', '--line-directives', action=BooleanOptionalAction, default=False,
+                        help='Emit #line directives in generated C for debugging')
 
     args = parser.parse_args()
 
@@ -68,7 +70,8 @@ def mccode(flavor: Flavor):
         instrument = reader.get_instrument(args.filename, mode=Mode.minimal)
 
     # Construct the object which will translate the Python instrument to C
-    visitor = CTargetVisitor(instrument, flavor=flavor, config=config, verbose=config['verbose'])
+    visitor = CTargetVisitor(instrument, flavor=flavor, config=config, verbose=config['verbose'],
+                             line_directives=args.line_directives)
     # Go through the instrument, finish by writing the output file:
     visitor.save(filename=config['output'])
 
