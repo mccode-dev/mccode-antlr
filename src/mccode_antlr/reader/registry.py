@@ -11,7 +11,7 @@ from typing import Type, Any
 from msgspec import Struct
 import requests
 from time import sleep
-
+from packaging.version import Version, InvalidVersion
 
 def _fetch_registry_with_retry(url, max_retries=3, timeout=10):
     """Fetch a registry file with retry logic for gateway timeouts"""
@@ -553,7 +553,7 @@ REGISTRY_PRIORITY_HIGH=5
 REGISTRY_PRIORITY_HIGHEST=10
 
 
-def _get_remote_repository_version_tags(url):
+def _get_remote_repository_version_tags(url) -> list[Version] | None:
     import re
     from importlib.util import find_spec
     if find_spec('git'):
@@ -562,13 +562,14 @@ def _get_remote_repository_version_tags(url):
         try:
             res = g.ls_remote(url, sort='-v:refname', tags=True)
             ex = re.compile(r'v\d+(?:\.\d+(?:\.\d+)?)?')
-            return list(dict.fromkeys(ex.findall(res)))
+            keys = list(dict.fromkeys(ex.findall(res)))
+            return [Version(key) for key in keys]
         except git.exc.GitCommandError:
             pass
     return None
 
 
-def _get_local_version_tags():
+def _get_local_version_tags() -> list[Version]:
     from packaging.version import Version, InvalidVersion
     cache_path = pooch.os_cache(f'mccodeantlr/libc')
     versions = []
@@ -582,7 +583,7 @@ def _get_local_version_tags():
 
 
 @cache
-def _source_registry_tag():
+def _source_registry_tag() -> tuple[str, str, Version]:
     """Resolve (source_url, registry_url, tag) from config, cached per process.
 
     The resolved tag is stable for the lifetime of the process: a restart is
@@ -596,27 +597,30 @@ def _source_registry_tag():
     registry_url = config['mccode_pooch']['registry'].as_str_expanded()
     source_url = config['mccode_pooch']['source'].as_str_expanded()
 
-    known_tags = _get_remote_repository_version_tags(registry_url)
-    if known_tags is None:
-        known_tags = _get_local_version_tags()
+    known_versions = _get_remote_repository_version_tags(registry_url)
+    if known_versions is None:
+        known_versions = _get_local_version_tags()
     if requested_tag.lower() == 'latest':
-        requested_tag = known_tags[0]
-    elif requested_tag not in known_tags:
+        requested_tag = f'v{known_versions[0]}'
+    elif Version(requested_tag) not in known_versions:
         raise RuntimeError(f"The specified version tag, {requested_tag}, is not available in {registry_url}")
-    return source_url, registry_url, requested_tag
+    return source_url, registry_url, Version(requested_tag)
 
 
-def mccode_registry_version():
-    from packaging.version import Version
-    _, _, tag = _source_registry_tag()
-    return Version(tag)
+def mccode_registry_version() -> Version:
+    return _source_registry_tag()[2]
+
+
+def mccode_registry_url_tag() -> tuple[str, str]:
+    src, _, version = _source_registry_tag()
+    return src, f'v{version}'
 
 
 def _mccode_pooch_registries(flavor: Flavor):
     src, reg, tag = _source_registry_tag()
 
     def make_registry(name):
-        return GitHubRegistry(name, src, tag, registry=reg, priority=REGISTRY_PRIORITY_LOWEST)
+        return GitHubRegistry(name, src, f'v{tag}', registry=reg, priority=REGISTRY_PRIORITY_LOWEST)
 
     registries = [make_registry('libc')]
     if flavor in (Flavor.MCSTAS, Flavor.MCXTRACE):

@@ -691,12 +691,11 @@ def fetch_mccode_clang_format_config() -> Path | None:
     try:
         import pooch as _pooch
         from mccode_antlr.reader.registry import (
-            _source_registry_tag, _fetch_registry_with_retry,
+            mccode_registry_url_tag, _fetch_registry_with_retry,
         )
 
-        source_url, _, tag = _source_registry_tag()
+        source_url, tag = mccode_registry_url_tag()
         url = f'{source_url}/raw/{tag}/.clang-format'
-
         cache_dir = _pooch.os_cache('mccodeantlr/clang-format') / tag
         cached = cache_dir / '.clang-format'
 
