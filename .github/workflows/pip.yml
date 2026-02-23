@@ -34,9 +34,7 @@ jobs:
       uses: ilammy/msvc-dev-cmd@v1
 
     - name: Build and install
-      run: pip install --verbose .
+      run: pip install --verbose '.[test,hdf5]'
 
     - name: Test
-      run: |
-        python -m pip install pytest h5py pytest-missing-modules
-        python -m pytest -v
+      run: python -m pytest -v

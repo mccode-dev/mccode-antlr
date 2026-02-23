@@ -40,7 +40,7 @@ classifiers = [
 dynamic = ["version"]
 
 [project.optional-dependencies]
-test = ["gputil==1.4.0", 'pytest', 'pytest-missing-modules']
+test = ["gputil==1.4.0", 'pytest']
 hdf5 = ["h5py>=3.11.0"]
 mcpl = ["mcpl>=2.2.0"]
 
