@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from msgspec import Struct
-from typing import Union
+from typing import Optional, Union
 from .expression import Expr
 
 
@@ -58,6 +58,8 @@ class InstrumentParameter(Struct):
 class ComponentParameter(Struct):
     name: str
     value: Expr
+    unit: Optional[str] = None
+    description: Optional[str] = None
 
     @classmethod
     def from_dict(cls, args: dict):

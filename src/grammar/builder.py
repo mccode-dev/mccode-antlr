@@ -212,9 +212,14 @@ def main():
     if kwargs['version'] is None:
         kwargs['version'] = antlr4_runtime_version()
 
+    mcdoc_kwargs = {
+        'target': Target.python,
+        'features': [Feature.visitor],
+    }
     ensure_language_up_to_date('McComp', **mc_kwargs, **kwargs)
     ensure_language_up_to_date('McInstr', **mc_kwargs, **kwargs)
     ensure_language_up_to_date('C', **c_kwargs, **kwargs)
+    ensure_language_up_to_date('McDoc', **mcdoc_kwargs, **kwargs)
 
 if __name__ == '__main__':
     # __name__ = 'builder.py'
