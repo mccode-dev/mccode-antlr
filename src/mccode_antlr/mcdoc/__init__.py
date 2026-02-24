@@ -77,3 +77,31 @@ def parse_mcdoc(source: str) -> dict[str, tuple[Optional[str], Optional[str]]]:
     visitor = McDocExtractVisitor()
     visitor.visit(tree)
     return visitor.parameters
+
+
+def parse_mcdoc_full(source: str) -> 'McDocFullExtractor':
+    """Parse a McDoc header from *source* and return all section data.
+
+    Parameters
+    ----------
+    source:
+        The full text of a ``.comp`` file, or the raw text of a ``/* ... */``
+        block comment (the preprocessor handles both cases).
+
+    Returns
+    -------
+    A :class:`~mccode_antlr.mcdoc.visitor.McDocFullExtractor` populated with
+    ``info_fields``, ``short_desc``, ``desc_lines``, ``parameters``, and
+    ``link_lines`` from the first McDoc block comment found.
+    """
+    from antlr4 import InputStream
+    from mccode_antlr.grammar import McDoc_parse
+    from .visitor import McDocFullExtractor
+
+    cleaned = _preprocess(source)
+    visitor = McDocFullExtractor()
+    if cleaned:
+        stream = InputStream(cleaned)
+        tree = McDoc_parse(stream, 'mcdoc')
+        visitor.visit(tree)
+    return visitor

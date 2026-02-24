@@ -443,6 +443,31 @@ class _McCompFormatter(_Formatter):
 
     def _format_component_definition(self, ctx) -> None:
         cname = type(ctx).__name__
+        name = ctx.Identifier().getText()
+
+        # Collect parameter names for McDoc header generation
+        ps = ctx.component_parameter_set()
+        input_params: list[str] = []
+        output_params: list[str] = []
+        if ps.component_define_parameters() is not None:
+            input_params += [
+                p.Identifier().getText()
+                for p in ps.component_define_parameters().component_parameters().component_parameter()
+            ]
+        if ps.component_set_parameters() is not None:
+            input_params += [
+                p.Identifier().getText()
+                for p in ps.component_set_parameters().component_parameters().component_parameter()
+            ]
+        if ps.component_out_parameters() is not None:
+            output_params += [
+                p.Identifier().getText()
+                for p in ps.component_out_parameters().component_parameters().component_parameter()
+            ]
+
+        # Rewrite the McDoc header before flushing other hidden comments.
+        self._format_mcdoc_header(ctx.Define().symbol, name, input_params, output_params)
+
         self._flush_comments_before(ctx.Define().symbol)
 
         name = ctx.Identifier().getText()
@@ -563,6 +588,54 @@ class _McCompFormatter(_Formatter):
         ub = ctx.unparsed_block().UnparsedBlock().symbol
         self._flush_comments_before(ub)
         self._w(f'METADATA {mime} {name}\n{ub.text}\n')
+
+    def _format_mcdoc_header(
+        self,
+        define_token,
+        comp_name: str,
+        input_params: list[str],
+        output_params: list[str],
+    ) -> None:
+        """Find, consume, and rewrite the McDoc block comment before *define_token*.
+
+        Any block comment in the HIDDEN channel that contains McDoc section tags
+        (``%I``, ``%D``, ``%P``, or ``%E``) is treated as the component's McDoc
+        header.  It is consumed from the hidden token stream (so the normal
+        ``_flush_comments_before`` does not re-emit it) and replaced with a
+        canonically formatted version.
+
+        Other hidden tokens before ``define_token`` (e.g. a copyright block without
+        McDoc tags) are left for ``_flush_comments_before`` to handle normally.
+        """
+        from antlr4 import Token
+        from ._mcdoc import build_canonical_mcdoc, extract_mcdoc_from_token
+
+        _MCDOC_TAGS = ('%I', '%D', '%P', '%E')
+
+        hidden = self._ts.getHiddenTokensToLeft(
+            define_token.tokenIndex, Token.HIDDEN_CHANNEL
+        ) or []
+
+        # Find the first block comment that looks like a McDoc header.
+        mcdoc_token = None
+        for h in hidden:
+            if h.tokenIndex <= self._last_comment_idx:
+                continue
+            text = h.text
+            if text.startswith('/*') and any(tag in text for tag in _MCDOC_TAGS):
+                mcdoc_token = h
+                break
+
+        # Parse existing McDoc data (if any).
+        existing = extract_mcdoc_from_token(mcdoc_token.text) if mcdoc_token else None
+
+        # Consume the McDoc token so _flush_comments_before skips it.
+        if mcdoc_token is not None:
+            self._last_comment_idx = max(self._last_comment_idx, mcdoc_token.tokenIndex)
+
+        # Emit the canonical header.
+        canonical = build_canonical_mcdoc(comp_name, existing, input_params, output_params)
+        self._w(canonical)
 
 
 # ---------------------------------------------------------------------------
