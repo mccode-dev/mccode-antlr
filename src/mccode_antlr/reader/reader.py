@@ -3,12 +3,43 @@ from pathlib import Path
 from loguru import logger
 # from dataclasses import dataclass, field
 from msgspec import Struct, field
+from msgspec.structs import replace as _struct_replace
 
 from .registry import Registry, registries_match, registry_from_specification
 from ..comp import Comp
 from ..common import Mode
 
 from mccode_antlr import Flavor
+
+
+# ---------------------------------------------------------------------------
+# McDoc enrichment helpers
+# ---------------------------------------------------------------------------
+
+def _enrich_comp_from_mcdoc(comp: Comp, source: str) -> None:
+    """Enrich *comp*'s parameters in-place with McDoc unit/description metadata."""
+    try:
+        from ..mcdoc import parse_mcdoc
+        mcdoc = parse_mcdoc(source)
+    except Exception:
+        return
+    if not mcdoc:
+        return
+
+    def handle_one_param(param):
+        if (unit_desc := mcdoc.get(param.name)) is not None:
+            return _struct_replace(param, unit=unit_desc[0], description=unit_desc[1])
+        return param
+
+    def handle_param_type(params):
+        return tuple(handle_one_param(param) for param in params)
+
+    if comp.define:
+        comp.define = handle_param_type(comp.define)
+    if comp.setting:
+        comp.setting = handle_param_type(comp.setting)
+    if comp.output:
+        comp.output = handle_param_type(comp.output)
 
 
 # ---------------------------------------------------------------------------
@@ -229,6 +260,7 @@ class Reader(Struct):
                 fullname = self.fullname(name, ext='.comp', strict=True)
                 fullname = fullname if isinstance(fullname, Path) else Path(fullname)
                 res.category = 'UNKNOWN' if fullname.is_absolute() else fullname.parts[0]
+            _enrich_comp_from_mcdoc(res, source)
             component_cache.put(abs_path, res)
         else:
             logger.debug('Component cache hit: %s', abs_path)
