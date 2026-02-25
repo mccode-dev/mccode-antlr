@@ -50,6 +50,19 @@ def _literal_text(ctx) -> str:
     return s.getText(start.start, stop.stop if stop is not None else start.stop)
 
 
+def _param_name(ctx) -> str:
+    """Return the parameter name identifier text from a component_parameter context.
+
+    Some alternatives (Vector, DoubleArray, IntegerArray) can contain a second
+    Identifier as the default value, so ``ctx.Identifier()`` returns a list in
+    those cases.  This helper always returns just the first (parameter name).
+    """
+    ident = ctx.Identifier()
+    if isinstance(ident, list):
+        return ident[0].getText()
+    return ident.getText()
+
+
 def _first_token(ctx):
     """Return the first Token in the subtree rooted at *ctx*."""
     if isinstance(ctx, TerminalNode):
@@ -451,17 +464,17 @@ class _McCompFormatter(_Formatter):
         output_params: list[str] = []
         if ps.component_define_parameters() is not None:
             input_params += [
-                p.Identifier().getText()
+                _param_name(p)
                 for p in ps.component_define_parameters().component_parameters().component_parameter()
             ]
         if ps.component_set_parameters() is not None:
             input_params += [
-                p.Identifier().getText()
+                _param_name(p)
                 for p in ps.component_set_parameters().component_parameters().component_parameter()
             ]
         if ps.component_out_parameters() is not None:
             output_params += [
-                p.Identifier().getText()
+                _param_name(p)
                 for p in ps.component_out_parameters().component_parameters().component_parameter()
             ]
 
@@ -555,19 +568,24 @@ class _McCompFormatter(_Formatter):
 
     def _format_component_parameter(self, ctx) -> str:
         cname = type(ctx).__name__
-        name = ctx.Identifier().getText()
+        name = _param_name(ctx)
         default = ''
         if ctx.Assign() is not None:
-            if ctx.expr() is not None:
+            if hasattr(ctx, 'expr') and ctx.expr() is not None:
                 default = '=' + self._expr(ctx.expr())
-            elif ctx.StringLiteral() is not None:
+            elif hasattr(ctx, 'StringLiteral') and ctx.StringLiteral() is not None:
                 default = '=' + ctx.StringLiteral().getText()
-            elif ctx.Null() is not None:
+            elif hasattr(ctx, 'Null') and ctx.Null() is not None:
                 default = '=NULL'
-            elif ctx.initializerlist() is not None:
+            elif hasattr(ctx, 'initializerlist') and ctx.initializerlist() is not None:
                 default = '=' + _literal_text(ctx.initializerlist())
             else:
-                default = '=0'
+                # Vector/DoubleArray/IntegerArray with an Identifier default, or literal '0'
+                idents = ctx.Identifier()
+                if isinstance(idents, list) and len(idents) > 1:
+                    default = '=' + idents[1].getText()
+                else:
+                    default = '=0'
         if cname == 'ComponentParameterIntegerContext':
             return f'int {name}{default}'
         if cname == 'ComponentParameterStringContext':

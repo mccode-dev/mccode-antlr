@@ -71,6 +71,7 @@ class _ComponentCache:
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._instance._store: dict[str, tuple[int, Comp]] = {}
+            cls._instance._source_overrides: dict[str, str] = {}
         return cls._instance
 
     @staticmethod
@@ -118,6 +119,29 @@ class _ComponentCache:
             json_path.write_bytes(to_json(comp))
         except Exception:
             pass
+
+    def evict(self, path: Path) -> None:
+        """Remove a single path from the in-memory store (disk JSON is preserved)."""
+        self._store.pop(str(path), None)
+
+    # ------------------------------------------------------------------
+    # In-memory source overrides (for LSP-provided unsaved edits)
+    # ------------------------------------------------------------------
+
+    def override_source(self, name: str, source: str) -> None:
+        """Store *source* as the in-memory text for component *name*.
+
+        ``Reader.contents()`` checks this dict before reading from disk,
+        so all readers will see the live text immediately.
+        """
+        self._source_overrides[name] = source
+
+    def clear_override(self, name: str) -> None:
+        """Remove the in-memory source override for *name*."""
+        self._source_overrides.pop(name, None)
+
+    def get_override(self, name: str) -> str | None:
+        return self._source_overrides.get(name)
 
     def clear(self) -> None:
         """Flush all in-memory entries (disk JSON files are preserved)."""
@@ -200,6 +224,11 @@ class Reader(Struct):
         raise RuntimeError(f'{name} not found in {msg}')
 
     def contents(self, name: str, which: str = None, ext: str = None, strict: bool = False):
+        # Return in-memory override (unsaved LSP edits) when available.
+        if ext in (None, '.comp'):
+            override = component_cache.get_override(name)
+            if override is not None:
+                return override
         registries = self.registries if which is None else [x for x in self.registries
                                                             if x.name in which]
         for reg in registries:
@@ -270,6 +299,46 @@ class Reader(Struct):
         if name not in self.components:
             self.add_component(name, current_instance_name=current_instance_name)
         return self.components[name]
+
+    def inject_source(self, name: str, source: str, filename: str | None = None) -> None:
+        """Parse *source* as a component definition and store it in ``self.components``.
+
+        Bypasses all file-based caches (process-level and disk JSON) so that
+        unsaved in-memory edits are immediately reflected in hover/completion.
+        Also stores *source* in the process-level cache's source-override dict so
+        that ``contents()`` returns the live text for all Reader instances.
+
+        Raises nothing on parse failure — the existing cached component is kept.
+        """
+        from antlr4 import InputStream
+        from ..grammar import McComp_ErrorListener, McComp_parse
+        from ..comp import CompVisitor
+
+        fn = filename or f'{name}.comp'
+        stream = InputStream(source)
+        error_listener = make_reader_error_listener(McComp_ErrorListener, 'Component', name, source)
+        tree = McComp_parse(stream, 'prog', error_listener)
+        visitor = CompVisitor(self, fn, instance_name=None)
+        try:
+            res = visitor.visitProg(tree)
+        except Exception:
+            return
+        if not isinstance(res, Comp):
+            return
+        if res.category is None:
+            res.category = 'UNKNOWN'
+        _enrich_comp_from_mcdoc(res, source)
+        component_cache.override_source(name, source)
+        self.components[name] = res
+
+    def evict(self, name: str) -> None:
+        """Remove *name* from ``self.components`` and the source-override dict.
+
+        The next ``get_component`` call will re-read from the process-level cache
+        (which uses mtime) or re-parse from disk — useful after a file save.
+        """
+        self.components.pop(name, None)
+        component_cache.clear_override(name)
 
     def get_instrument(self, name: str | None | Path, destination=None, mode: Mode | None = None):
         """Load and parse an instr Instrument definition file
