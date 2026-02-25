@@ -489,6 +489,8 @@ def registries_match(registry: Registry, spec):
     if isinstance(spec, Registry):
         return registry == spec
     parts = spec.split()
+    if not parts:
+        return False
     path = Path(parts[1] if len(parts) == 2 else parts[0])
     if path.exists() and registry.root == path.resolve():
         return True

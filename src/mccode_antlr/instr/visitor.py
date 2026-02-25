@@ -324,18 +324,19 @@ class InstrVisitor(McInstrVisitor):
 
     def visitShell(self, ctx: McInstrParser.ShellContext):
         from subprocess import run
-        args = str(ctx.StringLiteral()).split(' ')
-        run(args, shell=True, check=True)
+        args = str(ctx.StringLiteral()).strip('"\'').split()
+        run(args, shell=False, check=True)
 
     def visitSearchPath(self, ctx: McInstrParser.SearchPathContext):
-        self.parent.handle_search_keyword(str(ctx.StringLiteral()))
+        self.parent.handle_search_keyword(str(ctx.StringLiteral()).strip('"\''))
 
     def visitSearchShell(self, ctx: McInstrParser.SearchShellContext):
         from subprocess import run
-        args = str(ctx.StringLiteral()).split()
-        res = run(args, shell=True, capture_output=True, check=True)
+        args = str(ctx.StringLiteral()).strip('"\'').split()
+        res = run(args, shell=False, capture_output=True, check=True)
         for specs in res.stdout.decode().split('\n'):
-            self.parent.handle_search_keyword(specs)
+            if specs.strip():
+                self.parent.handle_search_keyword(specs)
 
     # TODO Make this and the identical list of visitors in comp/visitor.py a single definition ... somehow
     # FIXME There *are* no statements in McCode, so all identifiers always produce un-parsable values.
