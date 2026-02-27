@@ -14,7 +14,6 @@ InstanceReference = TypeVar('InstanceReference', bound='Instance')
 VectorReference = tuple[Vector, Optional[InstanceReference]]
 AnglesReference = tuple[Angles, Optional[InstanceReference]]
 
-# @dataclass
 class Instance(Struct):
     """Intermediate representation of a McCode component instance
 
@@ -45,6 +44,13 @@ class Instance(Struct):
             if getattr(self, name) != getattr(other, name):
                 return False
         return True
+
+    def __hash__(self):
+        return hash((
+            self.name, self.type, self.at_relative, self.rotate_relative,
+            self.orientation, self.parameters, self.removable, self.cpu, self.split,
+            self.when, self.group, self.extend, self.jump, self.metadata, self.mode
+        ))
 
     def __repr__(self):
         return f'Instance({self.name}, {self.type.name})'
@@ -190,12 +196,15 @@ class Instance(Struct):
     def set_parameters(self, **kwargs):
         for name, value in kwargs.items():
             self.set_parameter(name, value)
+        return self
 
     def REMOVABLE(self):
         self.removable = True
+        return self
 
     def CPU(self):
         self.cpu = True
+        return self
 
     def SPLIT(self, count):
         if isinstance(count, str):
@@ -203,6 +212,7 @@ class Instance(Struct):
         if not isinstance(count, Expr):
             raise ValueError(f'Expected provided SPLIT expression to be an Expr not a {type(count)}')
         self.split = count
+        return self
 
     def WHEN(self, expr):
         if isinstance(expr, str):
@@ -212,9 +222,11 @@ class Instance(Struct):
         if expr.is_constant:
             raise RuntimeError(f'Evaluated WHEN statement {expr} would be constant at runtime!')
         self.when = expr
+        return self
 
     def GROUP(self, name: str):
         self.group = name
+        return self
 
     def EXTEND(self, *blocks):
         # copy vanilla overwrite-COPY behavior, issue 85
@@ -222,6 +234,7 @@ class Instance(Struct):
         #self.extend += blocks_to_raw_c(*blocks)
         if len(blocks):
             self.extend = blocks_to_raw_c(*blocks)
+        return self
 
     def JUMP(self, *jumps):
         # copy vanilla overwrite-COPY behavior, issue 85
@@ -229,6 +242,7 @@ class Instance(Struct):
         # self.jump += jumps
         if len(jumps):
             self.jump = jumps
+        return self
 
     def add_metadata(self, m: MetaData):
         if any([x.name == m.name for x in self.metadata]):
@@ -262,6 +276,10 @@ class Instance(Struct):
             if name in jump:
                 return True
         return False
+
+    @property
+    def dependency(self):
+        return self.type.dependency
 
 
 def _triplet_ref_str(which, tr: Union[VectorReference, AnglesReference], absolute, relative, required=False):

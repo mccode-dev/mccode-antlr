@@ -56,6 +56,9 @@ class Model(msgspec.Struct):
     name: str
     obj: msgspec.Raw
 
+    def __hash__(self):
+        return hash((self.name, bytes(self.obj)))
+
     @classmethod
     def from_value(cls, obj: Any, encoder=None):
         if encoder is None:

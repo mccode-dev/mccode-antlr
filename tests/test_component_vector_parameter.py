@@ -85,7 +85,7 @@ class ComponentVectorParameterTestCase(unittest.TestCase):
             filtered = filter(lambda x: x.startswith('easy_to_spot'), result.decode('utf8').split('\n'))
             return [float(x.split('=')[-1].strip()) for x in filtered]
 
-    def _parse_comp(self, comp_name: str, contents: str, instance_name: str = 'instance'):
+    def _parse_comp(self, comp_name: str, contents: str):
         from antlr4 import InputStream
         from mccode_antlr.grammar import McComp_parse, McComp_ErrorListener
         from mccode_antlr.comp import CompVisitor
@@ -95,7 +95,7 @@ class ComponentVectorParameterTestCase(unittest.TestCase):
         )
         tree = McComp_parse(InputStream(contents), 'prog', error_listener)
         # no need to call back to the reader, so we can use a dummy visitor
-        visitor = CompVisitor(self.assembler.reader, __file__, instance_name=instance_name)
+        visitor = CompVisitor(self.assembler.reader, __file__)
         res = visitor.visitProg(tree)
         self.assembler.reader.components[comp_name] = res
         return res
@@ -107,7 +107,6 @@ class ComponentVectorParameterTestCase(unittest.TestCase):
         tree = McInstr_parse(InputStream(contents), 'prog')
         visitor = InstrVisitor(self.assembler.reader, 'no source')
         instr = visitor.visitProg(tree)
-        instr.flags = tuple(self.assembler.reader.c_flags)
         instr.registries = tuple(self.assembler.reader.registries)
         return instr
 

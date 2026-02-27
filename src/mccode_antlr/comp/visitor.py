@@ -10,11 +10,10 @@ from ..grammar.McCompParser import McCompParser
 
 
 class CompVisitor(McCompVisitor):
-    def __init__(self, parent, filename, instance_name=None):
+    def __init__(self, parent, filename):
         self.parent = parent  # the instrument (handler?) that wanted to read this component
         self.filename = filename
         self.state = Comp()
-        self.instance_name = instance_name
 
     def visitProg(self, ctx: Parser.ProgContext):
         self.state = Comp()
@@ -31,7 +30,7 @@ class CompVisitor(McCompVisitor):
         from copy import deepcopy
         new_name, copy_from = [str(x) for x in ctx.Identifier()]
         if self.parent is None:
-            raise RuntimeError("Can not copy a component definition without a parent instrument")
+            raise RuntimeError("Can not copy a component definition without a parent reader/registry")
         copy_from_comp = self.parent.get_component(copy_from)
         # pull from that component ... deepcopy _just_ in case
         self.state = deepcopy(copy_from_comp)
@@ -124,7 +123,7 @@ class CompVisitor(McCompVisitor):
     def visitDependency(self, ctx: Parser.DependencyContext):
         if ctx.StringLiteral() is not None:
             # the flags are the literal string without its quotes:
-            self.parent.add_c_flags(str(ctx.StringLiteral()).strip('"'))
+            self.state.dependency = str(ctx.StringLiteral()).strip('"')
 
     def visitComponent_trace(self, ctx: McCompParser.Component_traceContext):
         self.state.TRACE(*self.multi_block("trace", ctx.multi_block()))

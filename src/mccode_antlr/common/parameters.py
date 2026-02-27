@@ -1,10 +1,7 @@
-from dataclasses import dataclass
 from msgspec import Struct
 from typing import Optional, Union
 from .expression import Expr
 
-
-# @dataclass
 class InstrumentParameter(Struct):
     name: str
     unit: str
@@ -37,6 +34,9 @@ class InstrumentParameter(Struct):
         self.to_file(output, wrapper)
         return output.getvalue().strip()
 
+    def __hash__(self):
+        return hash((self.name, self.value, self.unit))
+
     def __str__(self):
         from mccode_antlr.common import TextWrapper
         return self.to_string(TextWrapper())
@@ -54,7 +54,6 @@ class InstrumentParameter(Struct):
         return InstrumentParameter(self.name, self.unit, self.value.copy())
 
 
-# @dataclass
 class ComponentParameter(Struct):
     name: str
     value: Expr
@@ -71,6 +70,9 @@ class ComponentParameter(Struct):
         output = StringIO()
         self.to_file(output, wrapper)
         return output.getvalue().strip()
+
+    def __hash__(self):
+        return hash((self.name, self.value, self.unit, self.description))
 
     def __str__(self):
         from mccode_antlr.common import TextWrapper

@@ -1,6 +1,7 @@
 """Data structures required for representing the contents of a McCode instr file"""
 from __future__ import annotations
 
+from functools import lru_cache
 from io import StringIO
 from msgspec import Struct, field
 from typing import Optional
@@ -11,7 +12,6 @@ from .group import Group, DependentGroup
 from loguru import logger
 
 
-# @dataclass
 class Instr(Struct):
     """Intermediate representation of a McCode instrument
 
@@ -29,21 +29,21 @@ class Instr(Struct):
     initialize: tuple[RawC, ...] = field(default_factory=tuple)  # initialization of global declare parameters
     save: tuple[RawC, ...] = field(default_factory=tuple)  # statements executed after TRACE to save results
     final: tuple[RawC, ...] = field(default_factory=tuple)  # clean-up memory for global declare parameters
-    groups: dict[str, Group] = field(default_factory=dict)
-    flags: tuple[str, ...] = field(default_factory=tuple)  # (C) flags needed for compilation of the (translated) instrument
     registries: tuple[Registry, ...] = field(default_factory=tuple)  # the registries used by the reader to populate this
+    dependency: tuple[str, ...] = field(default_factory=tuple)  # some (C) flags needed for compilation of the (translated) instrument
+    # _groups: dict[str, Group] = field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, args: dict):
         from mccode_antlr.reader.registry import SerializableRegistry as SR
         from mccode_antlr.instr.instance import make_independent
         popt = 'name', 'source'
-        tpreq = 'included', 'flags',
+        tpreq = 'included', 'dependency',
         tmtype = {'parameters': InstrumentParameter, 'metadata': MetaData,
                  'instances': DepInstance, 'user': RawC, 'declare': RawC,
                   'initialize': RawC, 'save': RawC, 'final': RawC, 'registries': SR
                  }
-        dtype = {'components': Comp, 'groups': DependentGroup}
+        dtype = {'components': Comp}
 
         data = {}
         data.update({k: args[k] for k in popt if k in args})
@@ -54,7 +54,6 @@ class Instr(Struct):
         instances = data.pop('instances')
         components = data.pop('components')
         data['components'] = make_independent(instances, components)
-        data['groups'] = {k: v.make_independent(data['components']) for k, v in data['groups'].items()}
         return cls(**data)
 
     def to_dict(self):
@@ -67,7 +66,6 @@ class Instr(Struct):
         data['registries'] = [SR.from_registry(r) for r in self.registries]
         data['instances'] = instances
         data['components'] = components
-        data['groups'] = {k: DependentGroup.from_independent(v) for k, v in self.groups.items()}
         return data
 
     def __eq__(self, other):
@@ -78,6 +76,13 @@ class Instr(Struct):
             if getattr(self, name) != getattr(other, name):
                 return False
         return True
+
+    def __hash__(self):
+        return hash((
+            self.name, self.source, self.parameters, self.metadata, self.components,
+            self.included, self.user, self.declare, self.initialize, self.save,
+            self.final, self.registries, self.dependency
+        ))
 
     def to_file(self, output=None, wrapper=None):
         if output is None:
@@ -100,8 +105,9 @@ class Instr(Struct):
 
         for metadata in self.metadata:
             metadata.to_file(output=output, wrapper=wrapper)
-        if self.flags:
-            print(wrapper.quoted_line('DEPENDENCY ', list(self.flags)), file=output)
+        # Print only the .instr-added DEPENDENCY line(s) here -- .comp DEPENDENCY excluded
+        if self.dependency:
+            print(wrapper.quoted_line('DEPENDENCY ', list(self.dependency)), file=output)
 
         if self.declare:
             print(wrapper.block('DECLARE', _join_raw_tuple(self.declare)), file=output)
@@ -221,7 +227,7 @@ class Instr(Struct):
         self.included += (name,)
 
     def DEPENDENCY(self, *strings):
-        self.flags += strings
+        self.dependency += strings
 
     def USERVARS(self, *blocks):
         self.user += blocks_to_raw_c(*blocks)
@@ -243,12 +249,9 @@ class Instr(Struct):
             self.metadata = tuple([x for x in self.metadata if x.name != m.name])
         self.metadata += (m,)
 
-    def determine_groups(self):
-        for id, inst in enumerate(self.components):
-            if inst.group:
-                if inst.group not in self.groups:
-                    self.groups[inst.group] = Group(inst.group, len(self.groups))
-                self.groups[inst.group].add(id, inst)
+    @property
+    def groups(self):
+        return determine_groups(self.components)
 
     def component_types(self):
         # # If component order is unimportant, we can use a set:
@@ -331,11 +334,12 @@ class Instr(Struct):
         return flag
 
     @property
-    def unique_flags(self) -> set[str]:
+    def dependencies(self) -> set[str]:
         # Each 'flag' in self.flags is from a single instrument component DEPENDENCY,
         # and might contain duplicates: If we accept that white space differences
         # matter, we can deduplicate the strings 'easily'
-        uf = set(self.flags)
+        uf = set(self.dependency)
+        uf.update(inst.dependency for inst in self.components if inst.dependency is not None)
         if any(inst.cpu for inst in self.components):
             uf.add('-DFUNNEL')
         return uf
@@ -344,7 +348,7 @@ class Instr(Struct):
         # The dependency strings are allowed to contain any of
         #       '@NEXUSFLAGS@', @MCCODE_LIB@, CMD(...), ENV(...), GETPATH(...)
         # each of which should be replaced by ... something. Start by replacing the 'static' (old-style) keywords
-        replaced_flags = [self._replace_keywords(flag) for flag in self.unique_flags]
+        replaced_flags = [self._replace_keywords(flag) for flag in self.dependencies]
         # Then use the above decoder method to replace any instances of CMD, ENV, or GETPATH
         return [self._replace_env_getpath_cmd(flag) for flag in replaced_flags]
 
@@ -363,8 +367,8 @@ class Instr(Struct):
         copy.initialize = tuple(x.copy() for x in self.initialize)
         copy.save = tuple(x.copy() for x in self.save)
         copy.final = tuple(x.copy() for x in self.final)
-        copy.groups = {k: v.copy() for k, v in self.groups.items()}
-        copy.flags = tuple(x for x in self.flags)
+        # copy.groups = {k: v.copy() for k, v in self.groups.items()}
+        copy.dependency = tuple(x for x in self.dependency)
         copy.registries = tuple(x for x in self.registries)
         return copy
 
@@ -431,7 +435,6 @@ class Instr(Struct):
             from ..reader import Reader
             reader = Reader(registries=list(self.registries))
             component = reader.get_component(component)
-            self.flags += tuple(reader.c_flags)
         self.components += (Instance(name, component, at_relative, rotate_relative, orientation,
                                      parameters, group, removable),)
 
@@ -548,3 +551,14 @@ class Instr(Struct):
 
 def _join_raw_tuple(raw_tuple: tuple[RawC, ...]):
     return '\n'.join([str(rc) for rc in raw_tuple])
+
+
+@lru_cache
+def determine_groups(instances) -> dict[str, Group]:
+    groups = {}
+    for id, inst in enumerate(instances):
+        if inst.group:
+            if inst.group not in groups:
+                groups[inst.group] = Group(inst.group, len(groups))
+            groups[inst.group].add(id, inst)
+    return groups

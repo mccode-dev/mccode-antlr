@@ -132,7 +132,7 @@ class InstrIO:
     from mccode_antlr.instr import Instr
     attrs = ('name', 'source')
     names = ('parameters', 'metadata', 'included', 'user', 'declare', 'initialize', 'save', 'final',
-             'flags', 'registries')
+             'dependency', 'registries')
 
     @staticmethod
     def load(group, **kwargs) -> Instr:
@@ -151,35 +151,31 @@ class InstrIO:
             instances.append(HDF5IO.load(instance_group, instances=known_instances, components=component_types))
             known_instances[instances[-1].name] = instances[-1]
         values['components'] = tuple(instances)
-        # With all instances known, it is possible to construct the groups dictionary
-        values['groups'] = HDF5IO.load(group['groups'], instances=known_instances)
         return InstrIO.Instr(**values)
 
     @staticmethod
     def save(group, data: Instr, **kwargs):
         _standard_save(InstrIO.Instr, group, data, InstrIO.attrs, InstrIO.names, **kwargs)
-        # The groups field does not need special treatment for saving, but does for loading
-        HDF5IO.save(group=group.create_group('groups'), data=data.groups)
         # the instances _must_ be recorded in order (we can recover their names later):
         HDF5IO.save(group=group.create_group('instances'), data=data.components)
         # The order of the component types in the instrument are not important.
         HDF5IO.save(group=group.create_group('components'), data=data.component_types())
 
 
-class GroupIO:
-    from mccode_antlr.instr import Instance, Group
-
-    @staticmethod
-    def load(group, instances: dict[str, Instance], **kwargs) -> Group:
-        values = _standard_read(GroupIO.Group, group, ('name', 'index'), (), ('ids', 'member_names'), **kwargs)
-        values['members'] = [instances[name] for name in values['member_names']]
-        del values['member_names']
-        return GroupIO.Group(**values)
-
-    @staticmethod
-    def save(group, data, **kwargs):
-        _standard_save(GroupIO.Group, group, data, ('name', 'index'), ('ids', ), **kwargs)
-        HDF5IO.save(group=group.create_group('member_names'), data=[member.name for member in data.members])
+# class GroupIO:
+#     from mccode_antlr.instr import Instance, Group
+#
+#     @staticmethod
+#     def load(group, instances: dict[str, Instance], **kwargs) -> Group:
+#         values = _standard_read(GroupIO.Group, group, ('name', 'index'), (), ('ids', 'member_names'), **kwargs)
+#         values['members'] = [instances[name] for name in values['member_names']]
+#         del values['member_names']
+#         return GroupIO.Group(**values)
+#
+#     @staticmethod
+#     def save(group, data, **kwargs):
+#         _standard_save(GroupIO.Group, group, data, ('name', 'index'), ('ids', ), **kwargs)
+#         HDF5IO.save(group=group.create_group('member_names'), data=[member.name for member in data.members])
 
 
 def RemoteRegistryIO(actual_type):
@@ -415,7 +411,7 @@ class HDF5IO:
         'DataSource': DataSourceIO,
         'Instance': InstanceIO,
         'RawC': _dataclass_io(RawC, attrs=('filename', 'line'), required=('source',), optional=('translated',)),
-        'Group': GroupIO,
+        # 'Group': GroupIO,
         'ModuleRemoteRegistry': RemoteRegistryIO(ModuleRemoteRegistry),
         'GitHubRegistry': RemoteRegistryIO(GitHubRegistry),
         'LocalRegistry': LocalRegistryIO,

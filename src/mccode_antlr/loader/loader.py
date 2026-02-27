@@ -24,7 +24,6 @@ def parse_mccode_instr(contents: str, registries: list[Registry], source: str | 
     reader = Reader(registries=registries)
     visitor = InstrVisitor(reader, source or '<string>')
     instr = visitor.visitProg(McInstr_parse(InputStream(contents), 'prog'))
-    instr.flags += tuple(reader.c_flags)
     instr.registries += tuple(registries)
     return instr
 

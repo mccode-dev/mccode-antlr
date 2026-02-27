@@ -1,12 +1,14 @@
 from msgspec import Struct, field
 from .instance import Instance
 
-# @dataclass
 class Group(Struct):
     name: str
     index: int
     ids: list[int] = field(default_factory=list)
     members: list[Instance] = field(default_factory=list)
+
+    def __hash__(self):
+        return hash((self.name, self.index, tuple(self.ids), tuple(self.members)))
 
     def add(self, id: int, inst: Instance):
         self.ids.append(id)

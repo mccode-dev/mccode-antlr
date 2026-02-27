@@ -4,7 +4,6 @@ from typing import Optional
 from msgspec import Struct
 from .utilities import escape_str_for_c
 
-# @dataclass
 class RawC(Struct):
     filename: Optional[str]
     line: int
@@ -14,6 +13,9 @@ class RawC(Struct):
     @classmethod
     def from_dict(cls, args: dict):
         return cls(**args)
+
+    def __hash__(self):
+        return hash((self.filename, self.line, self.source, self.translated))
 
     def __str__(self):
         return self.source

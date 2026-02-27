@@ -169,7 +169,6 @@ class OpStyle (IntEnum):
     PYTHON = 2
 
 
-# @dataclass
 class Op(Struct):
     data_type: DataType
     style: OpStyle
@@ -268,7 +267,6 @@ class Op(Struct):
     def as_type(self, pdt):
         raise NotImplementedError()
 
-# @dataclass
 class TrinaryOp(Op):
     op: str
     first: OpNode
@@ -352,7 +350,6 @@ class TrinaryOp(Op):
                 x.verify_parameters(instrument_parameter_names)
 
 
-# @dataclass
 class BinaryOp(Op):
     op: str
     left: OpNode
@@ -497,7 +494,6 @@ class BinaryOp(Op):
                 x.verify_parameters(instrument_parameter_names)
 
 
-# @dataclass
 class UnaryOp(Op):
     op: str
     value: OpNode
@@ -599,7 +595,6 @@ class UnaryOp(Op):
             x.verify_parameters(instrument_parameter_names)
 
 
-# @dataclass
 class Value(Struct):
     _value: int | float | str | list[int] | list[float] | list[str]
     _data: DataType = DataType.undefined
@@ -1005,7 +1000,6 @@ ExprNode = Union[ExprNodeSingular, ExprNodeList]
 OpNode = list[Union[Value, UnaryOp, BinaryOp, TrinaryOp, Op]]
 
 
-# @dataclass
 class Expr(Struct):
     expr: ExprNode
 

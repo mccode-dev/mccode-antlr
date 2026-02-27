@@ -1,45 +1,13 @@
 from __future__ import annotations
 from pathlib import Path
 from loguru import logger
-# from dataclasses import dataclass, field
 from msgspec import Struct, field
-from msgspec.structs import replace as _struct_replace
 
 from .registry import Registry, registries_match, registry_from_specification
 from ..comp import Comp
 from ..common import Mode
 
 from mccode_antlr import Flavor
-
-
-# ---------------------------------------------------------------------------
-# McDoc enrichment helpers
-# ---------------------------------------------------------------------------
-
-def _enrich_comp_from_mcdoc(comp: Comp, source: str) -> None:
-    """Enrich *comp*'s parameters in-place with McDoc unit/description metadata."""
-    try:
-        from ..mcdoc import parse_mcdoc
-        mcdoc = parse_mcdoc(source)
-    except Exception:
-        return
-    if not mcdoc:
-        return
-
-    def handle_one_param(param):
-        if (unit_desc := mcdoc.get(param.name)) is not None:
-            return _struct_replace(param, unit=unit_desc[0], description=unit_desc[1])
-        return param
-
-    def handle_param_type(params):
-        return tuple(handle_one_param(param) for param in params)
-
-    if comp.define:
-        comp.define = handle_param_type(comp.define)
-    if comp.setting:
-        comp.setting = handle_param_type(comp.setting)
-    if comp.output:
-        comp.output = handle_param_type(comp.output)
 
 
 # ---------------------------------------------------------------------------
@@ -182,12 +150,13 @@ def make_reader_error_listener(super_class, filetype, name, source, pre=5, post=
     return ReaderErrorListener()
 
 
-# @dataclass
 class Reader(Struct):
     registries: list[Registry] = field(default_factory=list)
     components: dict[str, Comp] = field(default_factory=dict)
-    c_flags: list[str] = field(default_factory=list)
     flavor: Flavor | None = None
+
+    def __hash__(self):
+        return hash((tuple(self.registries), tuple(self.components.items()), self.flavor))
 
     def __post_init__(self):
         from .registry import ordered_registries, default_registries
@@ -210,9 +179,6 @@ class Reader(Struct):
                 self.prepend_registry(reg)
             else:
                 raise RuntimeError(f"Registry specification {spec} did not specify a valid registry!")
-
-    def add_c_flags(self, flags):
-        self.c_flags.append(flags)
 
     def locate(self, name: str, which: str = None, ext: str = None, strict: bool = False):
         registries = self.registries if which is None else [x for x in self.registries if x.name in which]
@@ -267,32 +233,25 @@ class Reader(Struct):
     def add_component(self, name: str, current_instance_name=None):
         if name in self.components:
             raise RuntimeError("The named component is already known.")
-        from antlr4 import InputStream
-        from ..grammar import McComp_ErrorListener, McComp_parse
-        from ..comp import CompVisitor
+        from ..grammar import McComp_ErrorListener
 
         filename = str(self.locate(name, ext='.comp', strict=True))
         abs_path = Path(filename).resolve()
 
         # Check the process-level cache before running the ANTLR parser.
-        res = component_cache.get(abs_path)
-        if res is None:
-            source = self.contents(name, ext='.comp', strict=True)
-            stream = InputStream(source)
-            error_listener = make_reader_error_listener(McComp_ErrorListener, 'Component', name, source)
-            tree = McComp_parse(stream, 'prog', error_listener)
-            visitor = CompVisitor(self, filename, instance_name=current_instance_name)
-            res = visitor.visitProg(tree)
-            if not isinstance(res, Comp):
-                raise RuntimeError(f'Parsing component file {filename} did not produce a component object!')
-            if res.category is None:
-                fullname = self.fullname(name, ext='.comp', strict=True)
-                fullname = fullname if isinstance(fullname, Path) else Path(fullname)
-                res.category = 'UNKNOWN' if fullname.is_absolute() else fullname.parts[0]
-            _enrich_comp_from_mcdoc(res, source)
-            component_cache.put(abs_path, res)
+        if (res := component_cache.get(abs_path)) is not None:
+            logger.debug(f'Component cache hit: {abs_path}')
         else:
-            logger.debug('Component cache hit: %s', abs_path)
+            source = self.contents(name, ext='.comp', strict=True)
+            fullname = self.fullname(name, ext='.comp', strict=True)
+            error_listener = make_reader_error_listener(
+                McComp_ErrorListener,'Component', name, source
+            )
+            res = Comp.from_source(
+                self, error_listener, source, filename, fullname
+            )
+            component_cache.put(abs_path, res)
+
         self.components[name] = res
 
     def get_component(self, name: str, current_instance_name=None):
@@ -310,24 +269,16 @@ class Reader(Struct):
 
         Raises nothing on parse failure — the existing cached component is kept.
         """
-        from antlr4 import InputStream
-        from ..grammar import McComp_ErrorListener, McComp_parse
-        from ..comp import CompVisitor
-
-        fn = filename or f'{name}.comp'
-        stream = InputStream(source)
-        error_listener = make_reader_error_listener(McComp_ErrorListener, 'Component', name, source)
-        tree = McComp_parse(stream, 'prog', error_listener)
-        visitor = CompVisitor(self, fn, instance_name=None)
+        from ..grammar import McComp_ErrorListener
+        error_listener = make_reader_error_listener(
+            McComp_ErrorListener, 'Component', name, source
+        )
         try:
-            res = visitor.visitProg(tree)
+            res = Comp.from_source(self, error_listener, source, filename)
         except Exception:
             return
         if not isinstance(res, Comp):
             return
-        if res.category is None:
-            res.category = 'UNKNOWN'
-        _enrich_comp_from_mcdoc(res, source)
         component_cache.override_source(name, source)
         self.components[name] = res
 
@@ -374,6 +325,5 @@ class Reader(Struct):
         if not isinstance(res, Instr):
             raise RuntimeError(f'Parsing instrument file {filename} did not produce an Instr object')
         res.source = filename
-        res.flags = tuple(self.c_flags)
         res.registries = tuple(self.registries)
         return res
