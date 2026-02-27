@@ -239,8 +239,9 @@ class Reader(Struct):
         abs_path = Path(filename).resolve()
 
         # Check the process-level cache before running the ANTLR parser.
-        res = component_cache.get(abs_path)
-        if res is None:
+        if (res := component_cache.get(abs_path)) is not None:
+            logger.debug(f'Component cache hit: {abs_path}')
+        else:
             source = self.contents(name, ext='.comp', strict=True)
             fullname = self.fullname(name, ext='.comp', strict=True)
             error_listener = make_reader_error_listener(
@@ -250,8 +251,7 @@ class Reader(Struct):
                 self, error_listener, source, filename, fullname
             )
             component_cache.put(abs_path, res)
-        else:
-            logger.debug('Component cache hit: %s', abs_path)
+
         self.components[name] = res
 
     def get_component(self, name: str, current_instance_name=None):
