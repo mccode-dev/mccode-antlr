@@ -1,8 +1,6 @@
-from dataclasses import dataclass
 from msgspec import Struct
 from enum import Enum
 
-# @dataclass
 class DataSource(Struct):
     class Type(Enum):
         Component = 1
@@ -11,6 +9,9 @@ class DataSource(Struct):
 
     _type : Type
     _name : str
+
+    def __hash__(self):
+        return hash((self._type, self._name))
 
     @classmethod
     def from_dict(cls, args: dict):
@@ -37,12 +38,14 @@ class DataSource(Struct):
         return DataSource(DataSource.Type[type_name], name)
 
 
-# @dataclass
 class MetaData(Struct):
     source: DataSource
     name: str
     mimetype: str
     value: str
+
+    def __hash__(self):
+        return hash((self.source, self.name, self.mimetype, self.value))
 
     @classmethod
     def from_dict(cls, args: dict):

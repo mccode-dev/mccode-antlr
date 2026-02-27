@@ -1,13 +1,12 @@
 """Data structures required for representing the contents of a McCode comp file"""
 from __future__ import annotations
-
+from pathlib import Path
 from typing import Optional
 from msgspec import Struct, field
 from ..common import ComponentParameter, MetaData, parameter_name_present, RawC, blocks_to_raw_c
 
 
 # Could this be replaced by a subclassed 'name' class? E.g., Slit.comp <=> class McCompSlit(McComp)?
-# @dataclass
 class Comp(Struct):
     """Intermediate representation of a McCode component definition
 
@@ -48,12 +47,31 @@ class Comp(Struct):
             {k: tuple(t.from_dict(a) for a in args[k]) for k, t in tmreq.items()})
         return cls(**data)
 
+    @classmethod
+    def from_source(cls,
+                    reader,
+                    error_listener,
+                    source: str,
+                    filename: str | None = None,
+                    fullname: str | Path | None = None,
+                    ):
+        from antlr4 import InputStream
+        from mccode_antlr.grammar import McComp_ErrorListener, McComp_parse
+        from mccode_antlr.comp.visitor import CompVisitor
+        from mccode_antlr.reader.reader import make_reader_error_listener
+        stream = InputStream(source)
+        tree = McComp_parse(stream, 'prog', error_listener)
+        visitor = CompVisitor(reader, filename or '<source>')
+        comp = visitor.visitProg(tree)
+        if comp.category is None and (filename is not None or fullname is not None):
+            fullname = fullname or Path(filename)
+            fullname = fullname if isinstance(fullname, Path) else Path(fullname)
+            comp.category = 'UNKNOWN' if fullname.is_absolute() else fullname.parts[0]
+        enrich_comp_from_mcdoc(comp, source)
+        return comp
+
     def __hash__(self):
         return hash(repr(self))
-
-    # @property
-    # def parameters(self):
-    #     return self.define + self.setting
 
     def has_parameter(self, name: str):
         return parameter_name_present(self.define, name) or parameter_name_present(self.setting, name)
@@ -205,3 +223,34 @@ class Comp(Struct):
 
     def __str__(self):
         return self.to_string()
+
+
+# ---------------------------------------------------------------------------
+# McDoc enrichment helpers
+# ---------------------------------------------------------------------------
+
+def enrich_comp_from_mcdoc(comp: Comp, source: str) -> None:
+    """Enrich *comp*'s parameters in-place with McDoc unit/description metadata."""
+    from msgspec.structs import replace
+    try:
+        from mccode_antlr.mcdoc import parse_mcdoc
+        mcdoc = parse_mcdoc(source)
+    except Exception:
+        return
+    if not mcdoc:
+        return
+
+    def handle_one_param(param):
+        if (unit_desc := mcdoc.get(param.name)) is not None:
+            return replace(param, unit=unit_desc[0], description=unit_desc[1])
+        return param
+
+    def handle_param_type(params):
+        return tuple(handle_one_param(param) for param in params)
+
+    if comp.define:
+        comp.define = handle_param_type(comp.define)
+    if comp.setting:
+        comp.setting = handle_param_type(comp.setting)
+    if comp.output:
+        comp.output = handle_param_type(comp.output)

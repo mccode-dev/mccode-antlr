@@ -84,10 +84,6 @@ class Assembler:
         comp_type = self.reader.get_component(type_name)
         if type_name != comp_type.name:
             raise RuntimeError(f"Component resolution failed for {type_name}, found {comp_type.name} instead")
-        if self.reader.c_flags:
-            unique_flags = list(self.instrument.flags)
-            unique_flags.extend(self.reader.c_flags)
-            self.instrument.flags = tuple(dict.fromkeys(unique_flags))
         at, ref = self._handle_at(at)
         instance = Instance(name, comp_type,
                             at_relative=(at, ref), rotate_relative=self._handle_rotate(rotate, ref),

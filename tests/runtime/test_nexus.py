@@ -47,7 +47,7 @@ def test_instr_dependency():
     component origin = check_for_define() at (0, 0, 0) absolute
     end
     """), registries=[in_memory])
-    assert any(macro_name() == x for x in instr.flags)
+    assert any(macro_name() == x for x in instr.dependency)
     results, data = compile_and_run(instr, '-n 1 dummy=2')
     lines = results.decode('utf-8').splitlines()
     assert sum('UNUSUAL_MACRO set' == x for x in lines) == 1
@@ -62,7 +62,7 @@ def test_instr_no_dependency():
     component origin = check_for_define() at (0, 0, 0) absolute
     end
     """), registries=[in_memory])
-    assert not any(macro_name() == x for x in instr.flags)
+    assert not any(macro_name() == x for x in instr.dependency)
     results, data = compile_and_run(instr, '-n 1 dummy=2')
     lines = results.decode('utf-8').splitlines()
     assert sum('UNUSUAL_MACRO set' == x for x in lines) == 0
@@ -78,7 +78,7 @@ def test_nexus_key_is_expanded():
        component origin = check_for_nexus() at (0, 0, 0) absolute
        end
        """), registries=[in_memory])
-    assert any('@NEXUSFLAGS@' == x for x in instr.flags)
+    assert any('@NEXUSFLAGS@' == x for x in instr.dependency)
     assert not any('@NEXUSFLAGS@' == x for x in instr.decoded_flags())
     nexus_flags = config['flags']['nexus'].get()
     assert any(nexus_flags == x for x in instr.decoded_flags())

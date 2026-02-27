@@ -11,7 +11,6 @@ SeitzType = TypeVar('SeitzType', bound='Seitz')
 
 
 
-# @dataclass
 class Matrix(Struct):
     """Any 3D matrix, not necessarily a rotation matrix"""
     xx: Expr = field(default_factory=lambda: Expr.float(0))
@@ -36,6 +35,9 @@ class Matrix(Struct):
         o = Expr.float(1)
         z = Expr.float(0)
         return cls(o, z, z, z, o, z, z, z, o)
+
+    def __hash__(self):
+        return hash(tuple(self))
 
     def __iter__(self):
         for x in (self.xx, self.xy, self.xz, self.yx, self.yy, self.yz, self.zx, self.zy, self.zz):
@@ -101,7 +103,6 @@ class Matrix(Struct):
                       round(self.zx, n), round(self.zy, n), round(self.zz, n))
 
 
-# @dataclass
 class Vector(Struct):
     x: Expr = field(default_factory=lambda: Expr.float(0))
     y: Expr = field(default_factory=lambda: Expr.float(0))
@@ -113,6 +114,9 @@ class Vector(Struct):
         for name in [f.name for f in fields(cls)]:
             args[name] = Expr.from_dict(args[name])
         return cls(**args)
+
+    def __hash__(self):
+        return hash(tuple(self))
 
     def __iter__(self):
         for v in (self.x, self.y, self.z):
@@ -159,7 +163,6 @@ class Vector(Struct):
         return any(value in x for x in (self.x, self.y, self.z))
 
 
-# @dataclass
 class Angles(Struct):
     x: Expr = field(default_factory=lambda: Expr.float(0))
     y: Expr = field(default_factory=lambda: Expr.float(0))
@@ -171,6 +174,9 @@ class Angles(Struct):
         for name in [f.name for f in fields(cls)]:
             args[name] = Expr.from_dict(args[name])
         return cls(**args)
+
+    def __hash__(self):
+        return hash(tuple(self))
 
     def __iter__(self):
         for a in (self.x, self.y, self.z):
@@ -195,7 +201,6 @@ class Angles(Struct):
         return any(value in x for x in (self.x, self.y, self.z))
 
 
-# @dataclass
 class Rotation(Struct):
     """A _valid_ 3-D rotation matrix flattened in row-order.
 
@@ -219,6 +224,9 @@ class Rotation(Struct):
         for name in [f.name for f in fields(cls)]:
             args[name] = Expr.from_dict(args[name])
         return cls(**args)
+
+    def __hash__(self):
+        return hash(tuple(self))
 
     def __iter__(self):
         for x in (self.xx, self.xy, self.xz, self.yx, self.yy, self.yz, self.zx,
@@ -276,7 +284,6 @@ class Rotation(Struct):
         return any(value in x for x in (self.xx, self.xy, self.xz, self.yx, self.yy, self.yz, self.zx, self.zy, self.zz))
 
 
-# @dataclass
 class Seitz(Struct):
     xx: Expr = field(default_factory=lambda: Expr.float(1))
     xy: Expr = field(default_factory=lambda: Expr.float(0))
@@ -309,6 +316,9 @@ class Seitz(Struct):
         return cls(Expr.float(1), Expr.float(0), Expr.float(0), vector.x,
                    Expr.float(0), Expr.float(1), Expr.float(0), vector.y,
                    Expr.float(0), Expr.float(0), Expr.float(1), vector.z)
+
+    def __hash__(self):
+        return hash(tuple(self))
 
     def __str__(self):
         return f'[{str(self.rotation())}|{str(self.vector())}]'
@@ -499,10 +509,12 @@ def axes_euler_angles(m: Rotation, degrees) -> Angles:
 OrientationPartType = TypeVar('OrientationPartType', bound='OrientationPart')
 
 
-# @dataclass
 class Part(Struct):
     """The Seitz matrix part of any arbitrary projective affine transformation"""
     _axes: Seitz = field(default_factory=lambda: Seitz())
+
+    def __hash__(self):
+        return hash(self._axes)
 
     @classmethod
     def from_dict(cls, args: dict):
@@ -633,7 +645,6 @@ class Part(Struct):
         return value in self._axes
 
 
-# @dataclass
 class TranslationPart(Part):
     """A specialization to the translation-only part of a projective affine transformation"""
     v: Vector = field(default_factory=lambda: Vector())
@@ -641,6 +652,9 @@ class TranslationPart(Part):
     @classmethod
     def from_dict(cls, args: dict):
         return cls(Vector.from_dict(args['v']))
+
+    def __hash__(self):
+        return hash(self.v)
 
     def __str__(self):
         return f'({self.v.x}, {self.v.y}, {self.v.z}) [0, 0, 0]'
@@ -682,11 +696,13 @@ class TranslationPart(Part):
         return value in self.v
 
 
-# @dataclass
 class RotationPart(Part):
     """A specialization to the rotation-only part of a projective affine transformation"""
     v: Expr = field(default_factory=lambda: Expr.float(0))
     degrees: bool = True
+
+    def __hash__(self):
+        return hash((self.v, self.degrees))
 
     @classmethod
     def from_dict(cls, args: dict):
@@ -822,7 +838,6 @@ class RotationZ(RotationPart):
 PartsType = TypeVar('PartsType', bound='Parts')
 
 
-# @dataclass
 class Parts(Struct):
     """A list of unresolved or partially resolved successive projective affine transformation(s)"""
     _stack: tuple[Part, ...] = field(default_factory=tuple)
@@ -830,6 +845,9 @@ class Parts(Struct):
     @classmethod
     def from_dict(cls, args: dict):
         return cls(tuple(Part.from_dict(x) for x in args['_stack']))
+
+    def __hash__(self):
+        return hash(self._stack)
 
     def __str__(self):
         inner = ','.join(str(x) for x in self._stack) if len(self._stack) else ''
@@ -980,7 +998,6 @@ class Parts(Struct):
 OrientType = TypeVar('OrientType', bound='Orient')
 
 
-# @dataclass
 class Orient(Struct):
     """Un-evaluated lists of dependent operations that position and orient an object in a coordinate system"""
     _position: Parts = field(default_factory=Parts)
@@ -998,6 +1015,9 @@ class Orient(Struct):
 
     def __repr__(self):
         return f'Orient<{repr(self._position)}, {repr(self._rotation)}>'
+
+    def __hash__(self):
+        return hash((self._position, self._rotation, self._degrees))
 
     @property
     def degrees(self):

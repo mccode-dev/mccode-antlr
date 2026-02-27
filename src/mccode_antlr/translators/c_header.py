@@ -94,7 +94,7 @@ def header_pre_runtime(
      * Instrument: {source.source} ({source.name})
      * Date: {datetime.now()}
      * File: {config.get('output')}
-     * CFLAGS={' '.join(source.unique_flags)}
+     * CFLAGS={' '.join(source.decoded_flags())}
      */
 
     #ifndef WIN32

@@ -32,7 +32,6 @@ class InstrVisitor(McInstrVisitor):
     def visitInstrument_definition(self, ctx: McInstrParser.Instrument_definitionContext):
         self.state.name = str(ctx.Identifier())
         self.visitChildren(ctx)
-        self.state.determine_groups()
 
     def visitInstrument_parameters(self, ctx: McInstrParser.Instrument_parametersContext):
         # The speedy-antlr-tool exposed Python parse tree doesn't know about/expose

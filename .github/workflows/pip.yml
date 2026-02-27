@@ -34,7 +34,7 @@ jobs:
       uses: ilammy/msvc-dev-cmd@v1
 
     - name: Build and install
-      run: pip install --verbose '.[test,hdf5]'
+      run: pip install --verbose '.[test,hdf5,mcpl]'
 
     - name: Test
       run: python -m pytest -v

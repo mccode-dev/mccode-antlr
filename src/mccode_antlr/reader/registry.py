@@ -416,6 +416,9 @@ class SerializableRegistry(Struct):
     registry_type: str
     registry_data: dict[str, str]
 
+    def __hash__(self):
+        return hash((self.registry_type, tuple(sorted(self.registry_data.items()))))
+
     @classmethod
     def from_registry(cls, registry: Any):
         return cls(str(type(registry)), registry.file_contents())

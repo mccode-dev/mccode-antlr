@@ -48,3 +48,57 @@ def test_instrument_parameter_json_round_trip():
     assert ip.name == ret.name
     assert ip.value == ret.value
     assert str(ip) == str(ret)
+
+
+def test_component_json_round_trip():
+    from mccode_antlr.comp import Comp
+    from mccode_antlr.common.parameters import ComponentParameter
+    from mccode_antlr.common.expression import Expr
+
+    comp = Comp(
+        name='test', category="test_category",
+        setting=(ComponentParameter(
+            name="a_parameter",
+            value=Expr.float(1.),
+            unit='m',
+            description="""Some
+            long 
+            description"""
+        ),),
+        dependency="mcpl-config --show compileflags",
+    )
+
+    ret = assert_round_trip(comp)
+    assert comp == ret
+
+
+def test_mcpl_component_json_round_trip():
+    from pathlib import Path
+    from mccode_antlr import Flavor
+    from mccode_antlr.comp.comp import Comp
+    from mccode_antlr.grammar import McComp_ErrorListener as MCCEL
+    from mccode_antlr.reader.registry import default_registries
+    from mccode_antlr.reader.reader import Reader, make_reader_error_listener
+
+    registries = default_registries(Flavor.MCSTAS)
+
+    # Look for MCPL_input.comp:
+    name = 'MCPL_input'
+    source, filename, fullfile = "", None, None
+    for reg in registries:
+        if reg.known(name, ".comp", True):
+            source = reg.contents(name, ".comp")
+            fullfile = reg.fullname(name, ".comp")
+            filename = (fullfile if isinstance(fullfile, Path) else Path(fullfile)).stem
+
+    assert "@MCPLFLAGS@" in source
+
+    reader = Reader(registries=registries, flavor=Flavor.MCSTAS)
+    ear_err = make_reader_error_listener(MCCEL, 'Component', name, source)
+
+    comp = Comp.from_source(reader, ear_err, source, filename, fullfile)
+    ret = assert_round_trip(comp)
+    assert comp == ret
+    assert comp.dependency == '@MCPLFLAGS@'
+
+

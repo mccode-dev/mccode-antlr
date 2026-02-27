@@ -1,15 +1,16 @@
-# from dataclasses import dataclass
 from msgspec import Struct
 from ..common import Expr
 
 
-# @dataclass
 class Jump(Struct):
     target: str
     relative_target: int
     iterate: bool
     condition: Expr
     absolute_target: int = -1
+
+    def __hash__(self):
+        return hash((self.target, self.relative_target, self.iterate, self.condition, self.absolute_target))
 
     @classmethod
     def from_dict(cls, args: dict):
