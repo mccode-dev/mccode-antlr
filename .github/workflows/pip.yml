@@ -33,8 +33,13 @@ jobs:
       if: runner.os == 'Windows'
       uses: ilammy/msvc-dev-cmd@v1
 
-    - name: Build and install
+    - name: Build and install with testing dependencies including HDF5 and MCPL
+      if: runner.os != 'Windows'
       run: pip install --verbose '.[test,hdf5,mcpl]'
+
+    - name: Build and install with testing dependencies including HDF5 (no MCPL)
+      if: runner.os == 'Windows'
+      run: pip install --verbose '.[test,hdf5]'
 
     - name: Test
       run: python -m pytest -v
