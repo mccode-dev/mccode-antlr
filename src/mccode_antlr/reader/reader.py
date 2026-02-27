@@ -233,9 +233,7 @@ class Reader(Struct):
     def add_component(self, name: str, current_instance_name=None):
         if name in self.components:
             raise RuntimeError("The named component is already known.")
-        from antlr4 import InputStream
-        from ..grammar import McComp_ErrorListener, McComp_parse
-        from ..comp import CompVisitor
+        from ..grammar import McComp_ErrorListener
 
         filename = str(self.locate(name, ext='.comp', strict=True))
         abs_path = Path(filename).resolve()
@@ -251,20 +249,6 @@ class Reader(Struct):
             res = Comp.from_source(
                 self, error_listener, source, filename, fullname
             )
-            #
-            # stream = InputStream(source)
-            #
-            # tree = McComp_parse(stream, 'prog', error_listener)
-            # visitor = CompVisitor(self, filename)
-            # res = visitor.visitProg(tree)
-            # if not isinstance(res, Comp):
-            #     raise RuntimeError(f'Parsing component file {filename} did not produce a component object!')
-            # if res.category is None:
-            #     fullname = self.fullname(name, ext='.comp', strict=True)
-            #     fullname = fullname if isinstance(fullname, Path) else Path(fullname)
-            #     res.category = 'UNKNOWN' if fullname.is_absolute() else fullname.parts[0]
-            # _enrich_comp_from_mcdoc(res, source)
-            #
             component_cache.put(abs_path, res)
         else:
             logger.debug('Component cache hit: %s', abs_path)
@@ -285,11 +269,12 @@ class Reader(Struct):
 
         Raises nothing on parse failure — the existing cached component is kept.
         """
+        from ..grammar import McComp_ErrorListener
         error_listener = make_reader_error_listener(
             McComp_ErrorListener, 'Component', name, source
         )
         try:
-            res = Comp.from_source(self, error_listener, source, fn)
+            res = Comp.from_source(self, error_listener, source, filename)
         except Exception:
             return
         if not isinstance(res, Comp):

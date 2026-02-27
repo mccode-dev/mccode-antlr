@@ -249,13 +249,6 @@ class Instr(Struct):
             self.metadata = tuple([x for x in self.metadata if x.name != m.name])
         self.metadata += (m,)
 
-    # def determine_groups(self):
-    #     for id, inst in enumerate(self.components):
-    #         if inst.group:
-    #             if inst.group not in self.groups:
-    #                 self.groups[inst.group] = Group(inst.group, len(self.groups))
-    #             self.groups[inst.group].add(id, inst)
-
     @property
     def groups(self):
         return determine_groups(self.components)
