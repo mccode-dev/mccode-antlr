@@ -169,7 +169,7 @@ class OpStyle (IntEnum):
     PYTHON = 2
 
 
-class Op(Struct):
+class Op(Struct, tag_field='type', tag='op'):
     data_type: DataType
     style: OpStyle
 
@@ -267,7 +267,7 @@ class Op(Struct):
     def as_type(self, pdt):
         raise NotImplementedError()
 
-class TrinaryOp(Op):
+class TrinaryOp(Op, tag='trinary_op'):
     op: str
     first: OpNode
     second: OpNode
@@ -350,7 +350,7 @@ class TrinaryOp(Op):
                 x.verify_parameters(instrument_parameter_names)
 
 
-class BinaryOp(Op):
+class BinaryOp(Op, tag='binary_op'):
     op: str
     left: OpNode
     right: OpNode
@@ -494,7 +494,7 @@ class BinaryOp(Op):
                 x.verify_parameters(instrument_parameter_names)
 
 
-class UnaryOp(Op):
+class UnaryOp(Op, tag='unary_op'):
     op: str
     value: OpNode
 
@@ -595,8 +595,15 @@ class UnaryOp(Op):
             x.verify_parameters(instrument_parameter_names)
 
 
-class Value(Struct):
-    _value: int | float | str | list[int] | list[float] | list[str]
+# Module-level alias so that msgspec resolves _value's type from module globals,
+# bypassing the int/float/str classmethods defined on Value itself.
+# list[int]/list[float]/list[str] are merged to untyped list since msgspec
+# can't discriminate between them; Value.__post_init__ handles coercion.
+_ValueScalar = int | float | str | list
+
+
+class Value(Struct, tag_field='type', tag='value'):
+    _value: _ValueScalar
     _data: DataType = DataType.undefined
     _object: Optional[ObjectType] = None
     _shape: Optional[ShapeType] = None
@@ -1379,6 +1386,8 @@ def binary_expr(func, name, left, right):
 
 
 def value_or_op_from_dict(args: dict):
+    # Strip the msgspec tag discriminator if present (added by tag_field='type')
+    args = {k: v for k, v in args.items() if k != 'type'}
     # Value: _value, _data, _object, _shape,
     if all(x in args for x in ('_value', '_data', '_object', '_shape')):
         return Value(**args)

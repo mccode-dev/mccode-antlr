@@ -27,6 +27,7 @@ class InstrVisitor(McInstrVisitor):
     def visitProg(self, ctx: McInstrParser.ProgContext):
         self.state = Instr()
         self.visit(ctx.instrument_definition())
+        self.state.finalize_flow_edges()
         return self.state
 
     def visitInstrument_definition(self, ctx: McInstrParser.Instrument_definitionContext):
