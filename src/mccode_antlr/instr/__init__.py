@@ -15,6 +15,8 @@ from .flow import (
     FlowEdgeRecord,
     build_particle_flow_graph,
     flow_graph_from_records,
+    build_instance_io,
+    InstanceIO,
 )
 
 
@@ -40,4 +42,6 @@ __all__ = [
     'FlowEdgeRecord',
     'build_particle_flow_graph',
     'flow_graph_from_records',
+    'build_instance_io',
+    'InstanceIO',
 ]
