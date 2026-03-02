@@ -7,6 +7,11 @@ on:
     branches:
       - main
 
+env:
+  # Pin the McCode repository version used for component and library files.
+  # Bump this when a new McCode release should be adopted.
+  MCCODE_VERSION: v3.5.31
+
 jobs:
   build:
     name: Build with Pip
@@ -32,6 +37,36 @@ jobs:
     - name: Setup MSVC compilers for testing
       if: runner.os == 'Windows'
       uses: ilammy/msvc-dev-cmd@v1
+
+    - name: Cache McCode repository
+      id: cache-mccode
+      uses: actions/cache@v4
+      with:
+        path: mccode-repo
+        key: mccode-${{ env.MCCODE_VERSION }}
+
+    - name: Checkout McCode ${{ env.MCCODE_VERSION }} (sparse)
+      if: steps.cache-mccode.outputs.cache-hit != 'true'
+      uses: actions/checkout@v6
+      with:
+        repository: mccode-dev/McCode
+        ref: ${{ env.MCCODE_VERSION }}
+        path: mccode-repo
+        sparse-checkout: |
+          common/lib/share
+          mcstas-comps
+          mcxtrace-comps
+        sparse-checkout-cone-mode: false
+
+    - name: Point mccode-antlr at the local McCode clone
+      # Uses bash on all platforms (including Windows via Git Bash) so that
+      # $GITHUB_WORKSPACE expands consistently with forward slashes.
+      shell: bash
+      run: |
+        MCCODE_ROOT="$GITHUB_WORKSPACE/mccode-repo"
+        echo "MCCODEANTLR_MCSTAS__PATHS=${MCCODE_ROOT}/mcstas-comps ${MCCODE_ROOT}/common/lib/share" >> "$GITHUB_ENV"
+        echo "MCCODEANTLR_MCXTRACE__PATHS=${MCCODE_ROOT}/mcxtrace-comps ${MCCODE_ROOT}/common/lib/share" >> "$GITHUB_ENV"
+        echo "MCCODEANTLR_MCCODE_POOCH__TAG=${{ env.MCCODE_VERSION }}" >> "$GITHUB_ENV"
 
     - name: Build and install with testing dependencies including HDF5 and MCPL
       if: runner.os != 'Windows'
