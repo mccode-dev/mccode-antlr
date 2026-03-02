@@ -334,3 +334,76 @@ def _build_flow_edge_records(components: tuple) -> tuple:
 
     return tuple(records)
 
+
+# ---------------------------------------------------------------------------
+# Instance I/O helpers
+# ---------------------------------------------------------------------------
+
+from typing import NamedTuple
+
+
+class InstanceIO(NamedTuple):
+    """Pair of dicts describing particle-state reachability for each instance.
+
+    inputs[X]  – names of instances whose outgoing particle state *directly*
+                 feeds into X (i.e. X receives a particle that last interacted
+                 with one of these).
+    outputs[X] – names of instances that directly receive X's outgoing particle
+                 state.
+
+    TRY_NEXT edges (between GROUP co-members) are *excluded*: a co-member that
+    fails to SCATTER passes the *reset* state back to the group entry point, not
+    its own modified state.  To preserve symmetry the group predecessor is
+    propagated as an input to every group member, and every group member is
+    propagated as an output of the group predecessor.
+    """
+
+    inputs: dict[str, set[str]]
+    outputs: dict[str, set[str]]
+
+
+def build_instance_io(instr: Instr) -> InstanceIO:
+    """Return :class:`InstanceIO` for all instances in *instr*.
+
+    Algorithm
+    ---------
+    1. Walk ``flow_edges``, skipping TRY_NEXT edges.  Every other edge
+       ``src → dst`` adds *src* to ``inputs[dst]`` and *dst* to
+       ``outputs[src]``.
+
+    2. For each GROUP, propagate the inputs of the *first* member (which are
+       the components preceding the group) to *all* members, and symmetrically
+       add all members to the outputs of the group predecessors.
+    """
+    all_names = {inst.name for inst in instr.components}
+    inputs: dict[str, set[str]] = {name: set() for name in all_names}
+    outputs: dict[str, set[str]] = {name: set() for name in all_names}
+
+    # Step 1: direct (non-TRY_NEXT) edges
+    for record in instr.flow_edges:
+        if isinstance(record.edge, GroupEdge) and record.edge.kind == GroupEdgeKind.TRY_NEXT:
+            continue
+        if record.src in all_names:
+            outputs[record.src].add(record.dst)
+        if record.dst in all_names:
+            inputs[record.dst].add(record.src)
+
+    # Step 2: group predecessor propagation
+    # Collect ordered member lists (preserving component order)
+    group_members: dict[str, list[str]] = {}
+    for inst in instr.components:
+        if inst.group:
+            group_members.setdefault(inst.group, []).append(inst.name)
+
+    for members in group_members.values():
+        first = members[0]
+        predecessors = frozenset(inputs[first])  # already set in step 1
+        # Every member receives the same predecessor states (state is reset)
+        for member in members[1:]:
+            inputs[member] |= predecessors
+        # Every predecessor outputs to all members
+        for pred in predecessors:
+            outputs[pred] |= set(members)
+
+    return InstanceIO(inputs=inputs, outputs=outputs)
+
