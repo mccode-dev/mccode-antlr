@@ -7,6 +7,11 @@ on:
     branches:
       - main
 
+env:
+  # Pin the McCode version whose component and library files are used in tests.
+  # Bump this when a new McCode release should be adopted.
+  MCCODE_VERSION: v3.5.31
+
 jobs:
   build:
     name: Build with Pip
@@ -41,5 +46,38 @@ jobs:
       if: runner.os == 'Windows'
       run: pip install --verbose '.[test,hdf5]'
 
+    - name: Locate pooch cache directory
+      id: pooch-cache-dir
+      shell: python
+      run: |
+        import os, pooch
+        from pathlib import Path
+        # All mccode-antlr caches live under a single parent named 'mccodeantlr'
+        # inside the OS cache dir (e.g. ~/.cache/mccodeantlr on Linux,
+        # %LOCALAPPDATA%\mccodeantlr on Windows).  On Windows, pooch.os_cache()
+        # uses the appdirs double-nesting convention so os_cache('mccodeantlr')
+        # returns …\mccodeantlr\mccodeantlr\Cache — a *sibling* of the actual
+        # registry caches, not their parent.  Walk up from any sub-registry path
+        # to find the first path component named 'mccodeantlr'.
+        probe = Path(pooch.os_cache('mccodeantlr/libc'))
+        parts = probe.parts
+        idx = next((i for i, p in enumerate(parts) if p == 'mccodeantlr'), None)
+        cache = str(Path(*parts[:idx + 1])) if idx is not None else str(probe.parent)
+        with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+            f.write(f'path={cache}\n')
+
+    - name: Cache McCode pooch downloads
+      id: cache-pooch
+      uses: actions/cache@v4
+      with:
+        path: ${{ steps.pooch-cache-dir.outputs.path }}
+        key: pooch-${{ runner.os }}-${{ env.MCCODE_VERSION }}
+
+    - name: Pre-populate pooch cache
+      if: steps.cache-pooch.outputs.cache-hit != 'true'
+      run: python .github/scripts/warm_pooch_cache.py --tag ${{ env.MCCODE_VERSION }}
+
     - name: Test
+      env:
+        MCCODEANTLR_MCCODE_POOCH__TAG: ${{ env.MCCODE_VERSION }}
       run: python -m pytest -v
