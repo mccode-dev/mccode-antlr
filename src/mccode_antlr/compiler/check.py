@@ -1,6 +1,11 @@
 from __future__ import annotations
 from functools import cache
 
+# Stores the human-readable reason the last compile check failed, keyed by compiler path.
+# Used by the `compiled` decorator to surface a useful error message.
+_compile_check_failure: dict[str, str] = {}
+
+
 @cache
 def check_for_mccode_antlr_compiler(path: str) -> bool:
     from shutil import which
@@ -22,7 +27,6 @@ def check_for_mccode_antlr_compiler(path: str) -> bool:
 def compiles(compiler: str, instr):
     from os import access, R_OK
     from platform import system
-    from loguru import logger
     from pathlib import Path
     from tempfile import TemporaryDirectory
     from mccode_antlr import Flavor
@@ -47,14 +51,10 @@ def compiles(compiler: str, instr):
         command, result = compile_func(target.compiler, compiler_flags, binary, linker_flags, source)
 
         if result.returncode:
-            logger.info(f'Failed compiling {command} with error: {result.stderr}')
-            logger.info(f"Verify compiler {target.compiler} accepts {compiler_flags} and linker accepts {linker_flags}")
-            return False
+            stderr = result.stderr.decode(errors='replace').strip() if isinstance(result.stderr, bytes) else str(result.stderr).strip()
+            raise RuntimeError(f"C compiler exited with code {result.returncode}: {stderr}")
         if not binary.exists() or not binary.is_file() or not access(binary, R_OK):
-            logger.info(f"Compilation did not produce an executable output file, check that {target.compiler} works")
-            return False
-
-    return True
+            raise RuntimeError(f"Compilation produced no executable; check that {target.compiler} works")
 
 
 @cache
@@ -62,18 +62,27 @@ def simple_instr_compiles(which: str) -> bool:
     from subprocess import CalledProcessError
     from loguru import logger
     if not check_for_mccode_antlr_compiler(which):
+        from ..config import config
+        cc = config
+        for key in which.split('/'):
+            cc = cc[key]
+        _compile_check_failure[which] = f"compiler '{cc.get(str)}' not found in PATH"
         return False
     try:
         from mccode_antlr.loader import parse_mcstas_instr
         instr = parse_mcstas_instr("define instrument check() trace component a = Arm() at (0,0,0) absolute end")
-        return compiles(which, instr)
+        compiles(which, instr)
+        return True
     except RuntimeError as e:
-        logger.warning(f"Compiler check instrument could not be generated or compiled: {e}")
+        _compile_check_failure[which] = str(e)
+        logger.warning(f"Compiler check failed: {e}")
         return False
     except FileNotFoundError as e:
+        _compile_check_failure[which] = str(e)
         logger.warning(f"Compiler check failed, file not found: {e}")
         return False
     except CalledProcessError as e:
+        _compile_check_failure[which] = str(e)
         logger.warning(f"Compiler check failed, process error: {e}")
         return False
 
@@ -87,10 +96,11 @@ def compiled(method, compiler: str | None = None):
     def wrapper(*args, **kwargs):
         if simple_instr_compiles(compiler):
             return method(*args, **kwargs)
-        elif isinstance(args[0], TestCase):
-            args[0].skipTest(f'Skipping due to lack of working ${compiler}')
+        reason = _compile_check_failure.get(compiler, 'reason unknown — run with logging enabled')
+        if isinstance(args[0], TestCase):
+            args[0].skipTest(f'No working {compiler} compiler: {reason}')
         else:
-            raise RuntimeError(f'A working compiler is required to use function {method.__name__}')
+            raise RuntimeError(f'No working {compiler} compiler for {method.__name__}: {reason}')
 
     return wrapper
 
