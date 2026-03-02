@@ -31,12 +31,13 @@ class Instr(Struct):
     final: tuple[RawC, ...] = field(default_factory=tuple)  # clean-up memory for global declare parameters
     registries: tuple[Registry, ...] = field(default_factory=tuple)  # the registries used by the reader to populate this
     dependency: tuple[str, ...] = field(default_factory=tuple)  # some (C) flags needed for compilation of the (translated) instrument
-    # _groups: dict[str, Group] = field(default_factory=dict)
+    flow_edges: tuple = field(default_factory=tuple)  # serialisable particle-flow edge records (FlowEdgeRecord)
 
     @classmethod
     def from_dict(cls, args: dict):
         from mccode_antlr.reader.registry import SerializableRegistry as SR
         from mccode_antlr.instr.instance import make_independent
+        from mccode_antlr.instr.flow import FlowEdgeRecord
         popt = 'name', 'source'
         tpreq = 'included', 'dependency',
         tmtype = {'parameters': InstrumentParameter, 'metadata': MetaData,
@@ -54,6 +55,7 @@ class Instr(Struct):
         instances = data.pop('instances')
         components = data.pop('components')
         data['components'] = make_independent(instances, components)
+        data['flow_edges'] = tuple(FlowEdgeRecord.from_dict(a) for a in args.get('flow_edges', []))
         return cls(**data)
 
     def to_dict(self):
@@ -171,7 +173,273 @@ class Instr(Struct):
     def add_component(self, a: Instance):
         if any(x.name == a.name for x in self.components):
             raise RuntimeError(f"A component instance named {a.name} is already present in the instrument")
+        prev = self.components[-1] if self.components else None
         self.components += (a,)
+        if prev is not None:
+            self._add_sequential_or_group_edge(prev, a)
+
+    def add_flow_edge(self, src: str, dst: str, edge) -> None:
+        """Append a single :class:`~mccode_antlr.instr.FlowEdgeRecord` to ``flow_edges``.
+
+        Args:
+            src: Source component instance name.
+            dst: Destination component instance name.
+            edge: Any :class:`~mccode_antlr.instr.flow.FlowEdge` subclass instance.
+        """
+        from .flow import FlowEdgeRecord
+        self.flow_edges += (FlowEdgeRecord(src=src, dst=dst, edge=edge),)
+
+    def _add_sequential_or_group_edge(self, prev: Instance, curr: Instance) -> None:
+        """Add the correct sequential or group flow edge when *curr* is appended after *prev*."""
+        from .flow import FlowEdgeRecord, SequentialEdge, GroupEdge, GroupEdgeKind
+        same_group = prev.group is not None and prev.group == curr.group
+        prev_exits_group = prev.group is not None and prev.group != (curr.group or '')
+
+        if same_group:
+            self.flow_edges += (FlowEdgeRecord(
+                src=prev.name, dst=curr.name,
+                edge=GroupEdge(group_name=prev.group, kind=GroupEdgeKind.TRY_NEXT),
+            ),)
+        elif prev_exits_group:
+            # prev is the last member of its group; add group-exit edges from all group members to curr
+            group_name = prev.group
+            members = [inst for inst in self.components if inst.group == group_name]
+            for member in members:
+                self.flow_edges += (FlowEdgeRecord(
+                    src=member.name, dst=curr.name,
+                    edge=GroupEdge(group_name=group_name, kind=GroupEdgeKind.SCATTER_EXIT),
+                ),)
+            self.flow_edges += (FlowEdgeRecord(
+                src=prev.name, dst=curr.name,
+                edge=GroupEdge(group_name=group_name, kind=GroupEdgeKind.PASS_THROUGH),
+            ),)
+        else:
+            self.flow_edges += (FlowEdgeRecord(
+                src=prev.name, dst=curr.name,
+                edge=SequentialEdge(when=curr.when),
+            ),)
+
+    def finalize_flow_edges(self) -> None:
+        """Add JUMP edges to ``flow_edges`` (deferred because forward targets are unknown during parsing)."""
+        from .flow import FlowEdgeRecord, JumpEdge
+        components = self.components
+        n = len(components)
+        name_to_idx = {inst.name: idx for idx, inst in enumerate(components)}
+        for inst in components:
+            for jmp in inst.jump:
+                target_idx = jmp.absolute_target
+                if target_idx < 0:
+                    target_idx = name_to_idx.get(jmp.target, -1)
+                if 0 <= target_idx < n:
+                    self.flow_edges += (FlowEdgeRecord(
+                        src=inst.name, dst=components[target_idx].name,
+                        edge=JumpEdge(
+                            condition=jmp.condition,
+                            iterate=jmp.iterate,
+                            absolute_target=target_idx,
+                        ),
+                    ),)
+
+    def build_flow_graph(self):
+        """Rebuild ``flow_edges`` from scratch and return the derived :class:`networkx.MultiDiGraph`.
+
+        This is idempotent; it replaces any existing ``flow_edges`` content.
+        """
+        from .flow import _build_flow_edge_records, flow_graph_from_records
+        self.flow_edges = _build_flow_edge_records(self.components)
+        return flow_graph_from_records(self.components, self.flow_edges)
+
+    @property
+    def flow_graph(self):
+        """Derive a :class:`networkx.MultiDiGraph` from the current ``flow_edges`` (read-only view).
+
+        Call :meth:`build_flow_graph` to (re)build ``flow_edges`` from the component list,
+        or use :meth:`finalize_flow_edges` to add JUMP edges after incremental construction.
+        """
+        from .flow import flow_graph_from_records
+        return flow_graph_from_records(self.components, self.flow_edges)
+
+    def insert_component(
+        self,
+        name: str,
+        component,
+        *,
+        before: Optional[str] = None,
+        after: Optional[str] = None,
+        at_relative: Optional[tuple] = None,
+        rotate_relative: Optional[tuple] = None,
+        parameters: tuple = (),
+        group: Optional[str] = None,
+        removable: bool = False,
+    ) -> Instance:
+        """Insert a new component instance before or after an existing one.
+
+        Exactly one of *before* or *after* must be specified.
+
+        The ``components`` tuple is updated in-place and ``flow_edges`` is
+        updated consistently: the connecting sequential or TRY_NEXT edge
+        between the two surrounding components is split into two edges.  All
+        ``Jump.absolute_target`` fields in all existing instances are reset to
+        ``-1``; the translator's ``set_jump_absolute_targets()`` (called during
+        C generation) will re-resolve them by name.
+
+        Parameters
+        ----------
+        name:
+            Instance name for the new component (must be unique).
+        component:
+            Component type: a :class:`~mccode_antlr.instr.Comp` object or a
+            string that will be looked up from the instrument's registries.
+        before:
+            Name of the existing component to insert *before*.
+        after:
+            Name of the existing component to insert *after*.
+        at_relative:
+            ``(Vector | tuple[float,float,float], Instance | str | None)``
+            position and reference.  The reference may name a component that
+            comes *after* the new instance in the final order; it will be
+            re-expressed relative to the predecessor component.  If ``None``,
+            the position is computed as the midpoint between the surrounding
+            components (falls back to the origin of the predecessor when
+            orientations are unavailable or non-constant).
+        rotate_relative:
+            ``(Angles | tuple[float,float,float], Instance | str | None)``
+            rotation and reference.  Same forward-reference fixing applies.
+            If ``None``, the absolute orientation of the downstream component
+            is used (falls back to zero-rotation RELATIVE predecessor).
+        parameters:
+            Component instance parameters.
+        group:
+            GROUP name for the new instance, if any.
+        removable:
+            Whether the instance is marked removable.
+
+        Returns
+        -------
+        Instance
+            The newly created instance (already inserted into
+            ``self.components``).
+
+        Raises
+        ------
+        ValueError
+            If neither or both of *before*/*after* are given, or if *name*
+            is already present, or if the reference component is not found.
+        """
+        from .flow import FlowEdgeRecord, SequentialEdge, GroupEdge, GroupEdgeKind
+
+        # ── 0. Validate ────────────────────────────────────────────────────────
+        if (before is None) == (after is None):
+            raise ValueError("Exactly one of 'before' or 'after' must be specified.")
+        if any(x.name == name for x in self.components):
+            raise ValueError(f"A component instance named {name!r} is already present.")
+
+        # ── 1. Resolve reference component and insertion index ─────────────────
+        comp_names = [c.name for c in self.components]
+        if before is not None:
+            ref_name = before if isinstance(before, str) else before.name
+            if ref_name not in comp_names:
+                raise ValueError(f"Component {ref_name!r} not found.")
+            insert_idx = comp_names.index(ref_name)
+            pred_inst = self.components[insert_idx - 1] if insert_idx > 0 else None
+            succ_inst = self.components[insert_idx]
+        else:
+            ref_name = after if isinstance(after, str) else after.name
+            if ref_name not in comp_names:
+                raise ValueError(f"Component {ref_name!r} not found.")
+            target_idx = comp_names.index(ref_name)
+            insert_idx = target_idx + 1
+            pred_inst = self.components[target_idx]
+            succ_inst = self.components[insert_idx] if insert_idx < len(self.components) else None
+
+        # ── 2. Resolve component type ──────────────────────────────────────────
+        if isinstance(component, str):
+            from ..reader import Reader
+            reader = Reader(registries=list(self.registries))
+            component = reader.get_component(component)
+
+        # ── 3. Auto-compute position / rotation if not provided ────────────────
+        if at_relative is None:
+            at_relative = _midpoint_at_relative(pred_inst, succ_inst)
+        if rotate_relative is None:
+            rotate_relative = _downstream_rotate_relative(pred_inst, succ_inst)
+
+        # ── 4. Normalise vector/angles in at_relative / rotate_relative ────────
+        from .orientation import Vector, Angles
+        at_relative = _normalise_vr(at_relative, self.components, Vector)
+        rotate_relative = _normalise_vr(rotate_relative, self.components, Angles)
+
+        # ── 5. Fix forward references (ref must come before the new instance) ──
+        at_relative = _fix_forward_ref(at_relative, insert_idx, pred_inst)
+        rotate_relative = _fix_forward_ref_rotation(rotate_relative, insert_idx, pred_inst)
+
+        # ── 6. Reject insertion that would break a contiguous group ───────────
+        if (pred_inst is not None and succ_inst is not None
+                and pred_inst.group is not None
+                and pred_inst.group == succ_inst.group
+                and group != pred_inst.group):
+            raise ValueError(
+                f"Cannot insert component {name!r} (group={group!r}) between group members "
+                f"{pred_inst.name!r} and {succ_inst.name!r} "
+                f"(group {pred_inst.group!r}): McCode requires groups to be contiguous. "
+                f"Insert before {pred_inst.name!r}, after the last member of the group, "
+                f"or pass group={pred_inst.group!r} to join the group."
+            )
+
+        # ── 7. Create the instance (orientation computed in __post_init__) ──────
+        new_inst = Instance(name, component, at_relative, rotate_relative,
+                            parameters=parameters, group=group, removable=removable)
+
+        # ── 8. Insert into components tuple ────────────────────────────────────
+        comps = list(self.components)
+        comps.insert(insert_idx, new_inst)
+        self.components = tuple(comps)
+
+        # ── 9. Update flow_edges: split the connecting positional edge ─────────
+        updated_edges = list(self.flow_edges)
+        if pred_inst is not None and succ_inst is not None:
+            pred_name, succ_name = pred_inst.name, succ_inst.name
+            # Find the single "positional" edge: SequentialEdge or TRY_NEXT between pred and succ
+            connecting_idx = next(
+                (i for i, r in enumerate(updated_edges)
+                 if r.src == pred_name and r.dst == succ_name
+                 and isinstance(r.edge, (SequentialEdge, GroupEdge))
+                 and not (isinstance(r.edge, GroupEdge)
+                          and r.edge.kind in (GroupEdgeKind.SCATTER_EXIT,
+                                              GroupEdgeKind.PASS_THROUGH))),
+                None,
+            )
+            if connecting_idx is not None:
+                old_edge = updated_edges.pop(connecting_idx).edge
+                if isinstance(old_edge, GroupEdge) and old_edge.kind == GroupEdgeKind.TRY_NEXT:
+                    if group == pred_inst.group:
+                        e1 = GroupEdge(group_name=pred_inst.group, kind=GroupEdgeKind.TRY_NEXT)
+                        e2 = GroupEdge(group_name=pred_inst.group, kind=GroupEdgeKind.TRY_NEXT)
+                    else:
+                        e1 = SequentialEdge(when=new_inst.when)
+                        e2 = SequentialEdge(when=succ_inst.when)
+                else:
+                    e1 = SequentialEdge(when=new_inst.when)
+                    e2 = SequentialEdge(when=succ_inst.when)
+                updated_edges.append(FlowEdgeRecord(src=pred_name, dst=name, edge=e1))
+                updated_edges.append(FlowEdgeRecord(src=name, dst=succ_name, edge=e2))
+        elif pred_inst is None and succ_inst is not None:
+            updated_edges.append(FlowEdgeRecord(
+                src=name, dst=succ_inst.name, edge=SequentialEdge(when=succ_inst.when),
+            ))
+        elif pred_inst is not None and succ_inst is None:
+            updated_edges.append(FlowEdgeRecord(
+                src=pred_inst.name, dst=name, edge=SequentialEdge(when=new_inst.when),
+            ))
+        self.flow_edges = tuple(updated_edges)
+
+        # ── 10. Invalidate all Jump.absolute_target fields ─────────────────────
+        # The translator's set_jump_absolute_targets() re-resolves these by name.
+        for inst in self.components:
+            for jmp in inst.jump:
+                jmp.absolute_target = -1
+
+        return new_inst
 
     def add_parameter(self, a: InstrumentParameter, ignore_repeated=False):
         if not parameter_name_present(self.parameters, a.name):
@@ -562,3 +830,187 @@ def determine_groups(instances) -> dict[str, Group]:
                 groups[inst.group] = Group(inst.group, len(groups))
             groups[inst.group].add(id, inst)
     return groups
+
+
+# ---------------------------------------------------------------------------
+# Helpers for insert_component positioning
+# ---------------------------------------------------------------------------
+
+def _orient_is_constant(orient) -> bool:
+    """Return True if the Orient's position vector has all numeric (constant) components."""
+    if orient is None:
+        return False
+    try:
+        return all(e.has_value for e in orient.position())
+    except Exception:
+        return False
+
+
+def _midpoint_at_relative(pred_inst, succ_inst):
+    """Return ``(Vector, reference_instance)`` for the midpoint between *pred_inst* and *succ_inst*.
+
+    If *pred_inst* is ``None``, returns the origin ABSOLUTE.
+    If *succ_inst* is ``None``, returns the origin RELATIVE *pred_inst*.
+    If both orientations are available and constant, computes the true midpoint
+    expressed relative to *pred_inst*; otherwise falls back to the origin of
+    *pred_inst*.
+    """
+    from .orientation import Vector
+    from ..common import Expr
+    zero = Vector(Expr.float(0), Expr.float(0), Expr.float(0))
+
+    if pred_inst is None:
+        return zero, None  # ABSOLUTE origin
+    if succ_inst is None:
+        return zero, pred_inst
+
+    p_or = pred_inst.orientation
+    s_or = succ_inst.orientation
+    if _orient_is_constant(p_or) and _orient_is_constant(s_or):
+        p_pos = p_or.position()
+        s_pos = s_or.position()
+        mid_abs = (p_pos + s_pos) / Expr.float(2.0)
+        delta = mid_abs - p_pos
+        # Convert global delta to pred's local coordinate frame
+        at_in_pred = p_or.rotation('axes') * delta
+        return at_in_pred, pred_inst
+
+    # Fallback: place at pred's origin
+    return zero, pred_inst
+
+
+def _downstream_rotate_relative(pred_inst, succ_inst):
+    """Return ``(Angles, reference_instance)`` matching the orientation of the downstream component.
+
+    Expresses the rotation RELATIVE to *pred_inst* when possible (matching the
+    convention that AT and ROTATE should share the same reference).  Falls back
+    to zero-rotation RELATIVE *pred_inst* (or ABSOLUTE zero if no predecessor).
+
+    The relative rotation is computed as  R_rel = R_succ * R_pred^T  and then
+    converted back to Euler angles via :func:`axes_euler_angles`.
+    """
+    from .orientation import Angles, axes_euler_angles
+    from ..common import Expr
+    zero = Angles(Expr.float(0), Expr.float(0), Expr.float(0))
+
+    downstream = succ_inst if succ_inst is not None else pred_inst
+    if downstream is None:
+        return zero, None  # no components at all — ABSOLUTE zero
+
+    if pred_inst is None:
+        # No predecessor: use absolute orientation of downstream if available
+        if _orient_is_constant(downstream.orientation):
+            return downstream.orientation.angles(), None  # ABSOLUTE
+        return zero, None
+
+    # Both pred and succ (or just pred) exist: prefer RELATIVE to pred_inst
+    if not _orient_is_constant(pred_inst.orientation):
+        return zero, pred_inst  # pred orientation unknown — use zero RELATIVE pred
+
+    if downstream is pred_inst or not _orient_is_constant(downstream.orientation):
+        return zero, pred_inst  # no downstream info — zero RELATIVE pred
+
+    # R_rel = R_succ * R_pred^T  (rotation of succ expressed in pred's frame)
+    r_pred = pred_inst.orientation.rotation('axes')
+    r_succ = downstream.orientation.rotation('axes')
+    r_rel = r_succ * r_pred.inverse()
+    angles = axes_euler_angles(r_rel, degrees=True)
+    return angles, pred_inst
+
+
+def _normalise_vr(vr, components, vec_cls):
+    """Normalise ``(vec_or_tuple, inst_or_str_or_none)`` to ``(vec_cls, Instance | None)``.
+
+    Converts a plain tuple like ``((0, 0, 1), 'comp_name')`` to
+    ``(Vector(0, 0, 1), Instance)``.
+    """
+    from ..common import Expr
+    if vr is None:
+        return vr
+    vec, ref = vr
+    if isinstance(vec, (tuple, list)):
+        vec = vec_cls(*[Expr.best(v) for v in vec])
+    if isinstance(ref, str):
+        ref = next((c for c in components if c.name == ref), None)
+    return vec, ref
+
+
+def _fix_forward_ref(at_relative, insert_idx, pred_inst):
+    """Re-express *at_relative* relative to *pred_inst* if its reference comes after *insert_idx*.
+
+    If the reference component's index >= *insert_idx* (i.e., it will come
+    *after* the new instance), the position is converted to be expressed
+    relative to *pred_inst* using absolute coordinate arithmetic.  If the
+    required orientations are unavailable, a ``RuntimeError`` is raised.
+    """
+    if at_relative is None:
+        return at_relative
+    at_vec, ref_inst = at_relative
+    if ref_inst is None or pred_inst is None:
+        return at_relative  # ABSOLUTE or no predecessor — nothing to fix
+
+    # We need to know the index of ref_inst in the *current* (pre-insertion) tuple.
+    # This helper is called before the new component is spliced in, so the tuple
+    # is still the original.  We can't index into self.components here, but the
+    # caller holds insert_idx which is the insertion point in the original order.
+    # We compare by object identity: if ref_inst IS one of the post-insertion
+    # components, it was added later.  For simplicity, compare by name to
+    # determine whether it precedes insert_idx; the caller must supply the
+    # original component list indirectly through pred_inst position.
+    #
+    # We detect a forward reference by checking if ref_inst is the succ_inst
+    # or comes after it.  Since we can't access the full list here, the check
+    # is deferred: if ref_inst.orientation is set AND pred_inst.orientation is
+    # set, we can convert; otherwise we trust the caller supplied a valid ref.
+    if ref_inst is pred_inst:
+        return at_relative  # already relative to pred — nothing to do
+
+    ref_or = ref_inst.orientation if hasattr(ref_inst, 'orientation') else None
+    pred_or = pred_inst.orientation if hasattr(pred_inst, 'orientation') else None
+    if not _orient_is_constant(ref_or) or not _orient_is_constant(pred_or):
+        raise RuntimeError(
+            f"Cannot re-express position relative to {pred_inst.name!r}: "
+            f"orientations of {ref_inst.name!r} or {pred_inst.name!r} are unavailable or non-constant."
+        )
+
+    # abs_pos = ref_pos + ref_rotation_coordinates @ at_vec
+    abs_pos = ref_or.position() + ref_or.rotation('coordinates') * at_vec
+    delta = abs_pos - pred_or.position()
+    at_in_pred = pred_or.rotation('axes') * delta
+    return at_in_pred, pred_inst
+
+
+def _fix_forward_ref_rotation(rotate_relative, insert_idx, pred_inst):
+    """Re-express *rotate_relative* RELATIVE to *pred_inst* if its reference is forward.
+
+    Computes the absolute rotation of the reference and then expresses it
+    relative to *pred_inst* using  R_rel = R_ref_composed * R_pred^T,
+    keeping the same reference as AT so McCode sees a consistent pair.
+    """
+    if rotate_relative is None:
+        return rotate_relative
+    angles, ref_inst = rotate_relative
+    if ref_inst is None or pred_inst is None:
+        return rotate_relative  # ABSOLUTE or no predecessor
+
+    if ref_inst is pred_inst:
+        return rotate_relative
+
+    ref_or = ref_inst.orientation if hasattr(ref_inst, 'orientation') else None
+    pred_or = pred_inst.orientation if hasattr(pred_inst, 'orientation') else None
+    if not _orient_is_constant(ref_or) or not _orient_is_constant(pred_or):
+        raise RuntimeError(
+            f"Cannot re-express rotation relative to predecessor: "
+            f"orientation of {ref_inst.name!r} or {pred_inst.name!r} is unavailable or non-constant."
+        )
+
+    from .orientation import axes_euler_angles
+    from ..common import Expr
+    # Absolute rotation of the original (ref + angles)
+    from .orientation import Rotation
+    r_angles = Rotation.from_angles(angles)
+    r_abs = r_angles * ref_or.rotation('axes')
+    # Express relative to pred_inst
+    r_rel = r_abs * pred_or.rotation('axes').inverse()
+    rel_angles = axes_euler_angles(r_rel, degrees=True)
+    return rel_angles, pred_inst
