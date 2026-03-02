@@ -60,17 +60,21 @@ def compiles(compiler: str, instr):
 @cache
 def simple_instr_compiles(which: str) -> bool:
     from subprocess import CalledProcessError
+    from loguru import logger
     if not check_for_mccode_antlr_compiler(which):
         return False
     try:
         from mccode_antlr.loader import parse_mcstas_instr
         instr = parse_mcstas_instr("define instrument check() trace component a = Arm() at (0,0,0) absolute end")
         return compiles(which, instr)
-    except RuntimeError:
+    except RuntimeError as e:
+        logger.warning(f"Compiler check instrument could not be generated or compiled: {e}")
         return False
-    except FileNotFoundError:
+    except FileNotFoundError as e:
+        logger.warning(f"Compiler check failed, file not found: {e}")
         return False
-    except CalledProcessError:
+    except CalledProcessError as e:
+        logger.warning(f"Compiler check failed, process error: {e}")
         return False
 
 

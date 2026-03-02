@@ -38,27 +38,50 @@ jobs:
       if: runner.os == 'Windows'
       uses: ilammy/msvc-dev-cmd@v1
 
+    - name: Compute McCode lib directories from pooch registry
+      # Parse libc-registry.txt to derive the set of directories that need to be
+      # sparse-checked-out.  Deriving this from the registry means the checkout
+      # automatically tracks layout changes in the McCode repository.
+      id: mccode-lib-dirs
+      shell: bash
+      run: |
+        LIBC_DIRS=$(curl -fsSL \
+          "https://raw.githubusercontent.com/mccode-dev/mccode-pooch-registries/refs/tags/${{ env.MCCODE_VERSION }}/libc-registry.txt" \
+          | python3 -c "
+import sys
+dirs = set()
+for line in sys.stdin:
+    line = line.strip()
+    if line and not line.startswith('#'):
+        parts = line.split()
+        if parts:
+            parent = '/'.join(parts[0].split('/')[:-1])
+            if parent:
+                dirs.add(parent)
+print(' '.join(sorted(dirs)))
+")
+        echo "dirs=${LIBC_DIRS}" >> "$GITHUB_OUTPUT"
+
     - name: Cache McCode repository
       id: cache-mccode
       uses: actions/cache@v4
       with:
         path: mccode-repo
-        key: mccode-${{ env.MCCODE_VERSION }}
+        # Include the lib-dirs in the key so the cache is invalidated automatically
+        # if the McCode repository layout changes between releases.
+        key: mccode-${{ env.MCCODE_VERSION }}-${{ steps.mccode-lib-dirs.outputs.dirs }}
 
     - name: Checkout McCode ${{ env.MCCODE_VERSION }} (sparse)
       if: steps.cache-mccode.outputs.cache-hit != 'true'
-      uses: actions/checkout@v6
-      with:
-        repository: mccode-dev/McCode
-        ref: ${{ env.MCCODE_VERSION }}
-        path: mccode-repo
-        sparse-checkout: |
-          common/lib/share
-          mccode/nlib/share
-          mccode/xlib/share
-          mcstas-comps
-          mcxtrace-comps
-        sparse-checkout-cone-mode: false
+      shell: bash
+      run: |
+        git clone --filter=blob:none --no-checkout --depth=1 \
+          --branch "${{ env.MCCODE_VERSION }}" \
+          "https://github.com/mccode-dev/McCode.git" mccode-repo
+        cd mccode-repo
+        git sparse-checkout init --cone
+        git sparse-checkout set ${{ steps.mccode-lib-dirs.outputs.dirs }} mcstas-comps mcxtrace-comps
+        git checkout HEAD
 
     - name: Point mccode-antlr at the local McCode clone
       # Uses bash on all platforms (including Windows via Git Bash) so that
@@ -66,8 +89,12 @@ jobs:
       shell: bash
       run: |
         MCCODE_ROOT="$GITHUB_WORKSPACE/mccode-repo"
-        echo "MCCODEANTLR_MCSTAS__PATHS=${MCCODE_ROOT}/mcstas-comps ${MCCODE_ROOT}/common/lib/share ${MCCODE_ROOT}/mccode/nlib/share" >> "$GITHUB_ENV"
-        echo "MCCODEANTLR_MCXTRACE__PATHS=${MCCODE_ROOT}/mcxtrace-comps ${MCCODE_ROOT}/common/lib/share ${MCCODE_ROOT}/mccode/xlib/share" >> "$GITHUB_ENV"
+        LIB_PATHS=""
+        for dir in ${{ steps.mccode-lib-dirs.outputs.dirs }}; do
+          LIB_PATHS="${LIB_PATHS}${MCCODE_ROOT}/${dir} "
+        done
+        echo "MCCODEANTLR_MCSTAS__PATHS=${MCCODE_ROOT}/mcstas-comps ${LIB_PATHS}" >> "$GITHUB_ENV"
+        echo "MCCODEANTLR_MCXTRACE__PATHS=${MCCODE_ROOT}/mcxtrace-comps ${LIB_PATHS}" >> "$GITHUB_ENV"
         echo "MCCODEANTLR_MCCODE_POOCH__TAG=${{ env.MCCODE_VERSION }}" >> "$GITHUB_ENV"
 
     - name: Build and install with testing dependencies including HDF5 and MCPL
