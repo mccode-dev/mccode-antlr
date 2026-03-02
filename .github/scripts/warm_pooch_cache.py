@@ -24,7 +24,8 @@ def clone_mccode(url: str, tag: str, dest: Path) -> Path:
     """Shallow-clone the McCode repository at the given tag into dest."""
     print(f"Cloning {url} at {tag} …", flush=True)
     subprocess.run(
-        ['git', 'clone', '--depth=1', '--branch', tag, '--', url, str(dest)],
+        ['git', 'clone', '--depth=1', '-c', 'core.autocrlf=false',
+         '--branch', tag, '--', url, str(dest)],
         check=True,
     )
     return dest

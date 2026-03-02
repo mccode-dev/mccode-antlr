@@ -51,7 +51,18 @@ jobs:
       shell: python
       run: |
         import os, pooch
-        cache = str(pooch.os_cache('mccodeantlr'))
+        from pathlib import Path
+        # All mccode-antlr caches live under a single parent named 'mccodeantlr'
+        # inside the OS cache dir (e.g. ~/.cache/mccodeantlr on Linux,
+        # %LOCALAPPDATA%\mccodeantlr on Windows).  On Windows, pooch.os_cache()
+        # uses the appdirs double-nesting convention so os_cache('mccodeantlr')
+        # returns …\mccodeantlr\mccodeantlr\Cache — a *sibling* of the actual
+        # registry caches, not their parent.  Walk up from any sub-registry path
+        # to find the first path component named 'mccodeantlr'.
+        probe = Path(pooch.os_cache('mccodeantlr/libc'))
+        parts = probe.parts
+        idx = next((i for i, p in enumerate(parts) if p == 'mccodeantlr'), None)
+        cache = str(Path(*parts[:idx + 1])) if idx is not None else str(probe.parent)
         with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
             f.write(f'path={cache}\n')
 
