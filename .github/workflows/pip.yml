@@ -54,6 +54,8 @@ jobs:
         path: mccode-repo
         sparse-checkout: |
           common/lib/share
+          mccode/nlib/share
+          mccode/xlib/share
           mcstas-comps
           mcxtrace-comps
         sparse-checkout-cone-mode: false
@@ -64,8 +66,8 @@ jobs:
       shell: bash
       run: |
         MCCODE_ROOT="$GITHUB_WORKSPACE/mccode-repo"
-        echo "MCCODEANTLR_MCSTAS__PATHS=${MCCODE_ROOT}/mcstas-comps ${MCCODE_ROOT}/common/lib/share" >> "$GITHUB_ENV"
-        echo "MCCODEANTLR_MCXTRACE__PATHS=${MCCODE_ROOT}/mcxtrace-comps ${MCCODE_ROOT}/common/lib/share" >> "$GITHUB_ENV"
+        echo "MCCODEANTLR_MCSTAS__PATHS=${MCCODE_ROOT}/mcstas-comps ${MCCODE_ROOT}/common/lib/share ${MCCODE_ROOT}/mccode/nlib/share" >> "$GITHUB_ENV"
+        echo "MCCODEANTLR_MCXTRACE__PATHS=${MCCODE_ROOT}/mcxtrace-comps ${MCCODE_ROOT}/common/lib/share ${MCCODE_ROOT}/mccode/xlib/share" >> "$GITHUB_ENV"
         echo "MCCODEANTLR_MCCODE_POOCH__TAG=${{ env.MCCODE_VERSION }}" >> "$GITHUB_ENV"
 
     - name: Build and install with testing dependencies including HDF5 and MCPL
