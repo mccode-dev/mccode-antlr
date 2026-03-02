@@ -882,20 +882,40 @@ def _midpoint_at_relative(pred_inst, succ_inst):
 def _downstream_rotate_relative(pred_inst, succ_inst):
     """Return ``(Angles, reference_instance)`` matching the orientation of the downstream component.
 
-    Uses the absolute orientation of *succ_inst* when available, otherwise
-    falls back to zero-rotation RELATIVE *pred_inst* (or ABSOLUTE if no
-    predecessor).
+    Expresses the rotation RELATIVE to *pred_inst* when possible (matching the
+    convention that AT and ROTATE should share the same reference).  Falls back
+    to zero-rotation RELATIVE *pred_inst* (or ABSOLUTE zero if no predecessor).
+
+    The relative rotation is computed as  R_rel = R_succ * R_pred^T  and then
+    converted back to Euler angles via :func:`axes_euler_angles`.
     """
-    from .orientation import Angles
+    from .orientation import Angles, axes_euler_angles
     from ..common import Expr
     zero = Angles(Expr.float(0), Expr.float(0), Expr.float(0))
 
     downstream = succ_inst if succ_inst is not None else pred_inst
-    if downstream is not None and _orient_is_constant(downstream.orientation):
-        return downstream.orientation.angles(), None  # ABSOLUTE orientation
+    if downstream is None:
+        return zero, None  # no components at all — ABSOLUTE zero
 
-    # Fallback: same orientation as predecessor (or ABSOLUTE zero)
-    return zero, pred_inst
+    if pred_inst is None:
+        # No predecessor: use absolute orientation of downstream if available
+        if _orient_is_constant(downstream.orientation):
+            return downstream.orientation.angles(), None  # ABSOLUTE
+        return zero, None
+
+    # Both pred and succ (or just pred) exist: prefer RELATIVE to pred_inst
+    if not _orient_is_constant(pred_inst.orientation):
+        return zero, pred_inst  # pred orientation unknown — use zero RELATIVE pred
+
+    if downstream is pred_inst or not _orient_is_constant(downstream.orientation):
+        return zero, pred_inst  # no downstream info — zero RELATIVE pred
+
+    # R_rel = R_succ * R_pred^T  (rotation of succ expressed in pred's frame)
+    r_pred = pred_inst.orientation.rotation('axes')
+    r_succ = downstream.orientation.rotation('axes')
+    r_rel = r_succ * r_pred.inverse()
+    angles = axes_euler_angles(r_rel, degrees=True)
+    return angles, pred_inst
 
 
 def _normalise_vr(vr, components, vec_cls):
@@ -961,10 +981,11 @@ def _fix_forward_ref(at_relative, insert_idx, pred_inst):
 
 
 def _fix_forward_ref_rotation(rotate_relative, insert_idx, pred_inst):
-    """Re-express *rotate_relative* relative to *pred_inst* if its reference is forward.
+    """Re-express *rotate_relative* RELATIVE to *pred_inst* if its reference is forward.
 
-    For rotation, we compute the absolute orientation of the reference and
-    return it as an ABSOLUTE placement (reference = ``None``).
+    Computes the absolute rotation of the reference and then expresses it
+    relative to *pred_inst* using  R_rel = R_ref_composed * R_pred^T,
+    keeping the same reference as AT so McCode sees a consistent pair.
     """
     if rotate_relative is None:
         return rotate_relative
@@ -976,14 +997,20 @@ def _fix_forward_ref_rotation(rotate_relative, insert_idx, pred_inst):
         return rotate_relative
 
     ref_or = ref_inst.orientation if hasattr(ref_inst, 'orientation') else None
-    if not _orient_is_constant(ref_or):
+    pred_or = pred_inst.orientation if hasattr(pred_inst, 'orientation') else None
+    if not _orient_is_constant(ref_or) or not _orient_is_constant(pred_or):
         raise RuntimeError(
             f"Cannot re-express rotation relative to predecessor: "
-            f"orientation of {ref_inst.name!r} is unavailable or non-constant."
+            f"orientation of {ref_inst.name!r} or {pred_inst.name!r} is unavailable or non-constant."
         )
 
-    # Return absolute orientation by composing ref's rotation with the given angles.
-    # For simplicity, return the absolute angles of ref (angles=zero ABSOLUTE),
-    # since we're just trying to orient like ref.
-    # A full composition would require Rotation arithmetic; use ref's absolute angles.
-    return ref_or.angles(), None  # ABSOLUTE
+    from .orientation import axes_euler_angles
+    from ..common import Expr
+    # Absolute rotation of the original (ref + angles)
+    from .orientation import Rotation
+    r_angles = Rotation.from_angles(angles)
+    r_abs = r_angles * ref_or.rotation('axes')
+    # Express relative to pred_inst
+    r_rel = r_abs * pred_or.rotation('axes').inverse()
+    rel_angles = axes_euler_angles(r_rel, degrees=True)
+    return rel_angles, pred_inst
