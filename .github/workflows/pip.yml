@@ -47,19 +47,7 @@ jobs:
       run: |
         LIBC_DIRS=$(curl -fsSL \
           "https://raw.githubusercontent.com/mccode-dev/mccode-pooch-registries/refs/tags/${{ env.MCCODE_VERSION }}/libc-registry.txt" \
-          | python3 -c "
-import sys
-dirs = set()
-for line in sys.stdin:
-    line = line.strip()
-    if line and not line.startswith('#'):
-        parts = line.split()
-        if parts:
-            parent = '/'.join(parts[0].split('/')[:-1])
-            if parent:
-                dirs.add(parent)
-print(' '.join(sorted(dirs)))
-")
+          | python3 .github/scripts/mccode_lib_dirs.py)
         echo "dirs=${LIBC_DIRS}" >> "$GITHUB_OUTPUT"
 
     - name: Cache McCode repository
