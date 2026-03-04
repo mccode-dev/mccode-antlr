@@ -185,7 +185,9 @@ class TestCompiledInstr(TestCase):
         config = dict(default_main=True, enable_trace=False, portable=False, include_runtime=True,
                       embed_instrument_file=False, verbose=False)
         with TemporaryDirectory() as directory:
-            expected_binaries = [Path(directory).joinpath(f'{x.name}.out') for x in (instr, before, after)]
+            from mccode_antlr.config import config as mccode_config
+            ext = mccode_config['ext'].get(str)
+            expected_binaries = [Path(directory).joinpath(f'{x.name}{ext}') for x in (instr, before, after)]
             for obj in (instr, before, after):
                 try:
                     compile_instrument(obj, target, directory, flavor=Flavor.MCSTAS, config=config)
