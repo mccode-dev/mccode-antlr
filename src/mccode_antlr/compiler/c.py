@@ -93,40 +93,6 @@ def instrument_source(instrument: Instr, flavor: Flavor, config: dict, verbose: 
     return visitor.contents()
 
 
-# def linux_split_flags(instrument: Instr, target: CBinaryTarget):
-#         # the type of binary requested determines (some of) the required flags:
-#         compiler_flags = target.flags + target.extra_flags
-#         linker_flags = target.linker_flags
-#    -    # the instrument-defined flags are always(?) linker flags:
-#    -    # the flags in an instrument *might* contain ENV, CMD, GETPATH directives which need to be expanded via decode:
-#    -    linker_flags.extend(
-#    -        [word for flag in instrument.decoded_flags() for word in flag.split()])
-#    -
-#    -    # Why is this addition necessary?
-#    -    if any('OPENACC' in word for word in compiler_flags) and any(
-#    -            'NeXus' in word for word in compiler_flags):
-#    -        compiler_flags.append('-D__GNUC__')
-#    +    # Classify each token from decoded DEPENDENCY flag strings.
-#    +    # Linker tokens: -l<lib>, -L<dir>, -Wl,<linker-opts>, and bare library files.
-#    +    # Everything else (-I, -D, -std, -x, -fopenmp, -fPIC, …) is a compiler flag
-#    +    # and must appear before the stdin source marker ('-') in the command.
-#    +    _linker_starts = ('-l', '-L', '-Wl,')
-#    +    _lib_suffixes  = ('.so', '.a', '.dylib')
-#    +    for flag in instrument.decoded_flags():
-#    +        for word in flag.split():
-#    +            if word.startswith(_linker_starts) or word.endswith(_lib_suffixes):
-#    +                linker_flags.append(word)
-#    +            else:
-#    +                compiler_flags.append(word)
-#    +
-#    +    # Workaround: NeXus headers on some systems require __GNUC__ to be defined,
-#    +    # but the OpenACC compiler (PGI/NVHPC) does not define it by default.
-#    +    # Check both lists: -DOPENACC lands in compiler_flags; -lNeXus lands in linker_flags.
-#    +    all_flags = compiler_flags + linker_flags
-#    +    if any('OPENACC' in w for w in all_flags) and any('NeXus' in w for w in all_flags):
-#    +        compiler_flags.append('-D__GNUC__')
-#         return compiler_flags, linker_flags
-
 def linux_split_flags(instrument: Instr, target: CBinaryTarget):
     # the type of binary requested determines (some of) the required flags:
     compiler_flags = target.flags + target.extra_flags
