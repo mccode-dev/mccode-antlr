@@ -309,7 +309,35 @@ class CTargetVisitor(TargetVisitor, target_language='c'):
         #     self.out(f'/* Contents of {include.name}.h (requested from {include.parent})*/')
         #     self.out(include.content)
 
-        self.out(header_post_runtime(self.source, self.flavor, self.config, self.include_path()))
+        self.out(header_post_runtime(self.source, self.flavor, self.config, self.include_path(),
+                                     data_path=self._flavor_data_path()))
+
+    def _flavor_data_path(self):
+        """Return the comps root of the flavor-specific registry, or None.
+
+        The generated C file uses ``#define MCSTAS <path>`` (or MCXTRACE) as the
+        fallback search root for data files.  ``read_table-lib.c`` appends
+        ``/data/<filename>`` to that path, so it must point at the comps directory
+        (e.g. ``.cache/mccodeantlr/mcstas/vX.Y.Z/mcstas-comps``), not the libc root.
+        """
+        from pathlib import Path
+        flavor_name = str(self.flavor).lower()
+        if self.registries is None:
+            return None
+        for reg in self.registries:
+            if reg.name != flavor_name:
+                continue
+            if reg.pooch is None:
+                continue
+            # pooch.path is the versioned cache directory, e.g.
+            # ~/.cache/mccodeantlr/mcstas/v3.5.31 -- the comps sit one level below.
+            comps_dir = Path(reg.pooch.path) / f'{flavor_name}-comps'
+            if comps_dir.is_dir():
+                return comps_dir
+            # Fallback: return the pooch versioned path itself so at least
+            # the version directory is on the search path.
+            return Path(reg.pooch.path)
+        return None
 
     def include_header(self, header: CInclude):
         self.info(f'include {header} header')

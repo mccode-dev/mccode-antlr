@@ -279,7 +279,7 @@ def header_pre_runtime(
     return contents
 
 
-def header_post_runtime(source, flavor: Flavor, config: dict, include_path):
+def header_post_runtime(source, flavor: Flavor, config: dict, include_path, data_path=None):
     from ..common.utilities import escape_str_for_c
 
     def source_file_contents():
@@ -298,6 +298,11 @@ def header_post_runtime(source, flavor: Flavor, config: dict, include_path):
         message += f"Use --source option when running {config.get('flavor')}"
         return message
 
+    # The MCSTAS/MCXTRACE macro is used by read_table-lib.c as the fallback search root:
+    # it looks for data files at $FLAVOR/data/<name>.  Use data_path when provided so the
+    # compiled instrument can find Pooch-cached data files without any extra setup.
+    flavor_path = data_path if data_path is not None else include_path
+
     main_file_string = 'int main(int argc, char *argv[]){return mccode_main(argc, argv);}'
     contents = dedent(f"""
     /* *****************************************************************************
@@ -309,7 +314,7 @@ def header_post_runtime(source, flavor: Flavor, config: dict, include_path):
     #else
     int traceenabled = 0;
     #endif
-    #define {str(flavor).upper()} "{escape_str_for_c(str(include_path))}"
+    #define {str(flavor).upper()} "{escape_str_for_c(str(flavor_path))}"
     int   defaultmain         = {1 if config.get("default_main") else 0};
     char  instrument_name[]   = "{source.name}";
     char  instrument_source[] = "{escape_str_for_c(source.source)}";

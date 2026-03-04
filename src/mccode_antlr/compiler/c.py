@@ -282,6 +282,124 @@ def compile_instrument(
     return compile_c_instrument(instrument, target, output, replace, dump_source, **kwargs)
 
 
+def cflags_from_c_source(source: str) -> list[str]:
+    """Extract CFLAGS recorded in the header comment of a generated McCode C file.
+
+    The translator writes::
+
+        * CFLAGS=<space-separated flags>
+
+    as part of the opening block comment.  Returns an empty list when the line
+    is absent or contains no flags.
+    """
+    import re
+    match = re.search(r'^\s*\*\s*CFLAGS=(.*)$', source, re.MULTILINE)
+    if match:
+        flags = match.group(1).strip()
+        return flags.split() if flags else []
+    return []
+
+
+def _split_raw_flags(raw_flags: list[str], target: CBinaryTarget, *, windows: bool = False):
+    """Like linux_split_flags / windows_split_flags but accepts a plain list instead of Instr."""
+    compiler_flags = target.flags + target.extra_flags
+    linker_flags = target.linker_flags
+    if windows:
+        linker_prefixes = ('link', 'LIBPATH', 'SUBSYSTEM', 'ENTRY', 'STACK', 'HEAP',
+                           'MACHINE', 'MANIFEST', 'INCREMENTAL', 'NODEFAULTLIB',
+                           'OPT', 'LTCG', 'DEBUG', 'PDB', 'NATVIS', 'DYNAMICBASE')
+        for flag in raw_flags:
+            for word in flag.split():
+                word = word.strip()
+                stem = word[1:] if (word.startswith('/') or word.startswith('-')) else ''
+                if not stem or word.lower().endswith('.lib'):
+                    linker_flags.append(word)
+                elif stem.lower().startswith('l') or any(
+                        stem.upper().startswith(p) for p in linker_prefixes):
+                    linker_flags.append(word)
+                else:
+                    if stem.lower().startswith('std') and '=' in word:
+                        word = word.replace('=', ':')
+                    compiler_flags.append(word)
+    else:
+        _linker_starts = ('-l', '-L', '-Wl,')
+        _lib_suffixes = ('.so', '.a', '.dylib')
+        for flag in raw_flags:
+            for word in flag.split():
+                if word.startswith(_linker_starts) or word.endswith(_lib_suffixes):
+                    linker_flags.append(word)
+                else:
+                    compiler_flags.append(word)
+        all_flags = compiler_flags + linker_flags
+        if any('OPENACC' in w for w in all_flags) and any('NeXus' in w for w in all_flags):
+            compiler_flags.append('-D__GNUC__')
+    return compiler_flags, linker_flags
+
+
+@compiled
+def compile_c_file(
+        c_file: Union[str, Path],
+        target: CBinaryTarget,
+        output: Union[str, Path] = None,
+        replace: bool = False,
+):
+    """Compile a pre-generated McCode C source file directly to a binary.
+
+    This is the compile-only counterpart to :func:`compile_instrument` for the
+    case where the C translation step has already been performed (e.g. by
+    ``mcstas-antlr``).  CFLAGS are read from the ``* CFLAGS=`` line in the
+    file's opening block comment.
+
+    Parameters
+    ----------
+    c_file:
+        Path to the ``.c`` source file.
+    target:
+        The type of binary to produce.
+    output:
+        Destination path or directory for the binary.  Defaults to the current
+        working directory using the C file's stem as the binary name.
+    replace:
+        If ``True``, recompile even when the output already exists.
+    """
+    from os import R_OK, access
+    from platform import system
+    from mccode_antlr.config import config
+
+    c_file = Path(c_file)
+    source = c_file.read_text()
+    name = c_file.stem
+
+    if output is None:
+        output = Path()
+    if not isinstance(output, Path):
+        output = Path(output)
+    if output.is_dir():
+        output = output / name
+    if not output.suffix:
+        output = output.with_suffix(config['ext'].get(str))
+
+    if output.exists() and not replace:
+        return output
+
+    logger.info(f'Compile {name} from {c_file}')
+    raw_flags = cflags_from_c_source(source)
+    is_windows = 'Windows' == system()
+    _compile = windows_compile if is_windows else linux_compile
+    compiler_flags, linker_flags = _split_raw_flags(raw_flags, target, windows=is_windows)
+    command, result = _compile(target.compiler, compiler_flags, output, linker_flags, source)
+
+    if result.returncode:
+        stdout = result.stdout.decode() if isinstance(result.stdout, bytes) else result.stdout
+        stderr = result.stderr.decode() if isinstance(result.stderr, bytes) else result.stderr
+        raise RuntimeError(f"Compilation\n{' '.join(command)}\nfailed with output\n{stdout}\nand error\n{stderr}")
+    if not output.exists():
+        raise RuntimeError(f"Compilation should have produced {output}, but it does not appear to exist")
+    if not access(output, R_OK):
+        raise RuntimeError(f"{output} exists but is not an executable")
+    return output
+
+
 def run_compiled_instrument(binary: Path, target: CBinaryTarget, options: str, capture=False, dry_run: bool = False):
     from subprocess import run, CalledProcessError
     from platform import system
