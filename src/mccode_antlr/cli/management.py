@@ -223,11 +223,13 @@ def add_cache_management_parser(modes):
 def mccode_management_parser():
     """CLI interface to managing configuration and cache"""
     from argparse import ArgumentParser
+    from mccode_antlr.cli.datafile import add_datafile_management_parser
     parser = ArgumentParser(prog="mccode-antlr",
                             description='Manage mccode-antlr')
     modes = parser.add_subparsers(title='mode', help='Mode')
     add_cache_management_parser(modes)
     add_config_management_parser(modes)
+    add_datafile_management_parser(modes)
     return parser
 
 

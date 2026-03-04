@@ -130,12 +130,58 @@ class TargetVisitor:
         if self.verbose:
             logger.info(f'{self.source.name}: {msg}')
 
+    def prefetch_data_files(self):
+        """Pre-fetch data files referenced by string-typed component parameters.
+
+        Scans every component instance's string parameters.  For each literal
+        string value that matches a registered data file (i.e. its registry path
+        includes a ``data/`` path component) the file is fetched into the local
+        Pooch cache so it is available before the compiled C instrument runs.
+        """
+        from pathlib import Path
+        if not self.registries:
+            return
+        for comp in self.source.components:
+            for param in comp.parameters:
+                if not (param.value.is_str and param.value.has_value):
+                    continue
+                raw = param.value.value
+                if not isinstance(raw, str):
+                    continue
+                # String literals are stored with surrounding double-quotes
+                name = raw.strip('"').strip("'")
+                if not name or name in ('0', 'NULL'):
+                    continue
+                # Data files always have a file extension; skip bare names like "W"
+                if not Path(name).suffix:
+                    continue
+                for reg in self.registries:
+                    # Only consider exact basename matches inside a data/ directory.
+                    # reg.known(name, strict=True) checks Path(x).name == name which is
+                    # exact, but doesn't filter by directory.  We additionally require the
+                    # matched file to live under data/ to avoid fetching non-data assets.
+                    if not reg.known(name, strict=True):
+                        continue
+                    # Use the exact fullname (default exact=True) to avoid the loose
+                    # substring fallback that raises on multiple matches.
+                    fullname = reg.fullname(name)
+                    if fullname is None or f'data/{name}' not in fullname.replace('\\', '/'):
+                        continue
+                    cached = reg.path(fullname)
+                    logger.info(
+                        f'{self.source.name}: pre-fetched data file {name!r} '
+                        f'-> {cached}'
+                    )
+                    break
+
     def translate(self, reprocess=True):
         if self.output is not None:
             if not reprocess:
                 return self.output
             self.output.close()
         self.output = StringIO()
+        self.info('prefetch data files')
+        self.prefetch_data_files()
         self.info('visit header')
         self.visit_header()
         self.info('visit declare')
