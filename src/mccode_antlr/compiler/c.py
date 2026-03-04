@@ -93,55 +93,91 @@ def instrument_source(instrument: Instr, flavor: Flavor, config: dict, verbose: 
     return visitor.contents()
 
 
+# def linux_split_flags(instrument: Instr, target: CBinaryTarget):
+#         # the type of binary requested determines (some of) the required flags:
+#         compiler_flags = target.flags + target.extra_flags
+#         linker_flags = target.linker_flags
+#    -    # the instrument-defined flags are always(?) linker flags:
+#    -    # the flags in an instrument *might* contain ENV, CMD, GETPATH directives which need to be expanded via decode:
+#    -    linker_flags.extend(
+#    -        [word for flag in instrument.decoded_flags() for word in flag.split()])
+#    -
+#    -    # Why is this addition necessary?
+#    -    if any('OPENACC' in word for word in compiler_flags) and any(
+#    -            'NeXus' in word for word in compiler_flags):
+#    -        compiler_flags.append('-D__GNUC__')
+#    +    # Classify each token from decoded DEPENDENCY flag strings.
+#    +    # Linker tokens: -l<lib>, -L<dir>, -Wl,<linker-opts>, and bare library files.
+#    +    # Everything else (-I, -D, -std, -x, -fopenmp, -fPIC, …) is a compiler flag
+#    +    # and must appear before the stdin source marker ('-') in the command.
+#    +    _linker_starts = ('-l', '-L', '-Wl,')
+#    +    _lib_suffixes  = ('.so', '.a', '.dylib')
+#    +    for flag in instrument.decoded_flags():
+#    +        for word in flag.split():
+#    +            if word.startswith(_linker_starts) or word.endswith(_lib_suffixes):
+#    +                linker_flags.append(word)
+#    +            else:
+#    +                compiler_flags.append(word)
+#    +
+#    +    # Workaround: NeXus headers on some systems require __GNUC__ to be defined,
+#    +    # but the OpenACC compiler (PGI/NVHPC) does not define it by default.
+#    +    # Check both lists: -DOPENACC lands in compiler_flags; -lNeXus lands in linker_flags.
+#    +    all_flags = compiler_flags + linker_flags
+#    +    if any('OPENACC' in w for w in all_flags) and any('NeXus' in w for w in all_flags):
+#    +        compiler_flags.append('-D__GNUC__')
+#         return compiler_flags, linker_flags
+
 def linux_split_flags(instrument: Instr, target: CBinaryTarget):
     # the type of binary requested determines (some of) the required flags:
     compiler_flags = target.flags + target.extra_flags
     linker_flags = target.linker_flags
-    # the instrument-defined flags are always(?) linker flags:
-    # the flags in an instrument *might* contain ENV, CMD, GETPATH directives which need to be expanded via decode:
-    linker_flags.extend(
-        [word for flag in instrument.decoded_flags() for word in flag.split()])
+    # Classify each token from decoded DEPENDENCY flag strings.
+    # Linker tokens: -l<lib>, -L<dir>, -Wl,<linker-opts>, and bare library files.
+    # Everything else (-I, -D, -std, -x, -fopenmp, -fPIC, …) is a compiler flag
+    # and must appear before the stdin source marker ('-') in the command.
+    _linker_starts = ('-l', '-L', '-Wl,')
+    _lib_suffixes  = ('.so', '.a', '.dylib')
+    for flag in instrument.decoded_flags():
+       for word in flag.split():
+           if word.startswith(_linker_starts) or word.endswith(_lib_suffixes):
+               linker_flags.append(word)
+           else:
+               compiler_flags.append(word)
 
-    # Why is this addition necessary?
-    if any('OPENACC' in word for word in compiler_flags) and any(
-            'NeXus' in word for word in compiler_flags):
-        compiler_flags.append('-D__GNUC__')
+    # Workaround: NeXus headers on some systems require __GNUC__ to be defined,
+    # but the OpenACC compiler (PGI/NVHPC) does not define it by default.
+    # Check both lists: -DOPENACC lands in compiler_flags; -lNeXus lands in linker_flags.
+    all_flags = compiler_flags + linker_flags
+    if any('OPENACC' in w for w in all_flags) and any('NeXus' in w for w in all_flags):
+       compiler_flags.append('-D__GNUC__')
     return compiler_flags, linker_flags
 
 
-def windows_split_flags(instrument: Instr, target: CBinaryTarget):
-    # the type of binary requested determines (some of) the required flags:
+def windows_split_flags(instrument, target):
     compiler_flags = target.flags + target.extra_flags
     linker_flags = target.linker_flags
-    # instrument-defined flags may be for the compiler or linker.
-    # cl.exe accepts a _wide_ array of flags, most of which we can't support
-    # so, instead we are forced to handle things piecemeal.
-    cl_flags = {
-        'D': {'not': '/DYNAMICBASE',},
-        'U': {},
-        'p': {'has': '='},
-        'std': {'has': '=', 'replace': ('=', ':')}
-    }
+
+    linker_prefixes = ('link', 'LIBPATH', 'SUBSYSTEM', 'ENTRY', 'STACK', 'HEAP',
+                        'MACHINE', 'MANIFEST', 'INCREMENTAL', 'NODEFAULTLIB',
+                        'OPT', 'LTCG', 'DEBUG', 'PDB', 'NATVIS', 'DYNAMICBASE')
+
     for flag in instrument.decoded_flags():
         flag = flag.strip()
-        if not flag.startswith('/') and not flag.startswith('-'):
-            # Not an actual flag? Punt for now
-            linker_flags.append(flag)
-        elif any(flag[1:].startswith(key) for key in cl_flags):
-            d = next(d for key, d in cl_flags.items() if flag[1:].startswith(key))
-            if ('not' in d and flag == d['not']) or ('has' in d and not d['has'] in flag):
-                linker_flags.append(flag)
-            else:
-                if 'replace' in d:
-                    flag = flag.replace(d['replace'][0], d['replace'][1])
-                compiler_flags.append(flag)
-        elif flag[1:].lower().startswith('l') or flag.lower().endswith('.lib'):
-            linker_flags.append(flag)
-        else:
-            # Second punt; no match for our special (post / or -) strings
-            linker_flags.append(flag)
+        stem = flag[1:] if (flag.startswith('/') or flag.startswith('-')) else ''
 
-    # Check for OpenACC or NeXus in flags?
+        if not stem:  # bare path or .lib
+            linker_flags.append(flag)
+        elif flag.lower().endswith('.lib'):  # explicit .lib
+            linker_flags.append(flag)
+        elif stem.lower().startswith('l') or any(
+                stem.upper().startswith(p) for p in linker_prefixes):
+            linker_flags.append(flag)  # linker options
+        else:
+            # std: needs /std:c11 → /std:c11 (replace = with :)
+            if stem.lower().startswith('std') and '=' in flag:
+                flag = flag.replace('=', ':')
+            compiler_flags.append(flag)  # default: compiler
+
     return compiler_flags, linker_flags
 
 
