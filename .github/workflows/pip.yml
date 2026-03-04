@@ -39,12 +39,7 @@ jobs:
       uses: ilammy/msvc-dev-cmd@v1
 
     - name: Build and install with testing dependencies including HDF5 and MCPL
-      if: runner.os != 'Windows'
       run: pip install --verbose '.[test,hdf5,mcpl]'
-
-    - name: Build and install with testing dependencies including HDF5 (no MCPL)
-      if: runner.os == 'Windows'
-      run: pip install --verbose '.[test,hdf5]'
 
     - name: Locate pooch cache directory
       id: pooch-cache-dir

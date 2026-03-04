@@ -12,63 +12,49 @@ class CInclude:
     name: str
     order: int
     content: str = ''
-    root: str = ''
 
     def __hash__(self):
-        return hash(self.parent + self.name + self.content + self.root)
+        return hash(self.parent + self.name + self.content)
 
     def __str__(self):
-        return f'{self.root}:{self.parent}({self.order}):{self.name}'
-
-    def __lt__(self, other):
-        if self.parent == other.parent:
-            return self.order > other.order
-        if self.root or other.root:
-            if self.parent == self.root or self.parent == other.root:
-                return True
-            if other.parent == self.root or other.parent == other.root:
-                return False
-        if self.parent == other.name:
-            return False
-        if other.parent == self.name:
-            return True
-        return self.name < other.name
+        return f'{self.parent}({self.order}):{self.name}'
 
 
 def sort_include_hierarchy(includes: list[CInclude]):
+    """Return a deduplicated, topologically sorted list of CInclude objects.
+
+    CInclude(parent=P, name=N) means library N must be emitted before P uses it.
+    Kahn's algorithm is used so the result is deterministic (tie-breaking by
+    first-encounter order, which is Python 3.7+ dict insertion order).
+    """
     if len(includes) == 0:
         return []
-    logger.debug(f'sort includes {" ".join(str(x) for x in includes)}')
-    # find the 'root' of the tree, a parent which is _not_ a named include:
-    roots = list(set([x.parent for x in includes]).difference(set([x.name for x in includes])))
-    options = {}
-    for root in roots:
-        for include in includes:
-            include.root = root
-        # Sort the includes such that if A includes B and C, and C includes B, then we get [C:B, A:C, A:B]
-        # Or a more complicated case: G:(Z,A,W), Z:(B,Y), A:X, W(Y) -> [Z:Y, W:Y, A:X, B:W, Z:B, G:A, G:Z, G:W]
-        used, output = [], []
-        for include in sorted(includes, reverse=True):
-            if include.name not in used:
-                output.append(include)
-                used.append(include.name)
-        # Reduce output to [C:B, A:C], or [Z:Y, A:X, B:W, Z:B, G:A, G:Z], which would include the libraries correctly
-        # Double check, that the include order does not _directly_ contradict one of the include directives:
-        order = [x.name for x in output]
-        contradicts = False
-        for include in includes:
-            if include.parent in order and include.name in order:
-                parent_at = [index for index, name in enumerate(order) if name == include.parent][0]
-                name_at = [index for index, name in enumerate(order) if name == include.name][0]
-                if name_at > parent_at:
-                    contradicts = True
-        if not contradicts:
-            logger.debug(f"sorted to {'  '.join(order)}")
-            options[root] = output
-    if len(options) == 0:
-        raise RuntimeError(f'No valid sorting of {includes=}')
-    # Maybe there's a case where the specified root matters?
-    return list(options.values())[0]
+    # Build first-seen representative for each library name (deduplication).
+    by_name: dict[str, CInclude] = {}
+    for inc in includes:
+        if inc.name not in by_name:
+            by_name[inc.name] = inc
+    # Build DAG: edge N -> P means "N must come before P".
+    # Only add edges where both endpoints are library nodes.
+    successors: dict[str, list[str]] = {n: [] for n in by_name}
+    in_degree: dict[str, int] = {n: 0 for n in by_name}
+    for inc in includes:
+        if inc.parent in by_name and inc.name in by_name:
+            successors[inc.name].append(inc.parent)
+            in_degree[inc.parent] += 1
+    # Kahn's algorithm: seed with zero-in-degree nodes in insertion order.
+    queue = [n for n in by_name if in_degree[n] == 0]
+    result: list[CInclude] = []
+    while queue:
+        node = queue.pop(0)
+        result.append(by_name[node])
+        for succ in successors[node]:
+            in_degree[succ] -= 1
+            if in_degree[succ] == 0:
+                queue.append(succ)
+    if len(result) != len(by_name):
+        raise RuntimeError(f'Cycle detected in include hierarchy: {includes=}')
+    return result
 
 
 class CTargetVisitor(TargetVisitor, target_language='c'):
