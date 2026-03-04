@@ -168,7 +168,11 @@ class TestCompiledInstr(TestCase):
 
         flag_params = tuple(ComponentParameter(k, Expr.str(v)) for k, v in [
             ('userflag', '"flag"'), ('userflagcomment', '"Neutron Id"')])
-        before, after = instr.mcpl_split('split_point', filename='test_mcpl_split', output_parameters=flag_params)
+        # weight_mode=0: use particle weights exactly as stored (avoids deprecated weight_mode=2 scaling)
+        weight_mode_param = (ComponentParameter('weight_mode', Expr.float(0)),)
+        before, after = instr.mcpl_split('split_point', filename='test_mcpl_split',
+                                         output_parameters=flag_params,
+                                         input_parameters=weight_mode_param)
         self.assertEqual(before.name, 'Test_MCPL_output_first')
         self.assertEqual(after.name, 'Test_MCPL_output_second')
         self.assertTrue(isinstance(before, Instr))
@@ -201,7 +205,7 @@ class TestCompiledInstr(TestCase):
                 self.assertTrue(access(binary, R_OK))
 
             # Run the instrument and check that the output is the same
-            seed = randint(1000, 2**32 - 1)
+            seed = randint(1000, 2**31 - 1)  # limit to signed 32-bit to avoid overflow on Windows
             common = f'--seed {seed} -n 10000'
             run_compiled_instrument(expected_binaries[0], target, f"--dir {directory}/instr {common}")
             mcpl_file = Path(directory).joinpath('instr')
@@ -233,7 +237,17 @@ class TestCompiledInstr(TestCase):
                 # The files must be the same except for any header information:
                 instr_data = read_mccode_dat(instr_file)
                 after_data = read_mccode_dat(after_file)
-                self.assertTrue(allclose(instr_data.data, after_data.data))
+                if not allclose(instr_data.data, after_data.data):
+                    from numpy import abs as npabs, unravel_index, argmax
+                    diff = npabs(instr_data.data - after_data.data)
+                    rel_diff = diff / (npabs(instr_data.data) + 1e-30)
+                    max_idx = unravel_index(argmax(diff), diff.shape)
+                    self.fail(
+                        f"Mismatch in {instr_file.name}: shape={instr_data.data.shape}, "
+                        f"max_abs_diff={diff[max_idx]:.3e}, max_rel_diff={rel_diff[max_idx]:.3e}, "
+                        f"instr[{max_idx}]={instr_data.data[max_idx]:.6e}, "
+                        f"after[{max_idx}]={after_data.data[max_idx]:.6e}"
+                    )
 
     @compiled_test
     def test_assemble_a3_rotation(self):
