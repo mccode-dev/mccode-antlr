@@ -127,22 +127,23 @@ def windows_split_flags(instrument, target):
                         'MACHINE', 'MANIFEST', 'INCREMENTAL', 'NODEFAULTLIB',
                         'OPT', 'LTCG', 'DEBUG', 'PDB', 'NATVIS', 'DYNAMICBASE')
 
-    for flag in instrument.decoded_flags():
-        flag = flag.strip()
-        stem = flag[1:] if (flag.startswith('/') or flag.startswith('-')) else ''
+    for decoded in instrument.decoded_flags():
+        for flag in decoded.split():
+            flag = flag.strip()
+            stem = flag[1:] if (flag.startswith('/') or flag.startswith('-')) else ''
 
-        if not stem:  # bare path or .lib
-            linker_flags.append(flag)
-        elif flag.lower().endswith('.lib'):  # explicit .lib
-            linker_flags.append(flag)
-        elif stem.lower().startswith('l') or any(
-                stem.upper().startswith(p) for p in linker_prefixes):
-            linker_flags.append(flag)  # linker options
-        else:
-            # std: needs /std:c11 → /std:c11 (replace = with :)
-            if stem.lower().startswith('std') and '=' in flag:
-                flag = flag.replace('=', ':')
-            compiler_flags.append(flag)  # default: compiler
+            if not stem:  # bare path or .lib
+                linker_flags.append(flag)
+            elif flag.lower().endswith('.lib'):  # explicit .lib
+                linker_flags.append(flag)
+            elif stem.lower().startswith('l') or any(
+                    stem.upper().startswith(p) for p in linker_prefixes):
+                linker_flags.append(flag)  # linker options
+            else:
+                # std: needs /std:c11 → /std:c11 (replace = with :)
+                if stem.lower().startswith('std') and '=' in flag:
+                    flag = flag.replace('=', ':')
+                compiler_flags.append(flag)  # default: compiler
 
     return compiler_flags, linker_flags
 
