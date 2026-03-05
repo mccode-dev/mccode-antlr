@@ -270,8 +270,175 @@ def cache_ir_clean(stale: bool, force: bool):
 
 
 # ---------------------------------------------------------------------------
-# Argument-parser wiring
+# Component IR cache build
 # ---------------------------------------------------------------------------
+
+def _build_one_ir(comp_path_str: str, force: bool) -> tuple[str, str]:
+    """Parse one ``.comp`` file and write its ``.comp.json``.
+
+    Module-level so it is picklable by ``ProcessPoolExecutor``.
+
+    Returns ``(comp_path_str, status)`` where *status* is one of
+    ``'hit'``, ``'built'``, or ``'error: <message>'``.
+    """
+    from pathlib import Path
+    from mccode_antlr.reader.reader import component_cache, make_reader_error_listener
+    from mccode_antlr.comp import Comp
+    from mccode_antlr.grammar import McComp_ErrorListener
+
+    comp_path = Path(comp_path_str)
+    json_path = comp_path.with_suffix(comp_path.suffix + '.json')
+
+    if not force:
+        try:
+            if json_path.exists() and json_path.stat().st_mtime_ns >= comp_path.stat().st_mtime_ns:
+                return (comp_path_str, 'hit')
+        except OSError:
+            pass
+
+    try:
+        source = comp_path.read_text()
+        error_listener = make_reader_error_listener(
+            McComp_ErrorListener, 'Component', comp_path.stem, source
+        )
+        comp = Comp.from_source(None, error_listener, source, str(comp_path), str(comp_path))
+        component_cache.put(comp_path, comp)
+        return (comp_path_str, 'built')
+    except Exception as exc:
+        return (comp_path_str, f'error: {exc}')
+
+
+def _collect_comp_paths(registries) -> list[Path]:
+    """Return deduplicated absolute paths to all locally-present ``.comp`` files in *registries*.
+
+    Only files that are already present on disk are returned.  Call
+    :func:`cache_populate` first when you want to download remote files.
+
+    Parameters
+    ----------
+    registries:
+        An iterable of :class:`~mccode_antlr.reader.registry.Registry` objects.
+    """
+    seen: set[Path] = set()
+    paths: list[Path] = []
+
+    for reg in registries:
+        if getattr(reg, 'pooch', None) is not None:
+            # Pooch-backed (remote) registry — only include files already cached locally
+            for fname in reg.pooch.registry_files:
+                if not fname.endswith('.comp'):
+                    continue
+                local = Path(reg.pooch.path) / fname
+                if local.exists():
+                    key = local.resolve()
+                    if key not in seen:
+                        seen.add(key)
+                        paths.append(key)
+        else:
+            # Local registry
+            root = getattr(reg, 'root', None)
+            if root is None:
+                continue
+            root = Path(root)
+            for p in root.rglob('*.comp'):
+                key = p.resolve()
+                if key not in seen:
+                    seen.add(key)
+                    paths.append(key)
+
+    return paths
+
+
+def cache_ir_build(flavor: str, jobs: int, force: bool, download: bool,
+                   registry: list[str] | None):
+    """Pre-build component IR (``.comp.json``) files for all known registries."""
+    import os
+    from concurrent.futures import ProcessPoolExecutor, as_completed
+    from functools import partial
+    from mccode_antlr import Flavor
+    from mccode_antlr.reader.registry import default_registries, registry_from_specification
+
+    # Resolve target flavors
+    if flavor == 'both':
+        flavors = [Flavor.MCSTAS, Flavor.MCXTRACE]
+    else:
+        flavors = [Flavor[flavor.upper()]]
+
+    # Collect registries: defaults for each flavor + any user-supplied extras
+    all_registries = []
+    seen_regs: set = set()
+    for flv in flavors:
+        for reg in default_registries(flv):
+            if id(reg) not in seen_regs:
+                seen_regs.add(id(reg))
+                all_registries.append(reg)
+
+    for spec in (registry or []):
+        try:
+            extra = registry_from_specification(spec)
+        except Exception as exc:
+            print(f'WARNING: could not parse registry spec {spec!r}: {exc} — skipping.', flush=True)
+            continue
+        if extra is None:
+            print(f'WARNING: could not parse registry spec {spec!r} — skipping.', flush=True)
+            continue
+        all_registries.append(extra)
+
+    # Bulk-populate the default pooch caches via a single git clone when requested.
+    # This is much faster than fetching individual files and is the preferred approach.
+    if download:
+        print('Pre-populating pooch caches via git clone …', flush=True)
+        cache_populate(
+            tag=None,
+            from_path=None,
+            clone_url='https://github.com/mccode-dev/McCode.git',
+            flavor=flavor,
+        )
+
+    # Collect locally-present .comp paths (all default files are present after populate)
+    print('Collecting .comp files …', flush=True)
+    comp_paths = _collect_comp_paths(all_registries)
+    if not comp_paths:
+        print('No .comp files found (use --download to fetch and cache files first).')
+        return
+
+    n = len(comp_paths)
+    print(f'Found {n} .comp file(s). Building IR cache …', flush=True)
+
+    if jobs is None:
+        jobs = os.cpu_count() or 1
+
+    worker = partial(_build_one_ir, force=force)
+    built = hits = errors = 0
+
+    if jobs == 1:
+        for path in comp_paths:
+            _, status = worker(str(path))
+            if status == 'built':
+                built += 1
+            elif status == 'hit':
+                hits += 1
+            else:
+                errors += 1
+                print(f'  {path.name}: {status}', flush=True)
+    else:
+        with ProcessPoolExecutor(max_workers=jobs) as pool:
+            futures = {pool.submit(_build_one_ir, str(p), force): p for p in comp_paths}
+            for future in as_completed(futures):
+                _, status = future.result()
+                if status == 'built':
+                    built += 1
+                elif status == 'hit':
+                    hits += 1
+                else:
+                    errors += 1
+                    print(f'  {futures[future].name}: {status}', flush=True)
+
+    print(
+        f'\nDone. {built} built, {hits} already up-to-date, {errors} error(s).',
+        flush=True,
+    )
+
 
 def add_cache_management_parser(modes):
     parser = modes.add_parser(name='cache', help='Manage the mccode-antlr cache')
@@ -335,5 +502,41 @@ def add_cache_management_parser(modes):
     ic.add_argument('-f', '--force', action='store_true',
                     help='Skip confirmation prompt')
     ic.set_defaults(action=cache_ir_clean)
+
+    # -- ir-build --
+    ib = actions.add_parser(
+        name='ir-build',
+        help='Pre-build component IR cache files (*.comp.json) for all known registries',
+    )
+    ib.add_argument(
+        '--flavor', default='both', choices=['mcstas', 'mcxtrace', 'both'],
+        help="Which flavor's registries to build IR for (default: both)",
+    )
+    ib.add_argument(
+        '-j', '--jobs', type=int, default=None, metavar='N',
+        help='Number of parallel workers (default: os.cpu_count())',
+    )
+    ib.add_argument(
+        '--force', action='store_true',
+        help='Rebuild even if .comp.json is already up-to-date',
+    )
+    ib.add_argument(
+        '--download', action='store_true',
+        help=(
+            'Bulk-populate the pooch cache via git clone before building IR. '
+            'Uses the same mechanism as ``cache populate`` — much faster than '
+            'individual file fetches.'
+        ),
+    )
+    ib.add_argument(
+        '-R', '--registry', action='append', default=None, metavar='SPEC',
+        help=(
+            'Extra registry to include (repeatable). SPEC formats:\n'
+            '  /path/to/dir\n'
+            '  name /path/to/dir\n'
+            '  name url version registry-file-name'
+        ),
+    )
+    ib.set_defaults(action=cache_ir_build)
 
     return actions
