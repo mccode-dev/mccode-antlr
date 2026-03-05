@@ -3,7 +3,8 @@ from .registry import (
     Registry,
     LocalRegistry, RemoteRegistry, ModuleRemoteRegistry, GitHubRegistry,
     InMemoryRegistry,
-    collect_local_registries, default_registries, ensure_registries
+    collect_local_registries, default_registries, ensure_registries,
+    registry_from_specification,
 )
 
 __all__ = [
@@ -17,4 +18,5 @@ __all__ = [
     'collect_local_registries',
     'default_registries',
     'ensure_registries',
+    'registry_from_specification',
 ]

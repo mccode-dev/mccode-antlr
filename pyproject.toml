@@ -44,6 +44,12 @@ dynamic = ["version"]
 test = ["gputil==1.4.0", 'pytest']
 hdf5 = ["h5py>=3.11.0"]
 mcpl = ["mcpl>=2.2.0"]
+docs = [
+    "mkdocs>=1.6",
+    "mkdocs-material>=9.5",
+    "mkdocstrings[python]>=0.25",
+    "mkdocs-jupyter>=0.24",
+]
 
 [project.urls]
 "Homepage" = "https://github.com/mccode-dev/mccode-antlr"
