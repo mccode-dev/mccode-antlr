@@ -83,16 +83,19 @@ class Expr(Struct):
         return cls(Value.id(value))
 
     @classmethod
-    def parameter(cls, value, dt=None):
+    def parameter(cls, value: str, dt=None) -> 'Expr':
         """Create an Expr for a known instrument parameter (ObjectType.parameter).
 
         Unlike Expr.id(), the parameter flag is set immediately so that the
-        _instrument_var._parameters. prefix is used in C output without waiting
+        ``_instrument_var._parameters.`` prefix is used in C output without waiting
         for verify_parameters() to be called during instrument finalisation.
 
         Args:
-            value: parameter name string
+            value: parameter name string, or an existing Expr (returned unchanged)
             dt: optional DataType hint (default: DataType.undefined)
+
+        Returns:
+            Expr wrapping a Value with ObjectType.parameter
         """
         if isinstance(value, cls):
             return value

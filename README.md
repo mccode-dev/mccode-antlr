@@ -1,40 +1,74 @@
-# Monte Carlo Particle Ray Tracing compiler via ANTLR4
+# mccode-antlr
 
-Implementing the `mccode-3` language and targeting the `mcstas` and `mcxtrace` runtimes.
+[![PyPI](https://img.shields.io/pypi/v/mccode_antlr)](https://pypi.org/project/mccode_antlr/)
+[![conda-forge](https://img.shields.io/conda/vn/conda-forge/mccode-antlr)](https://anaconda.org/conda-forge/mccode-antlr)
+[![License](https://img.shields.io/badge/license-BSD--3--Clause-blue)](LICENSE)
+[![Python](https://img.shields.io/pypi/pyversions/mccode_antlr)](https://pypi.org/project/mccode_antlr/)
 
-# Installation
-Install the latest development version from GitHub with
-```Bash
-$ python -m pip install git+https://github.com/mccode-dev/mccode-antlr.git
-```
-or the latest release from PyPI with
-```Bash
-$ python -m pip install mccode_antlr
-```
+ANTLR4-based compiler and Python API for the McStas and McXtrace Monte Carlo
+particle ray-tracing languages.
 
-# Use
-The `mccode-antlr` package provides a command-line interface to the `McCode` language parsers
-and translators. To avoid shadowing the `McCode-3` translators, the command-line interface
-are suffixed with `-antlr`.
+**[Documentation](https://mccode-dev.github.io/mccode-antlr/)** ·
+[PyPI](https://pypi.org/project/mccode_antlr/) ·
+[conda-forge](https://anaconda.org/conda-forge/mccode-antlr) ·
+[Issues](https://github.com/mccode-dev/mccode-antlr/issues)
 
-```Bash
-$ mcstas-antlr --help
-```
+## Quick start
 
-```Bash
-$ mcxtrace-antlr --help
-```
+### Command line
 
-A local cache is used for storing instrument component files and
-runtime library files obtained from [the McCode repository](https://github.com/mccode-dev/McCode.git).
-The cache and configuration parameters for the whole `mccode-antlr` module can be
-accessed via a third command-line interface:
-```Bash
-$ mccode-antlr --help
+```bash
+pip install mccode_antlr
+
+mcstas-antlr my_instrument.instr   # translate to C
+mcrun-antlr  my_instrument.instr -n 1e6 --E_i=5.0   # compile & run
 ```
 
-## Language parsing with ANTLR4
-The traditional `McCode` `lex|flex` tokenizer and `yacc|bison` parser
+### Python API
+
+```python
+from mccode_antlr import Flavor
+from mccode_antlr.assembler import Assembler
+
+a = Assembler("BrillouinSpec", flavor=Flavor.MCSTAS)
+a.parameter("double E_i = 5.0")   # meV
+
+src = a.component("Source", "Source_simple",
+                  at=(0, 0, 0),
+                  parameters={"E0": "E_i", "radius": 0.05})
+
+instr = a.instrument()
+instr.to_file("BrillouinSpec.instr")
+
+# In Jupyter: just put `instr` on the last line of a cell for an interactive view
+```
+
+## Installation
+
+```bash
+# pip
+pip install mccode_antlr                 # latest release
+pip install "mccode_antlr[hdf5]"         # with HDF5 output
+pip install "mccode_antlr[mcpl]"         # with MCPL file support
+
+# conda / mamba (conda-forge)
+conda install conda-forge::mccode-antlr
+mamba install -c conda-forge mccode-antlr
+
+# development version
+pip install git+https://github.com/mccode-dev/mccode-antlr.git
+```
+
+## Documentation
+
+Full documentation — including a getting-started guide, core concepts, how-to
+guides, and API reference — is at:
+
+**https://mccode-dev.github.io/mccode-antlr/**
+
+## Why ANTLR4?
+
+
 included in-rule code to implement some language features and called
 the code-generator to construct the intermediate instrument source file.
 The mixture of language parsing and multiple layers of generated functionality

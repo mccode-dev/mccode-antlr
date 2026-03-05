@@ -567,12 +567,16 @@ class Value(Struct, tag_field='type', tag='value'):
         return cls(value, DataType.undefined, ObjectType.identifier, ShapeType.scalar)
 
     @classmethod
-    def parameter(cls, value, dt: DataType | None = None):
+    def parameter(cls, value: str, dt: 'DataType | None' = None) -> 'Value':
         """Create a Value representing a known instrument parameter (ObjectType.parameter).
 
         Unlike Value.id(), the ObjectType.parameter flag is set immediately so that
         format(..., 'p') emits the _instrument_var._parameters. prefix without waiting
         for verify_parameters() to be called.
+
+        Args:
+            value: the parameter name
+            dt: optional DataType hint (default: DataType.undefined)
         """
         return cls(value, dt if dt is not None else DataType.undefined, ObjectType.parameter, ShapeType.scalar)
 
