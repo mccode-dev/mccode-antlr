@@ -174,10 +174,8 @@ class RemoteRegistry(Registry):
         return {key: getattr(self, key) or '' for key in self.file_keys()}
 
     def to_file(self, output, wrapper):
-        wp = wrapper.parameter
-        wv = wrapper.value
-        contents = '(' + ', '.join([wp(n) + '=' + wv(v) for n, v in self.file_contents().items()]) + ')'
-        print(wrapper.line(self.__class__.__name__, [contents], ''), file=output)
+        filename = self.filename or f'{self.name}-registry.txt'
+        print(f'Registry: {self.name} {self.url or ""} {self.version or ""} {filename}', file=output)
 
     def known(self, name: str, ext: str = None, strict: bool = False):
         compare = _name_plus_suffix(name, ext)
@@ -344,11 +342,7 @@ class LocalRegistry(Registry):
         return {'name': self.name, 'root': self.root.as_posix(), 'priority': self.priority}
 
     def to_file(self, output, wrapper):
-        contents = '(' + ', '.join([
-            wrapper.parameter('name') + '=' + wrapper.value(self.name),
-            wrapper.parameter('root') + '=' + wrapper.url(self.root.as_posix()),
-        ]) + ')'
-        print(wrapper.line('LocalRegistry', [contents], ''), file=output)
+        print(f'Registry: {self.name} {self.root.as_posix()}', file=output)
 
     def _filetype_iterator(self, filetype: str):
         return self.root.glob(f'**/*.{filetype}')
@@ -630,6 +624,54 @@ def registry_from_specification(spec: str):
         return GitHubRegistry(p1, p2, p3, p4)
 
     return None
+
+
+def registries_from_instr_header(source: str) -> list[Registry]:
+    """Extract Registry objects from the instrument header block comment.
+
+    Looks for the leading ``/* … */`` block comment written by
+    :meth:`Instr.to_file` and parses every ``Registry: <spec>`` line using
+    :func:`registry_from_specification`.  Lines whose path no longer exists
+    (e.g. a :class:`LocalRegistry` saved on another machine) are silently
+    skipped.
+
+    Parameters
+    ----------
+    source:
+        Raw text of the ``.instr`` file (or any string that may start with
+        the instrument header comment).
+
+    Returns
+    -------
+    list of :class:`Registry`
+        Reconstructed registries in the order they appear in the header.
+    """
+    source = source.lstrip()
+    if not source.startswith('/*'):
+        return []
+    end = source.find('*/')
+    if end == -1:
+        return []
+    comment = source[2:end]
+
+    _PREFIX = 'Registry:'
+    registries: list[Registry] = []
+    seen_names: set[str] = set()
+    for line in comment.splitlines():
+        line = line.strip()
+        if not line.startswith(_PREFIX):
+            continue
+        spec = line[len(_PREFIX):].strip()
+        if not spec:
+            continue
+        try:
+            reg = registry_from_specification(spec)
+        except Exception:
+            reg = None
+        if reg is not None and reg.name not in seen_names:
+            seen_names.add(reg.name)
+            registries.append(reg)
+    return registries
 
 
 REGISTRY_PRIORITY_LOWEST=-10

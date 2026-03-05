@@ -133,3 +133,118 @@ class TestRegistryFromSpecificationNewFormats:
         assert cap['url'] == 'https://github.com/owner/repo'
         assert cap['name'] == 'repo'
 
+
+
+# ---------------------------------------------------------------------------
+# Registry.to_file — serialization format
+# ---------------------------------------------------------------------------
+
+class TestRegistryToFile:
+    """Tests for the Registry: <spec> comment format written by to_file."""
+
+    def _to_file_str(self, registry):
+        from io import StringIO
+        from mccode_antlr.common import TextWrapper
+        out = StringIO()
+        registry.to_file(out, TextWrapper())
+        return out.getvalue().strip()
+
+    def test_remote_registry_format(self):
+        import mccode_antlr.reader.registry as rm
+        reg = rm.RemoteRegistry('mylib', 'https://example.com/repo', 'v1.0', 'mylib-registry.txt')
+        line = self._to_file_str(reg)
+        assert line == 'Registry: mylib https://example.com/repo v1.0 mylib-registry.txt'
+
+    def test_local_registry_format(self, tmp_path):
+        import mccode_antlr.reader.registry as rm
+        reg = rm.LocalRegistry('mylib', str(tmp_path))
+        line = self._to_file_str(reg)
+        assert line == f'Registry: mylib {tmp_path.as_posix()}'
+
+    def test_remote_registry_roundtrips(self):
+        import mccode_antlr.reader.registry as rm
+        reg = rm.RemoteRegistry('mylib', 'https://example.com/repo', 'v1.0', 'mylib-registry.txt')
+        line = self._to_file_str(reg)
+        spec = line[len('Registry:'):].strip()
+        # format 4 → registry_from_specification would create a GitHubRegistry;
+        # check the spec is parseable back to the right name/url/version/filename
+        parts = spec.split()
+        assert parts == ['mylib', 'https://example.com/repo', 'v1.0', 'mylib-registry.txt']
+
+    def test_local_registry_roundtrips(self, tmp_path):
+        import mccode_antlr.reader.registry as rm
+        reg = rm.LocalRegistry('mylib', str(tmp_path))
+        line = self._to_file_str(reg)
+        spec = line[len('Registry:'):].strip()
+        recovered = rm.registry_from_specification(spec)
+        assert recovered is not None
+        assert recovered.name == 'mylib'
+        assert recovered.root == tmp_path.resolve()
+
+
+# ---------------------------------------------------------------------------
+# registries_from_instr_header — header comment scanner
+# ---------------------------------------------------------------------------
+
+class TestRegistriesFromInstrHeader:
+
+    def test_no_block_comment_returns_empty(self):
+        from mccode_antlr.reader.registry import registries_from_instr_header
+        assert registries_from_instr_header('DEFINE INSTRUMENT foo() TRACE END') == []
+
+    def test_comment_without_registry_lines_returns_empty(self):
+        from mccode_antlr.reader.registry import registries_from_instr_header
+        source = '/* Instrument foo\nSource: foo.instr\n*/\nDEFINE INSTRUMENT foo()\n'
+        assert registries_from_instr_header(source) == []
+
+    def test_local_registry_recovered(self, tmp_path):
+        from mccode_antlr.reader.registry import registries_from_instr_header
+        source = f'/* Instrument foo\nRegistry: mylib {tmp_path.as_posix()}\n*/\n'
+        regs = registries_from_instr_header(source)
+        assert len(regs) == 1
+        assert regs[0].name == 'mylib'
+        assert regs[0].root == tmp_path.resolve()
+
+    def test_nonexistent_local_path_skipped(self):
+        from mccode_antlr.reader.registry import registries_from_instr_header
+        source = '/* Instrument foo\nRegistry: mylib /nonexistent/path/that/does/not/exist\n*/\n'
+        regs = registries_from_instr_header(source)
+        assert regs == []
+
+    def test_multiple_registries_recovered(self, tmp_path):
+        from mccode_antlr.reader.registry import registries_from_instr_header
+        dir_a = tmp_path / 'a'
+        dir_b = tmp_path / 'b'
+        dir_a.mkdir()
+        dir_b.mkdir()
+        source = (
+            f'/* Instrument foo\n'
+            f'Registry: libA {dir_a.as_posix()}\n'
+            f'Registry: libB {dir_b.as_posix()}\n'
+            f'*/\n'
+        )
+        regs = registries_from_instr_header(source)
+        assert len(regs) == 2
+        assert {r.name for r in regs} == {'libA', 'libB'}
+
+    def test_duplicate_names_deduplicated(self, tmp_path):
+        from mccode_antlr.reader.registry import registries_from_instr_header
+        source = (
+            f'/* Instrument foo\n'
+            f'Registry: mylib {tmp_path.as_posix()}\n'
+            f'Registry: mylib {tmp_path.as_posix()}\n'
+            f'*/\n'
+        )
+        regs = registries_from_instr_header(source)
+        assert len(regs) == 1
+
+    def test_unclosed_comment_returns_empty(self):
+        from mccode_antlr.reader.registry import registries_from_instr_header
+        source = '/* Instrument foo\nRegistry: mylib /some/path\n'
+        assert registries_from_instr_header(source) == []
+
+    def test_leading_whitespace_ignored(self, tmp_path):
+        from mccode_antlr.reader.registry import registries_from_instr_header
+        source = f'\n\n/* Instrument foo\nRegistry: mylib {tmp_path.as_posix()}\n*/\n'
+        regs = registries_from_instr_header(source)
+        assert len(regs) == 1

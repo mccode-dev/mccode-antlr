@@ -21,7 +21,15 @@ def parse_mccode_instr(contents: str, registries: list[Registry], source: str | 
     from mccode_antlr.grammar import McInstr_parse
     from mccode_antlr.instr import InstrVisitor
     from mccode_antlr.reader import Reader
+    from mccode_antlr.reader.registry import registries_from_instr_header
     reader = Reader(registries=registries)
+    # Recover any extra registries embedded in the file header comment.
+    # Append only those not already known to the reader (explicit registries take priority).
+    known_names = {r.name for r in reader.registries}
+    for reg in registries_from_instr_header(contents):
+        if reg.name not in known_names:
+            reader.append_registry(reg)
+            known_names.add(reg.name)
     visitor = InstrVisitor(reader, source or '<string>')
     instr = visitor.visitProg(McInstr_parse(InputStream(contents), 'prog'))
     instr.registries += tuple(registries)
