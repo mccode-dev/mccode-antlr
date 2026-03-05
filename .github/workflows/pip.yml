@@ -70,7 +70,7 @@ jobs:
 
     - name: Pre-populate pooch cache
       if: steps.cache-pooch.outputs.cache-hit != 'true'
-      run: python .github/scripts/warm_pooch_cache.py --tag ${{ env.MCCODE_VERSION }}
+      run: mccode-antlr cache populate --tag ${{ env.MCCODE_VERSION }}
 
     - name: Test
       env:

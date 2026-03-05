@@ -262,9 +262,9 @@ class TestCacheManagement:
         with TemporaryDirectory() as tmpdir:
             cache_path = Path(tmpdir)
 
-            # Mock the cache_path function
-            from mccode_antlr.cli import management
-            monkeypatch.setattr(management, 'cache_path', lambda: cache_path)
+            # Mock the _cache_root function in the module where cache_list/cache_remove live
+            import mccode_antlr.cli.cache as cache_module
+            monkeypatch.setattr(cache_module, '_cache_root', lambda: cache_path)
 
             # Create some test cache structure
             (cache_path / 'package1' / 'v1.0').mkdir(parents=True)
