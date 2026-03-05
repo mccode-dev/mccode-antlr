@@ -450,6 +450,172 @@ class TestParserFunctions:
         assert hasattr(args, 'action')
 
 
+# ---------------------------------------------------------------------------
+# Minimal .comp source used throughout TestCacheIR
+# ---------------------------------------------------------------------------
+
+_MINIMAL_COMP = """\
+DEFINE COMPONENT {name}
+SETTING PARAMETERS ()
+TRACE
+%{{
+%}}
+END
+"""
+
+
+class TestCacheIR:
+    """Tests for cache ir-list, ir-clean, and ir-build sub-commands."""
+
+    @pytest.fixture
+    def comp_dir(self, tmp_path):
+        """Create a temporary directory with two synthetic .comp files."""
+        for stem in ('CompA', 'CompB'):
+            (tmp_path / f'{stem}.comp').write_text(_MINIMAL_COMP.format(name=stem))
+        return tmp_path
+
+    @pytest.fixture
+    def ir_root(self, comp_dir, monkeypatch):
+        """Point _cache_root at a directory that already contains .comp.json files."""
+        import mccode_antlr.cli.cache as cache_module
+        monkeypatch.setattr(cache_module, '_cache_root', lambda: comp_dir)
+
+        # Pre-build JSONs so ir-list / ir-clean have something to work with
+        from mccode_antlr.cli.cache import _build_one_ir
+        for comp in comp_dir.glob('*.comp'):
+            _build_one_ir(str(comp), force=True)
+
+        return comp_dir
+
+    # ------------------------------------------------------------------
+    # ir-list
+    # ------------------------------------------------------------------
+
+    def test_ir_list_short(self, capsys, ir_root):
+        from mccode_antlr.cli.cache import cache_ir_list
+        cache_ir_list(long=False)
+        out = capsys.readouterr().out
+        assert 'CompA.comp.json' in out
+        assert 'CompB.comp.json' in out
+
+    def test_ir_list_long(self, capsys, ir_root):
+        from mccode_antlr.cli.cache import cache_ir_list
+        cache_ir_list(long=True)
+        out = capsys.readouterr().out
+        assert 'CompA.comp.json' in out
+        assert 'B' in out  # full path contains directory name
+
+    def test_ir_list_empty(self, capsys, tmp_path, monkeypatch):
+        import mccode_antlr.cli.cache as cache_module
+        monkeypatch.setattr(cache_module, '_cache_root', lambda: tmp_path)
+        from mccode_antlr.cli.cache import cache_ir_list
+        cache_ir_list(long=False)
+        out = capsys.readouterr().out
+        assert 'No component IR cache files found' in out
+
+    # ------------------------------------------------------------------
+    # ir-clean
+    # ------------------------------------------------------------------
+
+    def test_ir_clean_all_with_force(self, ir_root):
+        from mccode_antlr.cli.cache import cache_ir_clean
+        assert list(ir_root.glob('*.comp.json'))
+        cache_ir_clean(stale=False, force=True)
+        assert not list(ir_root.glob('*.comp.json'))
+
+    def test_ir_clean_stale_only(self, ir_root):
+        from mccode_antlr.cli.cache import cache_ir_clean
+        # Touch CompA.comp to make its JSON stale
+        comp_a = ir_root / 'CompA.comp'
+        import time; time.sleep(0.01)
+        comp_a.write_text(comp_a.read_text())  # updates mtime
+        cache_ir_clean(stale=True, force=True)
+        # CompA.comp.json should be gone; CompB.comp.json should remain
+        assert not (ir_root / 'CompA.comp.json').exists()
+        assert (ir_root / 'CompB.comp.json').exists()
+
+    def test_ir_clean_confirmation_declined(self, ir_root, monkeypatch):
+        from mccode_antlr.cli.cache import cache_ir_clean
+        monkeypatch.setattr('builtins.input', lambda _: 'n')
+        cache_ir_clean(stale=False, force=False)
+        # Files should be untouched
+        assert list(ir_root.glob('*.comp.json'))
+
+    def test_ir_clean_confirmation_accepted(self, ir_root, monkeypatch):
+        from mccode_antlr.cli.cache import cache_ir_clean
+        monkeypatch.setattr('builtins.input', lambda _: 'y')
+        cache_ir_clean(stale=False, force=False)
+        assert not list(ir_root.glob('*.comp.json'))
+
+    # ------------------------------------------------------------------
+    # ir-build
+    # ------------------------------------------------------------------
+
+    @pytest.fixture
+    def mock_default_registries(self, monkeypatch):
+        """Prevent network calls from default_registries during ir-build tests."""
+        monkeypatch.setattr(
+            'mccode_antlr.reader.registry.default_registries', lambda flavor: []
+        )
+
+    def test_ir_build_creates_json(self, comp_dir, capsys, mock_default_registries):
+        from mccode_antlr.cli.cache import cache_ir_build
+        assert not list(comp_dir.glob('*.comp.json'))
+        cache_ir_build(
+            flavor='mcstas', jobs=1, force=False, download=False,
+            registry=[str(comp_dir)],
+        )
+        assert list(comp_dir.glob('*.comp.json'))
+
+    def test_ir_build_hits_on_second_run(self, comp_dir, capsys, mock_default_registries):
+        from mccode_antlr.cli.cache import cache_ir_build
+        # First run builds
+        cache_ir_build(flavor='mcstas', jobs=1, force=False, download=False,
+                       registry=[str(comp_dir)])
+        capsys.readouterr()
+        # Second run should report hits
+        cache_ir_build(flavor='mcstas', jobs=1, force=False, download=False,
+                       registry=[str(comp_dir)])
+        out = capsys.readouterr().out
+        assert 'already up-to-date' in out
+
+    def test_ir_build_force_rebuilds(self, comp_dir, capsys, mock_default_registries):
+        from mccode_antlr.cli.cache import cache_ir_build
+        # Build once, then force rebuild
+        cache_ir_build(flavor='mcstas', jobs=1, force=False, download=False,
+                       registry=[str(comp_dir)])
+        capsys.readouterr()
+        cache_ir_build(flavor='mcstas', jobs=1, force=True, download=False,
+                       registry=[str(comp_dir)])
+        out = capsys.readouterr().out
+        assert '0 already up-to-date' in out or 'built' in out
+
+    def test_ir_build_registry_spec_local_dir(self, comp_dir, capsys, mock_default_registries):
+        """--registry accepts a bare local path."""
+        from mccode_antlr.cli.cache import cache_ir_build
+        cache_ir_build(flavor='mcstas', jobs=1, force=False, download=False,
+                       registry=[str(comp_dir)])
+        out = capsys.readouterr().out
+        assert 'built' in out or 'already up-to-date' in out
+
+    def test_ir_build_bad_registry_spec_warns(self, comp_dir, capsys, mock_default_registries):
+        """An un-parseable registry spec should warn and continue."""
+        from mccode_antlr.cli.cache import cache_ir_build
+        cache_ir_build(flavor='mcstas', jobs=1, force=False, download=False,
+                       registry=['not-a-valid-spec://xyz'])
+        out = capsys.readouterr().out
+        assert 'WARNING' in out or 'warning' in out.lower() or 'No .comp files found' in out
+
+    def test_ir_build_no_comps_without_download(self, tmp_path, capsys, mock_default_registries):
+        """With no locally-cached files and --download off, nothing is built."""
+        from mccode_antlr.cli.cache import cache_ir_build
+        # Empty local dir → no .comp files → should print "No .comp files found"
+        cache_ir_build(flavor='mcstas', jobs=1, force=False, download=False,
+                       registry=[str(tmp_path)])
+        out = capsys.readouterr().out
+        assert 'No .comp files found' in out
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
 

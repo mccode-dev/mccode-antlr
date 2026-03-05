@@ -503,22 +503,103 @@ def registries_match(registry: Registry, spec):
     return False
 
 
+_DEFAULT_REGISTRY_FILE = 'pooch-registry.txt'
+
+
+def _parse_gitref_spec(spec: str):
+    """Parse compact git-reference registry specs into (name, url, version, registry_file).
+
+    Recognised formats
+    ------------------
+    ``git+{url}@{version}``
+        pip-style; ``{url}`` may end with ``.git``.
+
+    ``git+{url}@{version}#{registry-file}``
+        As above, with an explicit pooch registry file name.
+
+    ``{owner}/{repo}@{version}``
+        GitHub-Actions-style short form; expands to
+        ``https://github.com/{owner}/{repo}``.
+
+    ``{owner}/{repo}@{version}#{registry-file}``
+        As above, with an explicit pooch registry file name.
+
+    The registry file defaults to ``pooch-registry.txt`` when omitted.
+    The registry name is derived from the last path component of the URL
+    (stripping a trailing ``.git`` suffix).
+
+    Returns ``None`` when *spec* does not match any of these patterns.
+    """
+    if ' ' in spec:
+        return None  # existing space-separated formats handle these
+
+    if spec.startswith('git+'):
+        # git+{url}@{version}[#{registry-file}]
+        rest = spec[4:]
+        if '@' not in rest:
+            return None
+        url_part, version_part = rest.rsplit('@', 1)
+        url = url_part.rstrip('/')
+        if url.endswith('.git'):
+            url = url[:-4]
+        if '#' in version_part:
+            version, registry_file = version_part.split('#', 1)
+        else:
+            version, registry_file = version_part, _DEFAULT_REGISTRY_FILE
+        name = url.rstrip('/').split('/')[-1]
+        return name, url, version, registry_file
+
+    # {owner}/{repo}@{version}[#{registry-file}]
+    # Guard: exactly one '/', no leading '/', '@' present, no existing local path
+    if '@' in spec:
+        at_idx = spec.index('@')
+        repo_part = spec[:at_idx]
+        version_part = spec[at_idx + 1:]
+        if (
+            repo_part.count('/') == 1
+            and not repo_part.startswith('/')
+            and not Path(spec).exists()
+        ):
+            owner, repo = repo_part.split('/')
+            url = f'https://github.com/{owner}/{repo}'
+            if '#' in version_part:
+                version, registry_file = version_part.split('#', 1)
+            else:
+                version, registry_file = version_part, _DEFAULT_REGISTRY_FILE
+            return repo, url, version, registry_file
+
+    return None
+
+
 def registry_from_specification(spec: str):
     """Construct a Local or Remote Registry instance from a specification string
 
     Expected specifications are:
 
-    1. {resolvable folder path}
-    2. {name} {resolvable folder path}
-    3. {name} {resolvable url} {resolvable file path}
-    4. {name} {resolvable url} {version} {registry file name}
+    1. ``{resolvable folder path}``
+    2. ``{name} {resolvable folder path}``
+    3. ``{name} {resolvable url} {resolvable file path}``
+    4. ``{name} {resolvable url} {version} {registry file name}``
+    5. ``git+{url}@{version}`` or ``git+{url}@{version}#{registry-file}``
+    6. ``{owner}/{repo}@{version}`` or ``{owner}/{repo}@{version}#{registry-file}``
 
     The first two variants make a LocalRegistry, which searches the provided directory for files.
     The third makes a ModuleRemoteRegistry using pooch. The resolvable file path should point at a Pooch registry file.
-    The fourth makes a GitHubRegistry, which uses the specific folder structure of GitHub
+    The fourth makes a GitHubRegistry, which uses the specific folder structure of GitHub.
+    Formats 5 and 6 are compact git-reference forms that also produce a GitHubRegistry.
+    Format 6 expands ``{owner}/{repo}`` to ``https://github.com/{owner}/{repo}``.
+    For formats 5 and 6 the registry file defaults to ``pooch-registry.txt`` when
+    the ``#{registry-file}`` fragment is omitted.
     """
     if isinstance(spec, Registry):
         return spec
+
+    # Formats 5 & 6: compact git-reference specs (no spaces, contain '@')
+    parsed = _parse_gitref_spec(spec)
+    if parsed is not None:
+        name, url, version, registry_file = parsed
+        return GitHubRegistry(name, url, version, registry_file)
+
     parts = spec.split()
     if len(parts) == 0:
         return None
@@ -542,7 +623,7 @@ def registry_from_specification(spec: str):
     if not simple_url_validator(p2, file_ok=True):
         return None
 
-    if Path(p3).exists() and Path(p3).is_file():
+    if p3 is not None and Path(p3).exists() and Path(p3).is_file():
         return ModuleRemoteRegistry(p1, p2, Path(p3).resolve().as_posix())
 
     if p4 is not None:
