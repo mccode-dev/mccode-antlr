@@ -174,50 +174,9 @@ def add_config_management_parser(modes):
     return actions
 
 
-def cache_path():
-    from pooch import os_cache
-    return os_cache(f'mccodeantlr')
-
-
-def cache_remove(name, version, force):
-    from shutil import rmtree
-    path = cache_path()
-    if name is not None:
-        path = path.joinpath(name)
-    if version is not None:
-        path = path.joinpath(version)
-    if not force:
-        response = input(f'Remove {path} and all contents? [yN] ')
-        if 'yes' == response.lower() or 'y' == response.lower():
-            force = True
-    if force:
-        rmtree(path)
-
-
-def cache_list(name, long):
-    path = cache_path()
-    if name is not None:
-        path = path.joinpath(name)
-    dirs = sorted([d for d in path.iterdir() if d.is_dir()], key=lambda x: x.name)
-    dstr = '\n'.join(f'  {d if long else d.name}' for d in dirs)
-    n = len(dirs)
-    c = 'cache' if n == 1 else 'caches'
-    print(f'{n} known {c} for {path.name}:\n{dstr}')
-
-
-def add_cache_management_parser(modes):
-    parser = modes.add_parser(name='cache', help='Manage the mccode-antlr cache')
-    actions = parser.add_subparsers(help='Action to perform', metavar='ACTION', required=True)
-    r = actions.add_parser(name='remove', help='Remove a named cache')
-    r.add_argument('name', type=str, nargs='?', help='cache to remove [default all caches]')
-    r.add_argument('version', type=str, nargs='?', help='version to remove [default all versions]')
-    r.add_argument('-f', '--force', action='store_true')
-    r.set_defaults(action=cache_remove)
-    l = actions.add_parser(name='list', help='List named caches or the versions of one cache')
-    l.add_argument('name', type=str, nargs='?')
-    l.add_argument('-l', '--long', action='store_true')
-    l.set_defaults(action=cache_list)
-    return actions
+from mccode_antlr.cli.cache import (  # noqa: E402
+    cache_path, cache_remove, cache_list, add_cache_management_parser,
+)
 
 
 def mccode_management_parser():
