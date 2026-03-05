@@ -316,6 +316,13 @@ class GitHubRegistry(RemoteRegistry):
     def registry(self):
         return self._stashed_registry
 
+    def to_file(self, output, wrapper):
+        filename = self.filename or f'{self.name}-registry.txt'
+        items = [self.name, wrapper.url(self.url or ''), self.version or '', filename]
+        if self._stashed_registry:
+            items.append(wrapper.url(self._stashed_registry))
+        print(wrapper.line('Registry:', items), file=output)
+
     def file_contents(self) -> dict[str, str]:
         fc = super().file_contents()
         fc['registry'] = self._stashed_registry or ''
@@ -443,7 +450,7 @@ class InMemoryRegistry(Registry):
         self.priority = priority
 
     def to_file(self, output, wrapper):
-        print(f'InMemoryRegistry<{self.name=},{self.version=},{self.components=},{self.priority=}>', file=output)
+        print(wrapper.line('InMemoryRegistry:', [self.name, f'({len(self.components)} components)']), file=output)
 
     def add(self, name: str, definition: str):
         self.components[name] = definition
@@ -599,17 +606,18 @@ def registry_from_specification(spec: str):
     if len(parts) == 0:
         return None
     elif len(parts) == 1:
-        p1, p2, p3, p4 = parts[0], parts[0], None, None
+        p1, p2, p3, p4, p5 = parts[0], parts[0], None, None, None
     elif len(parts) < 4:
-        p1, p2, p3, p4 = parts[0], parts[1], None if len(parts) < 3 else parts[2], None
+        p1, p2, p3, p4, p5 = parts[0], parts[1], None if len(parts) < 3 else parts[2], None, None
     else:
         p1, p2, p3, p4 = parts[0], parts[1], parts[2], parts[3]
-    print(f"Constructing registry from {p1=} {p2=} {p3=} {p4=}  [{type(p1)=} {type(p2)=} {type(p3)=} {type(p4)=}]")
+        p5 = parts[4] if len(parts) >= 5 else None
     # convert string literals to strings:
     p1 = p1[1:-1] if p1.startswith('"') and p1.endswith('"') else p1
     p2 = p2[1:-1] if p2.startswith('"') and p2.endswith('"') else p2
     p3 = p3[1:-1] if p3 is not None and p3.startswith('"') and p3.endswith('"') else p3
     p4 = p4[1:-1] if p4 is not None and p4.startswith('"') and p4.endswith('"') else p4
+    p5 = p5[1:-1] if p5 is not None and p5.startswith('"') and p5.endswith('"') else p5
 
     if Path(p2).exists() and Path(p2).is_dir():
         return LocalRegistry(p1, str(Path(p2).resolve()))
@@ -622,7 +630,7 @@ def registry_from_specification(spec: str):
         return ModuleRemoteRegistry(p1, p2, Path(p3).resolve().as_posix())
 
     if p4 is not None:
-        return GitHubRegistry(p1, p2, p3, p4)
+        return GitHubRegistry(p1, p2, p3, p4, registry=p5)
 
     return None
 

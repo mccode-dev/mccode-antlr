@@ -171,6 +171,61 @@ class TestRegistryToFile:
         parts = spec.split()
         assert parts == ['mylib', 'https://example.com/repo', 'v1.0', 'mylib-registry.txt']
 
+    def test_github_registry_with_separate_registry_url_includes_fifth_field(self, monkeypatch):
+        """GitHubRegistry with a separate registry URL should emit 5 fields."""
+        import mccode_antlr.reader.registry as rm
+        calls = {}
+        def fake_init(self, name, url, version, filename=None, registry=None, priority=0):
+            self.name = name
+            self.url = url
+            self.version = version
+            self.filename = filename or f'{name}-registry.txt'
+            self._stashed_registry = registry if isinstance(registry, str) else None
+            self.pooch = None
+            self.priority = priority
+            calls['registry'] = registry
+        monkeypatch.setattr(rm.GitHubRegistry, '__init__', fake_init)
+        reg = rm.GitHubRegistry('files', 'https://github.com/org/files-repo', 'v2.0',
+                                registry='https://github.com/org/registry-repo')
+        line = self._to_file_str(reg)
+        parts = line[len('Registry:'):].strip().split()
+        assert parts == [
+            'files',
+            'https://github.com/org/files-repo',
+            'v2.0',
+            'files-registry.txt',
+            'https://github.com/org/registry-repo',
+        ]
+
+    def test_github_registry_separate_registry_url_roundtrips(self, monkeypatch):
+        """Round-trip: to_file then registry_from_specification preserves the registry URL."""
+        import mccode_antlr.reader.registry as rm
+        captured = {}
+        def fake_init(self, name, url, version, filename=None, registry=None, priority=0):
+            self.name = name
+            self.url = url
+            self.version = version
+            self.filename = filename or f'{name}-registry.txt'
+            self._stashed_registry = registry if isinstance(registry, str) else None
+            self.pooch = None
+            self.priority = priority
+            captured.update(name=name, url=url, version=version, filename=filename, registry=registry)
+        monkeypatch.setattr(rm.GitHubRegistry, '__init__', fake_init)
+
+        reg = rm.GitHubRegistry('files', 'https://github.com/org/files-repo', 'v2.0',
+                                registry='https://github.com/org/registry-repo')
+        line = self._to_file_str(reg)
+        spec = line[len('Registry:'):].strip()
+
+        # Reset captured so we can record what registry_from_specification passes
+        captured.clear()
+        recovered = rm.registry_from_specification(spec)
+        assert recovered is not None
+        assert captured['name'] == 'files'
+        assert captured['url'] == 'https://github.com/org/files-repo'
+        assert captured['version'] == 'v2.0'
+        assert captured['registry'] == 'https://github.com/org/registry-repo'
+
     def test_local_registry_roundtrips(self, tmp_path):
         import mccode_antlr.reader.registry as rm
         reg = rm.LocalRegistry('mylib', str(tmp_path))

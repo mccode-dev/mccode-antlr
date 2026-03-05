@@ -139,36 +139,13 @@ class Instr(Struct):
         from mccode_antlr.common import TextWrapper
         return self.to_string(TextWrapper())
 
-    def _my_repr_html_(self):
+    def _repr_html_(self):
         from mccode_antlr.common import HTMLWrapper
-        wrapper = HTMLWrapper(hider='hider', hidden='hidden')
+        wrapper = HTMLWrapper()
         output = StringIO()
         self.to_file(output=output, wrapper=wrapper)
         body = output.getvalue()
-        style = """
-        <style> 
-        .hider {cursor: pointer; user-select: none;}
-        .hider::before {content: "...";}
-        .hidden-before::before {display: none;}
-        .hidden {display: none;}
-        .active {display: block;}
-        </style>
-        """
-        script = """
-        <script>
-        var toggler = document.getElementsByClassName("hider");
-        var i;
-        for (i = 0; i < toggler.length; i++) {
-            toggler[i].addEventListener("click", function() {
-                var id = this.getAttribute('data-id');
-                this.parentElement.querySelector(`.hidden[id=${id}]`).classList.toggle("active");
-                this.classList.toggle("hidden-before");
-            });
-        }
-        </script>
-        """
-        html = f'<html><head><title>{self.name}</title>{style}</head><body>{body}{script}</body></html>'
-        return html
+        return f'<div class="mccode-instr">{body}</div>'
 
     def add_component(self, a: Instance):
         if any(x.name == a.name for x in self.components):

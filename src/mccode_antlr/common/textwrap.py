@@ -239,7 +239,7 @@ class HTMLWrapper(BaseWrapper):
         return '</details>'
 
     def block(self, name: str, content: str) -> str:
-        return '<br>'.join([self.bold(name) + ' %{' + self.hide(f'<pre>{content}</pre><br>') + '%} '])
+        return f'<details><summary>{self.bold(name)}</summary><pre>{content}</pre></details>'
 
     def line(self, name: str, items: list[str], sep: str = ' ') -> str:
         return ''.join(self.wrap(f'<b>{name}</b> {sep.join(items)}')) + '<br>'
@@ -251,7 +251,7 @@ class HTMLWrapper(BaseWrapper):
         return '<br>'.join('<br>'.join(self.wrap(line)) for line in items)
 
     def metadata_group(self, name: str, mimetype: str, item: str, value: str) -> str:
-        return f'<b>{name}</b> <code>{mimetype}</code> <var>{item}</var>' + ' %{' + self.hide(f'<pre>{value}</pre>') +'%}'
+        return f'<b>{name}</b> <code>{mimetype}</code> <var>{item}</var>' + self.hide(f'<pre>{value}</pre>')
 
     @staticmethod
     def datatype(data_type: str) -> str:
@@ -270,11 +270,11 @@ class HTMLWrapper(BaseWrapper):
 
     @staticmethod
     def start_list(name: str) -> str:
-        return f'<ul> {name}'
+        return f'<details open><summary>{name}</summary><ul>'
 
     @staticmethod
     def end_list(name: str) -> str:
-        return f'</ul> {name}'
+        return '</ul></details>'
 
     @staticmethod
     def start_list_item() -> str:
@@ -312,14 +312,8 @@ class HTMLWrapper(BaseWrapper):
     def br() -> str:
         return '<br>'
 
-    def hide(self, content: str) -> str:
-        from uuid import uuid4
-
-        def span(c, tag, i, cont):
-            return f'<span class="{c}" {tag}="{i}">{cont}</span>'
-
-        if len(content.strip()):
-            uuid = 'g-' + str(uuid4())  # a random UUID that _does not_ start with a 0
-            return span(self.hider, 'data-id', uuid, span(self.hidden, 'id', uuid, content))
-
+    @staticmethod
+    def hide(content: str) -> str:
+        if content.strip():
+            return f'<details><summary>…</summary>{content}</details>'
         return content
