@@ -501,3 +501,109 @@ class TestExpression(TestCase):
         self.assertEqual(f'{expr}', '-ex / values[0]')
 
         self.assertFalse(expr.is_vector) # because values[0] is a scalar
+
+
+class TestComparisonMethods(TestCase):
+    """Tests for the named comparison expression-building methods on Expr and Value."""
+
+    def test_value_parameter_classmethod(self):
+        """Value.parameter() creates ObjectType.parameter directly."""
+        from mccode_antlr.common.expression import Value, ObjectType
+        v = Value.parameter('flag')
+        self.assertTrue(v.is_id)
+        self.assertTrue(v.is_parameter)
+        self.assertEqual(v.object_type, ObjectType.parameter)
+        self.assertEqual(str(v), 'flag')
+        # format spec 'p' must prepend the instrument variable prefix
+        self.assertEqual(format(v, 'p'), '_instrument_var._parameters.flag')
+
+    def test_value_parameter_with_data_type(self):
+        from mccode_antlr.common.expression import Value, DataType
+        v = Value.parameter('n', DataType.int)
+        self.assertEqual(v.data_type, DataType.int)
+        self.assertTrue(v.is_parameter)
+
+    def test_expr_parameter_classmethod(self):
+        """Expr.parameter() wraps Value.parameter."""
+        from mccode_antlr.common.expression import Expr, ObjectType
+        e = Expr.parameter('flag')
+        self.assertTrue(e.is_id)
+        self.assertTrue(e.is_parameter)
+        self.assertEqual(str(e), 'flag')
+        self.assertEqual(format(e, 'p'), '_instrument_var._parameters.flag')
+
+    def test_expr_parameter_is_idempotent(self):
+        """Expr.parameter() on an existing Expr returns it unchanged."""
+        from mccode_antlr.common.expression import Expr
+        e = Expr.parameter('flag')
+        self.assertIs(Expr.parameter(e), e)
+
+    def test_value_eq(self):
+        """Value.eq() always returns a BinaryOp, never a bool."""
+        from mccode_antlr.common.expression import Value, BinaryOp
+        v = Value.parameter('flag')
+        result = v.eq(Value.int(1))
+        self.assertIsInstance(result, BinaryOp)
+        self.assertEqual(str(result), 'flag==1')
+
+    def test_value_ne(self):
+        from mccode_antlr.common.expression import Value, BinaryOp
+        v = Value.parameter('flag')
+        result = v.ne(Value.int(0))
+        self.assertIsInstance(result, BinaryOp)
+        self.assertEqual(str(result), 'flag!=0')
+
+    def test_expr_eq(self):
+        """Expr.eq() always returns an Expr, never a bool."""
+        from mccode_antlr.common.expression import Expr
+        e = Expr.parameter('flag')
+        result = e.eq(1)
+        self.assertIsInstance(result, Expr)
+        self.assertEqual(str(result), 'flag==1')
+
+    def test_expr_ne(self):
+        from mccode_antlr.common.expression import Expr
+        e = Expr.parameter('mode')
+        result = e.ne(0)
+        self.assertIsInstance(result, Expr)
+        self.assertEqual(str(result), 'mode!=0')
+
+    def test_expr_lt(self):
+        from mccode_antlr.common.expression import Expr
+        result = Expr.parameter('n').lt(10)
+        self.assertIsInstance(result, Expr)
+        self.assertEqual(str(result), 'n<10')
+
+    def test_expr_gt(self):
+        from mccode_antlr.common.expression import Expr
+        result = Expr.parameter('n').gt(0)
+        self.assertIsInstance(result, Expr)
+        self.assertEqual(str(result), 'n>0')
+
+    def test_expr_le(self):
+        from mccode_antlr.common.expression import Expr
+        result = Expr.parameter('n').le(Expr.int(5))
+        self.assertIsInstance(result, Expr)
+        self.assertEqual(str(result), 'n<=5')
+
+    def test_expr_ge(self):
+        from mccode_antlr.common.expression import Expr
+        result = Expr.parameter('n').ge(1)
+        self.assertIsInstance(result, Expr)
+        self.assertEqual(str(result), 'n>=1')
+
+    def test_expr_eq_between_parameters(self):
+        """Comparison between two parameter Expr objects."""
+        from mccode_antlr.common.expression import Expr
+        a = Expr.parameter('mode')
+        b = Expr.parameter('other')
+        result = a.eq(b)
+        self.assertIsInstance(result, Expr)
+        self.assertEqual(str(result), 'mode==other')
+
+    def test_parameter_format_in_comparison(self):
+        """format(..., 'p') propagates through comparison expressions."""
+        from mccode_antlr.common.expression import Expr
+        result = Expr.parameter('flag').eq(1)
+        self.assertEqual(format(result, 'p'), '_instrument_var._parameters.flag==1')
+
