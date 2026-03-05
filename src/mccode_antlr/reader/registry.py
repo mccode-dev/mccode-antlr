@@ -175,7 +175,8 @@ class RemoteRegistry(Registry):
 
     def to_file(self, output, wrapper):
         filename = self.filename or f'{self.name}-registry.txt'
-        print(f'Registry: {self.name} {self.url or ""} {self.version or ""} {filename}', file=output)
+        print(wrapper.line('Registry:', [self.name, wrapper.url(self.url or ''), self.version or '', filename]),
+              file=output)
 
     def known(self, name: str, ext: str = None, strict: bool = False):
         compare = _name_plus_suffix(name, ext)
@@ -342,7 +343,7 @@ class LocalRegistry(Registry):
         return {'name': self.name, 'root': self.root.as_posix(), 'priority': self.priority}
 
     def to_file(self, output, wrapper):
-        print(f'Registry: {self.name} {self.root.as_posix()}', file=output)
+        print(wrapper.line('Registry:', [self.name, wrapper.url(self.root.as_posix())]), file=output)
 
     def _filetype_iterator(self, filetype: str):
         return self.root.glob(f'**/*.{filetype}')
