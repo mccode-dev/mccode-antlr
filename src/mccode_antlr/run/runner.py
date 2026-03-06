@@ -181,14 +181,12 @@ def mccode_compile(instr, directory, flavor: Flavor, target: dict | None = None,
 
 def mccode_run_compiled(binary, target, directory: Path | str, parameters: str, capture: bool = True, dry_run: bool = False, use_defaults: bool = False):
     from mccode_antlr.compiler.c import run_compiled_instrument
-    from mccode_antlr.loader import read_mccode_dat
+    from mccode_antlr.run.output import _collect_output
     from pathlib import Path
 
     yes_flag = '--yes ' if use_defaults else ''
     result = run_compiled_instrument(binary, target, f'--dir {directory} {yes_flag}{parameters}', capture=capture, dry_run=dry_run)
-    sim_files = list(Path(directory).glob('**/*.dat'))
-    dats = {file.stem: read_mccode_dat(file) for file in sim_files}
-    return result, dats
+    return result, _collect_output(Path(directory))
 
 
 def mccode_run_scan(name: str, binary, target, parameters, directory, grid: bool, capture: bool = True, dry_run: bool = False, use_defaults: bool = False, **r_args):

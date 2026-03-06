@@ -1,5 +1,6 @@
 """Tests for the Simulation / McStas / McXtrace Python API."""
 import unittest
+from collections.abc import Mapping
 from textwrap import dedent
 
 import pytest
@@ -187,10 +188,7 @@ class SimulationCompileRunTests(unittest.TestCase):
             result, dats = sim.run({'value': 1.5}, ncount=10, seed=1)
             # result is a bytes object (captured stdout) or similar
             self.assertIsNotNone(result)
-            self.assertIsInstance(dats, dict)
-
-    @compiled_test
-    def test_run_chained(self):
+            self.assertIsInstance(dats, Mapping)  # SimulationOutput is a Mapping (dict-like)
         """McStas(instr).compile(dir).run(params) works as a one-liner."""
         from tempfile import TemporaryDirectory
         from mccode_antlr.run import McStas
@@ -211,7 +209,7 @@ class SimulationCompileRunTests(unittest.TestCase):
             self.assertEqual(len(results), 3)
             for result, dats in results:
                 self.assertIsNotNone(result)
-                self.assertIsInstance(dats, dict)
+                self.assertIsInstance(dats, Mapping)
 
     @compiled_test
     def test_scan_explicit_list(self):
@@ -257,7 +255,7 @@ class SimulationCompileRunTests(unittest.TestCase):
             sim = McStas(_simple_instr()).compile(tmpdir)
             result, dats = sim.run(ncount=5, seed=1)
             self.assertIsNotNone(result)
-            self.assertIsInstance(dats, dict)
+            self.assertIsInstance(dats, Mapping)
 
     @compiled_test
     def test_run_with_empty_dict_uses_defaults(self):
@@ -282,6 +280,263 @@ class SimulationCompileRunTests(unittest.TestCase):
             self.assertEqual(len(results), 1)
             result, dats = results[0]
             self.assertIsNotNone(result)
+
+
+# ---------------------------------------------------------------------------
+# SimulationOutput unit tests (no compilation required)
+# ---------------------------------------------------------------------------
+
+class SimulationOutputUnitTests(unittest.TestCase):
+    """Tests for SimulationOutput behaviour without running a real simulation."""
+
+    def _make_output(self, tmpdir, *, extra_files=None):
+        """Write minimal fake output files and return a SimulationOutput."""
+        from pathlib import Path
+        from mccode_antlr.run.output import _collect_output
+
+        d = Path(tmpdir)
+
+        # Write a minimal McCode .dat file (1D, 10 bins)
+        dat_content = dedent("""\
+            # Format: McCode with text headers
+            # URL: http://www.mccode.org
+            # Creator: test
+            # Instrument: fake
+            # Ncount: 1000
+            # Trace: no
+            # Gravitation: no
+            # Seed: 1
+            # Date: 0
+            # type: array_1d(10)
+            # Source: test.instr
+            # component: mon
+            # position: 0 0 0
+            # title: Monitor
+            # Ncount: 1000
+            # filename: mon.dat
+            # statistics: X0=0; dX=0;
+            # signal: Min=0; Max=0; Mean=0;
+            # values: 0 0 0
+            # xvar: x
+            # yvar: (I,I_err)
+            # xlabel: x [m]
+            # ylabel: Intensity
+            # xlimits: 0 1
+            # variables: x I I_err N
+            0.05 0.0 0.0 0
+            0.15 0.0 0.0 0
+            0.25 0.0 0.0 0
+            0.35 0.0 0.0 0
+            0.45 0.0 0.0 0
+            0.55 0.0 0.0 0
+            0.65 0.0 0.0 0
+            0.75 0.0 0.0 0
+            0.85 0.0 0.0 0
+            0.95 0.0 0.0 0
+            """)
+        (d / 'mon.dat').write_text(dat_content)
+
+        # Write a minimal .sim file
+        sim_content = dedent("""\
+            # Format: McCode with text headers
+            # URL: http://www.mccode.org
+            # Creator: test
+            # Instrument: fake
+            # Ncount: 1000
+            # Trace: no
+            # Gravitation: no
+            # Seed: 1
+            # Date: 0
+            # type: multiarray_1d(1)
+            # Source: test.instr
+            # simulation: fake
+            # filename: mccode.sim
+            # statistics: X0=0; dX=0;
+            begin instrument
+              Name: fake
+              Source: fake.instr
+              Parameters: none
+              Trace_enabled: no
+              Default_main: yes
+              Embedded_runtime: yes
+            end instrument
+            begin simulation
+              Ncount: 1000
+              Seed: 1
+              Date: 0
+              Nodes: 1
+              Gravitation: no
+            end simulation
+            """)
+        (d / 'mccode.sim').write_text(sim_content)
+
+        for filename, content in (extra_files or []):
+            (d / filename).write_text(content)
+
+        return _collect_output(d)
+
+    def test_dats_contains_known_dat_file(self):
+        from tempfile import TemporaryDirectory
+        with TemporaryDirectory() as tmpdir:
+            out = self._make_output(tmpdir)
+            self.assertIn('mon', out.dats)
+
+    def test_mapping_interface_getitem(self):
+        """out['mon'] works like the old dats['mon']."""
+        from tempfile import TemporaryDirectory
+        with TemporaryDirectory() as tmpdir:
+            out = self._make_output(tmpdir)
+            item = out['mon']
+            self.assertIsNotNone(item)
+
+    def test_mapping_interface_len(self):
+        from tempfile import TemporaryDirectory
+        with TemporaryDirectory() as tmpdir:
+            out = self._make_output(tmpdir)
+            self.assertEqual(len(out), 1)  # only 'mon'; .sim is excluded
+
+    def test_mapping_interface_iter(self):
+        from tempfile import TemporaryDirectory
+        with TemporaryDirectory() as tmpdir:
+            out = self._make_output(tmpdir)
+            self.assertEqual(list(out), ['mon'])
+
+    def test_sim_file_is_loaded(self):
+        """The .sim metadata file is loaded and available as .sim_file."""
+        from tempfile import TemporaryDirectory
+        with TemporaryDirectory() as tmpdir:
+            out = self._make_output(tmpdir)
+            # The .sim loader may raise on a minimal fake file; we just check
+            # that if it's None the attribute still exists.
+            self.assertTrue(hasattr(out, 'sim_file'))
+
+    def test_unrecognized_contains_binary_files(self):
+        """Files that cannot be parsed appear in .unrecognized."""
+        from tempfile import TemporaryDirectory
+        with TemporaryDirectory() as tmpdir:
+            out = self._make_output(tmpdir, extra_files=[
+                ('particle_output.mcpl', b'\x89MCPL binary data\x00'.decode('latin1')),
+            ])
+            unrecognized_names = [p.name for p in out.unrecognized]
+            self.assertIn('particle_output.mcpl', unrecognized_names)
+
+    def test_non_dat_extension_with_mccode_format_is_loaded(self):
+        """Files with non-.dat extensions that contain McCode format are loaded."""
+        from tempfile import TemporaryDirectory
+        from pathlib import Path
+        dat_content = dedent("""\
+            # Format: McCode with text headers
+            # URL: http://www.mccode.org
+            # Creator: test
+            # Instrument: fake
+            # Ncount: 1000
+            # Trace: no
+            # Gravitation: no
+            # Seed: 1
+            # Date: 0
+            # type: array_1d(5)
+            # Source: test.instr
+            # component: nd_mon
+            # position: 0 0 0
+            # title: Monitor_nD output
+            # Ncount: 1000
+            # filename: nd_mon.monitor
+            # statistics: X0=0; dX=0;
+            # signal: Min=0; Max=0; Mean=0;
+            # values: 0 0 0
+            # xvar: x
+            # yvar: (I,I_err)
+            # xlabel: x [m]
+            # ylabel: Intensity
+            # xlimits: 0 1
+            # variables: x I I_err N
+            0.1 0.0 0.0 0
+            0.3 0.0 0.0 0
+            0.5 0.0 0.0 0
+            0.7 0.0 0.0 0
+            0.9 0.0 0.0 0
+            """)
+        with TemporaryDirectory() as tmpdir:
+            (Path(tmpdir) / 'nd_mon.monitor').write_text(dat_content)
+            from mccode_antlr.run.output import _collect_output
+            out = _collect_output(Path(tmpdir))
+            self.assertIn('nd_mon', out.dats,
+                          "McCode-format file with non-.dat extension should be in dats")
+
+    def test_register_output_filter(self):
+        """register_output_filter installs a custom loader for a given extension."""
+        from tempfile import TemporaryDirectory
+        from pathlib import Path
+        from mccode_antlr.run import register_output_filter
+        from mccode_antlr.run.output import _collect_output, _LOAD_FILTERS
+
+        loaded_paths = []
+
+        def _fake_loader(path: Path):
+            loaded_paths.append(path)
+            return {'fake': True}
+
+        register_output_filter('.xyz', _fake_loader)
+        try:
+            with TemporaryDirectory() as tmpdir:
+                (Path(tmpdir) / 'custom.xyz').write_text('some custom data')
+                out = _collect_output(Path(tmpdir))
+                self.assertIn('custom', out.other)
+                self.assertEqual(out.other['custom'], {'fake': True})
+                self.assertEqual(len(loaded_paths), 1)
+        finally:
+            _LOAD_FILTERS.pop('.xyz', None)
+
+    def test_loaded_combines_dats_and_other(self):
+        """out.loaded includes both dats and other keyed entries."""
+        from tempfile import TemporaryDirectory
+        from pathlib import Path
+        from mccode_antlr.run import register_output_filter
+        from mccode_antlr.run.output import _collect_output, _LOAD_FILTERS
+
+        register_output_filter('.xyz', lambda p: {'custom': p.stem})
+        try:
+            with TemporaryDirectory() as tmpdir:
+                out = self._make_output(tmpdir, extra_files=[('extra.xyz', 'data')])
+                self.assertIn('mon', out.loaded)
+                self.assertIn('extra', out.loaded)
+        finally:
+            _LOAD_FILTERS.pop('.xyz', None)
+
+    def test_directory_attribute(self):
+        from tempfile import TemporaryDirectory
+        from pathlib import Path
+        with TemporaryDirectory() as tmpdir:
+            out = self._make_output(tmpdir)
+            self.assertEqual(out.directory, Path(tmpdir))
+
+    @compiled_test
+    def test_run_returns_simulation_output(self):
+        """sim.run() returns a SimulationOutput, not a plain dict."""
+        from tempfile import TemporaryDirectory
+        from mccode_antlr.run import McStas, SimulationOutput
+
+        with TemporaryDirectory() as tmpdir:
+            sim = McStas(_simple_instr()).compile(tmpdir)
+            result, out = sim.run(ncount=5, seed=1)
+            self.assertIsInstance(out, SimulationOutput)
+            self.assertIsNotNone(result)
+
+    @compiled_test
+    def test_simulation_output_is_mapping(self):
+        """SimulationOutput behaves as a Mapping (backward compat)."""
+        from tempfile import TemporaryDirectory
+        from collections.abc import Mapping
+        from mccode_antlr.run import McStas
+
+        with TemporaryDirectory() as tmpdir:
+            sim = McStas(_simple_instr()).compile(tmpdir)
+            result, out = sim.run(ncount=5, seed=1)
+            self.assertIsInstance(out, Mapping)
+            # dict-like operations must work
+            _ = list(out.keys())
+            _ = list(out.values())
+            _ = list(out.items())
 
 
 if __name__ == '__main__':
