@@ -27,6 +27,7 @@ theme:
     - navigation.top
     - search.highlight
     - content.code.copy
+    - content.tabs.link
 
 plugins:
   - search
@@ -52,6 +53,9 @@ markdown_extensions:
   - pymdownx.snippets
   - pymdownx.tabbed:
       alternate_style: true
+      slugify: !!python/object/apply:pymdownx.slugs.slugify
+        kwds:
+          case: lower
   - attr_list
   - md_in_html
   - tables
