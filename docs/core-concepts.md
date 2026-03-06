@@ -101,7 +101,7 @@ src = a.component("Source", "Source_simple",
                   at=(0, 0, 0),
                   parameters={"E0": "E_i"})
 
-instr = a.instrument()   # returns an Instr
+instr = a.instrument   # returns an Instr
 ```
 
 The `at` argument accepts:
@@ -125,7 +125,7 @@ The key methods are:
 | `a.initialize(c_code)` | Add to the INITIALIZE block |
 | `a.save(c_code)` | Add to the SAVE block |
 | `a.final(c_code)` | Add to the FINALLY block |
-| `a.instrument()` | Finalize and return the `Instr` |
+| `a.instrument` | The `Instr` being assembled |
 
 See [API: Assembler](api/assembler.md) for the full method list.
 

@@ -111,7 +111,7 @@ a.initialize("lambda_min = wavelength - 0.05; lambda_max = wavelength + 0.05;")
 ### Step 5 — Build and inspect the instrument
 
 ```python
-instr = a.instrument()
+instr = a.instrument
 
 # Print as McCode text
 print(instr)
@@ -192,7 +192,7 @@ my_comp.add_comp("Shutter", dedent("""\
 
 a = Assembler("MyInstrument", registries=[my_comp], flavor=Flavor.MCSTAS)
 shutter = a.component("S", "Shutter", at=(0, 0, 1), parameters={"open": "verbose"})
-instr = a.instrument()
+instr = a.instrument
 ```
 
 Alternatively, inject a component string into an existing `Reader` via

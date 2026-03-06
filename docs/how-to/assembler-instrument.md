@@ -74,7 +74,7 @@ monitor = a.component("Monitor", "TOF_monitor",
 ## 5. Build and write to file
 
 ```python
-instr = a.instrument()
+instr = a.instrument
 instr.to_file("SimpleTOF.instr")
 print(instr)
 ```

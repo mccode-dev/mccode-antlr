@@ -16,7 +16,7 @@ src = a.component("Source", "Source_simple")
 src.set_parameter("E0", "E_i")
 src.AT([0, 0, 0], "ABSOLUTE")
 
-instr = a.instrument()
+instr = a.instrument
 ```
 
 ## Reference
