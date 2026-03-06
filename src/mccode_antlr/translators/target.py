@@ -165,7 +165,7 @@ class TargetVisitor:
                     # Use the exact fullname (default exact=True) to avoid the loose
                     # substring fallback that raises on multiple matches.
                     fullname = reg.fullname(name)
-                    if fullname is None or f'data/{name}' not in fullname.replace('\\', '/'):
+                    if fullname is None or f'data/{name}' not in str(fullname).replace('\\', '/'):
                         continue
                     cached = reg.path(fullname)
                     logger.info(
