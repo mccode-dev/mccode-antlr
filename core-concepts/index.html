@@ -1263,12 +1263,13 @@ for constructing instruments in Python without writing raw McCode syntax:</p>
 <a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>
 <a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="n">a</span> <span class="o">=</span> <span class="n">Assembler</span><span class="p">(</span><span class="s2">&quot;MyInstrument&quot;</span><span class="p">,</span> <span class="n">flavor</span><span class="o">=</span><span class="n">Flavor</span><span class="o">.</span><span class="n">MCSTAS</span><span class="p">)</span>
 <a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="n">a</span><span class="o">.</span><span class="n">parameter</span><span class="p">(</span><span class="s2">&quot;double E_i = 5.0&quot;</span><span class="p">)</span>
-<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>
-<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="n">src</span> <span class="o">=</span> <span class="n">a</span><span class="o">.</span><span class="n">component</span><span class="p">(</span><span class="s2">&quot;Source&quot;</span><span class="p">,</span> <span class="s2">&quot;Source_simple&quot;</span><span class="p">,</span>
-<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>                  <span class="n">at</span><span class="o">=</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>
-<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>                  <span class="n">parameters</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;E0&quot;</span><span class="p">:</span> <span class="s2">&quot;E_i&quot;</span><span class="p">})</span>
-<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a>
-<a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a><span class="n">instr</span> <span class="o">=</span> <span class="n">a</span><span class="o">.</span><span class="n">instrument</span><span class="p">()</span>   <span class="c1"># returns an Instr</span>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="n">a</span><span class="o">.</span><span class="n">parameter</span><span class="p">(</span><span class="s2">&quot;int flag = 0&quot;</span><span class="p">)</span>
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>
+<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="n">src</span> <span class="o">=</span> <span class="n">a</span><span class="o">.</span><span class="n">component</span><span class="p">(</span><span class="s2">&quot;Source&quot;</span><span class="p">,</span> <span class="s2">&quot;Source_simple&quot;</span><span class="p">,</span>
+<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>                  <span class="n">at</span><span class="o">=</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>
+<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a>                  <span class="n">parameters</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;E0&quot;</span><span class="p">:</span> <span class="s2">&quot;E_i&quot;</span><span class="p">})</span>
+<a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a>
+<a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a><span class="n">instr</span> <span class="o">=</span> <span class="n">a</span><span class="o">.</span><span class="n">instrument</span><span class="p">()</span>   <span class="c1"># returns an Instr</span>
 </code></pre></div>
 <p>The <code>at</code> argument accepts:
 - a 3-tuple → placed <code>ABSOLUTE</code>
@@ -1334,8 +1335,8 @@ for constructing instruments in Python without writing raw McCode syntax:</p>
 <a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>                      <span class="n">at</span><span class="o">=</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">5</span><span class="p">],</span> <span class="s2">&quot;Source&quot;</span><span class="p">),</span>
 <a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>                      <span class="n">parameters</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;filename&quot;</span><span class="p">:</span> <span class="s1">&#39;&quot;tof.dat&quot;&#39;</span><span class="p">,</span> <span class="s2">&quot;tmin&quot;</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">,</span> <span class="s2">&quot;tmax&quot;</span><span class="p">:</span> <span class="mf">0.01</span><span class="p">})</span>
 <a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>
-<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="c1"># Conditional component (only active when flag == 1)</span>
-<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="n">monitor</span><span class="o">.</span><span class="n">WHEN</span><span class="p">(</span><span class="n">Expr</span><span class="o">.</span><span class="n">parameter</span><span class="p">(</span><span class="s2">&quot;verbose&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">eq</span><span class="p">(</span><span class="mi">1</span><span class="p">))</span>
+<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="c1"># Conditional component (only active when instrument parameter `flag` == 1)</span>
+<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="n">monitor</span><span class="o">.</span><span class="n">WHEN</span><span class="p">(</span><span class="n">Expr</span><span class="o">.</span><span class="n">parameter</span><span class="p">(</span><span class="s2">&quot;flag&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">eq</span><span class="p">(</span><span class="mi">1</span><span class="p">))</span>
 </code></pre></div>
 <hr />
 <h2 id="expression-expr">Expression (Expr)<a class="headerlink" href="#expression-expr" title="Permanent link">&para;</a></h2>
@@ -1375,6 +1376,8 @@ objects — symbolic expression trees that can be:</p>
             </div>
           
           
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
 <script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
         </div>
         
@@ -1413,7 +1416,7 @@ objects — symbolic expression trees that can be:</p>
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.tabs", "navigation.sections", "navigation.expand", "navigation.top", "search.highlight", "content.code.copy"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.tabs", "navigation.sections", "navigation.expand", "navigation.top", "search.highlight", "content.code.copy", "content.tabs.link"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
       <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
