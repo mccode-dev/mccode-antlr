@@ -371,7 +371,11 @@ class SimulationOutputUnitTests(unittest.TestCase):
         (d / 'mccode.sim').write_text(sim_content)
 
         for filename, content in (extra_files or []):
-            (d / filename).write_text(content)
+            p = d / filename
+            if isinstance(content, bytes):
+                p.write_bytes(content)
+            else:
+                p.write_text(content)
 
         return _collect_output(d)
 
@@ -415,7 +419,7 @@ class SimulationOutputUnitTests(unittest.TestCase):
         from tempfile import TemporaryDirectory
         with TemporaryDirectory() as tmpdir:
             out = self._make_output(tmpdir, extra_files=[
-                ('particle_output.mcpl', b'\x89MCPL binary data\x00'.decode('latin1')),
+                ('particle_output.mcpl', b'\x89MCPL binary data\x00'),
             ])
             unrecognized_names = [p.name for p in out.unrecognized]
             self.assertIn('particle_output.mcpl', unrecognized_names)
