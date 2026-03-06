@@ -34,10 +34,11 @@ class Simulation:
         self._binary: Path | None = None
         self._target: CBinaryTarget | None = None
         self._compile_dir: Path | None = None
+        self._tmpdir = None  # TemporaryDirectory when compile() owns the dir
 
     def compile(
         self,
-        directory: str | Path,
+        directory: str | Path | None = None,
         *,
         trace: bool = False,
         source: bool = False,
@@ -50,6 +51,9 @@ class Simulation:
         """Compile the instrument to a binary.
 
         :param directory: Directory in which to place the compiled binary and C source.
+            When *None* a temporary directory is created automatically and its
+            lifetime is tied to this :class:`Simulation` instance — it is cleaned
+            up when the instance is garbage collected.
         :param trace: Enable trace mode in the compiled binary.
         :param source: Embed the instrument source in the binary.
         :param verbose: Verbose compiler output.
@@ -62,8 +66,14 @@ class Simulation:
         from os import access, X_OK
         from mccode_antlr.run.runner import mccode_compile
 
-        if not isinstance(directory, Path):
-            directory = Path(directory)
+        if directory is None:
+            import tempfile
+            self._tmpdir = tempfile.TemporaryDirectory(prefix=f'{self.instr.name}_mccode_')
+            directory = Path(self._tmpdir.name)
+        else:
+            self._tmpdir = None
+            if not isinstance(directory, Path):
+                directory = Path(directory)
 
         binary_path = directory / self.instr.name
         if binary_path.exists() and access(binary_path, X_OK) and not force:
