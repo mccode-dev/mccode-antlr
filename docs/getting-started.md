@@ -47,7 +47,7 @@ runtime can compile and run:
 mcstas-antlr my_instrument.instr -o my_instrument.c
 
 # Run a simulation (wraps mcstas-antlr + C compilation + execution)
-mcrun-antlr my_instrument.instr -n 1e6 --E_i=5.0
+mcrun-antlr my_instrument.instr -n 1e6 E_i=5.0
 ```
 
 The `mccode-antlr` management command controls caches and configuration:

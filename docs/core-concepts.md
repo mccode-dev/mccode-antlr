@@ -95,6 +95,7 @@ from mccode_antlr.assembler import Assembler
 
 a = Assembler("MyInstrument", flavor=Flavor.MCSTAS)
 a.parameter("double E_i = 5.0")
+a.parameter("int flag = 0")
 
 src = a.component("Source", "Source_simple",
                   at=(0, 0, 0),
@@ -147,8 +148,8 @@ monitor = a.component("Monitor", "TOF_monitor",
                       at=([0, 0, 5], "Source"),
                       parameters={"filename": '"tof.dat"', "tmin": 0.0, "tmax": 0.01})
 
-# Conditional component (only active when flag == 1)
-monitor.WHEN(Expr.parameter("verbose").eq(1))
+# Conditional component (only active when instrument parameter `flag` == 1)
+monitor.WHEN(Expr.parameter("flag").eq(1))
 ```
 
 ---
