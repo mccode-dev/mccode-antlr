@@ -99,7 +99,18 @@ class CompVisitor(McCompVisitor):
         return ComponentParameter(name=name, value=value)
 
     def visitComponentParameterSymbol(self, ctx: Parser.ComponentParameterSymbolContext):
-        raise RuntimeError("McCode symbol parameter type not supported yet")
+        import warnings
+        name = str(ctx.Identifier())
+        warnings.warn(
+            f"McCode 'symbol' setting parameter type (parameter '{name}') is archaic "
+            f"and rarely used; treating as 'string'",
+            UserWarning, stacklevel=2
+        )
+        # The grammar rule always provides Assign + expr, but handle defensively
+        default = None
+        if ctx.Assign() is not None and ctx.expr() is not None:
+            default = str(self.visit(ctx.expr()))
+        return ComponentParameter(name=name, value=Expr.str(default))
 
     def visitComponentParameterDoubleArray(self, ctx: Parser.ComponentParameterDoubleArrayContext):
         # 'vector' is really just an alias for 'double *', right?
@@ -108,12 +119,12 @@ class CompVisitor(McCompVisitor):
     def visitComponentParameterIntegerArray(self, ctx: Parser.ComponentParameterIntegerArrayContext):
         from ..common import Value, DataType, ShapeType
         name = str(ctx.Identifier(0))
-        if ctx.assign() is not None and ctx.initializerlist() is not None:
+        if ctx.Assign() is not None and ctx.initializerlist() is not None:
             value = self.visit(ctx.initializerlist())
             value.data_type = DataType.int
         else:
             default = None
-            if ctx.assign() is not None:
+            if ctx.Assign() is not None:
                 default = "NULL"
                 if ctx.Identifier(1) is not None:
                     default = str(ctx.Identifier(1))
