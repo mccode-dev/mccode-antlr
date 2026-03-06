@@ -887,6 +887,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../api/simulation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Simulation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../api/registry/" class="md-nav__link">
         
   
@@ -1269,7 +1297,7 @@ for constructing instruments in Python without writing raw McCode syntax:</p>
 <a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>                  <span class="n">at</span><span class="o">=</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>
 <a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a>                  <span class="n">parameters</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;E0&quot;</span><span class="p">:</span> <span class="s2">&quot;E_i&quot;</span><span class="p">})</span>
 <a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a>
-<a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a><span class="n">instr</span> <span class="o">=</span> <span class="n">a</span><span class="o">.</span><span class="n">instrument</span><span class="p">()</span>   <span class="c1"># returns an Instr</span>
+<a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a><span class="n">instr</span> <span class="o">=</span> <span class="n">a</span><span class="o">.</span><span class="n">instrument</span>   <span class="c1"># returns an Instr</span>
 </code></pre></div>
 <p>The <code>at</code> argument accepts:
 - a 3-tuple → placed <code>ABSOLUTE</code>
@@ -1313,8 +1341,8 @@ for constructing instruments in Python without writing raw McCode syntax:</p>
 <td>Add to the FINALLY block</td>
 </tr>
 <tr>
-<td><code>a.instrument()</code></td>
-<td>Finalize and return the <code>Instr</code></td>
+<td><code>a.instrument</code></td>
+<td>The <code>Instr</code> being assembled</td>
 </tr>
 </tbody>
 </table>
