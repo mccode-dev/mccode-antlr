@@ -40,7 +40,7 @@
                          at=(0, 0, 0),
                          parameters={"radius": 0.05, "E0": "E_i", "dE": 0.1})
 
-    instr = a.instrument()
+    instr = a.instrument
     print(instr)   # or display in Jupyter: just put `instr` on the last line
     ```
 

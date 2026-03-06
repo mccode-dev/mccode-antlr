@@ -74,6 +74,7 @@ nav:
   - API Reference:
     - Assembler: api/assembler.md
     - Instrument (Instr): api/instr.md
+    - Simulation: api/simulation.md
     - Registries: api/registry.md
     - Expressions: api/expression.md
     - CLI commands: api/cli.md
