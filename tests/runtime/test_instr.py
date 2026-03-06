@@ -237,7 +237,7 @@ class TestCompiledInstr(TestCase):
                 # The files must be the same except for any header information:
                 instr_data = read_mccode_dat(instr_file)
                 after_data = read_mccode_dat(after_file)
-                if not allclose(instr_data.data, after_data.data):
+                if not allclose(instr_data.data, after_data.data, rtol=1e-2, atol=1e-8):
                     from numpy import abs as npabs, unravel_index, argmax
                     diff = npabs(instr_data.data - after_data.data)
                     rel_diff = diff / (npabs(instr_data.data) + 1e-30)

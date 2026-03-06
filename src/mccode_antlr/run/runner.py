@@ -132,6 +132,8 @@ def mccode_run_script_parser(prog: str):
     aa('--format', nargs=1, type=str, default=None, help='Output data files using FORMAT')
     aa('--dryrun', action='store_true', default=False,
        help='Do not run any simulations, just print the commands')
+    aa('-y', '--yes', action='store_true', default=False,
+       help='Assume default values for all instrument parameters not explicitly specified')
     aa('--parallel', action='store_true', default=False, help='Use MPI multi-process parallelism')
     aa('--gpu', action='store_true', default=False, help='Use GPU OpenACC parallelism')
     aa('--process-count', nargs=1, type=int, default=0, help='MPI process count, 0 == System Default')
@@ -177,18 +179,17 @@ def mccode_compile(instr, directory, flavor: Flavor, target: dict | None = None,
     return binary, def_target
 
 
-def mccode_run_compiled(binary, target, directory: Path | str, parameters: str, capture: bool = True, dry_run: bool = False):
+def mccode_run_compiled(binary, target, directory: Path | str, parameters: str, capture: bool = True, dry_run: bool = False, use_defaults: bool = False):
     from mccode_antlr.compiler.c import run_compiled_instrument
-    from mccode_antlr.loader import read_mccode_dat
+    from mccode_antlr.run.output import _collect_output
     from pathlib import Path
 
-    result = run_compiled_instrument(binary, target, f'--dir {directory} {parameters}', capture=capture, dry_run=dry_run)
-    sim_files = list(Path(directory).glob('**/*.dat'))
-    dats = {file.stem: read_mccode_dat(file) for file in sim_files}
-    return result, dats
+    yes_flag = '--yes ' if use_defaults else ''
+    result = run_compiled_instrument(binary, target, f'--dir {directory} {yes_flag}{parameters}', capture=capture, dry_run=dry_run)
+    return result, _collect_output(Path(directory))
 
 
-def mccode_run_scan(name: str, binary, target, parameters, directory, grid: bool, capture: bool = True, dry_run: bool = False, **r_args):
+def mccode_run_scan(name: str, binary, target, parameters, directory, grid: bool, capture: bool = True, dry_run: bool = False, use_defaults: bool = False, **r_args):
     from .range import parameters_to_scan
     n_pts, names, scan = parameters_to_scan(parameters, grid=grid)
     # n_zeros = len(str(n_pts))
@@ -207,15 +208,14 @@ def mccode_run_scan(name: str, binary, target, parameters, directory, grid: bool
             # TODO Use the following line instead of the one after it when McCode is fixed to use zero-padded folder names
             # # runtime_arguments['dir'] = args["dir"].joinpath(str(number).zfill(n_zeros))
             this_directory = directory.joinpath(str(number))
-            pars = mccode_runtime_parameters(r_args, parameters)
-            r, d = mccode_run_compiled(binary, target, this_directory, pars, capture=capture, dry_run=dry_run)
+            pars = mccode_runtime_parameters(args, dict(zip(names, values)))
+            r, d = mccode_run_compiled(binary, target, this_directory, pars, capture=capture, dry_run=dry_run, use_defaults=use_defaults)
             results.append((r, d))
         return results
     else:
         directory.parent.mkdir(parents=True, exist_ok=True)
-        print(parameters)
         pars = mccode_runtime_parameters(args, parameters)
-        return mccode_run_compiled(binary, target, directory, pars, capture=capture, dry_run=dry_run)
+        return [mccode_run_compiled(binary, target, directory, pars, capture=capture, dry_run=dry_run, use_defaults=use_defaults)]
 
 
 def mccode_run(instrument: Instr,
@@ -256,7 +256,7 @@ def mccode_run(instrument: Instr,
     )
     out_dir = directory.joinpath(f'{instrument.name}{datetime.now().strftime("%Y%m%d_%H%M%S")}')
 
-    mccode_run_scan(instrument.name, binary_path, target, parameters, out_dir, mesh, **runtime)
+    return mccode_run_scan(instrument.name, binary_path, target, parameters, out_dir, mesh, **runtime)
 
 
 def mccode_run_cmd(flavor: Flavor):
@@ -290,11 +290,13 @@ def mccode_run_cmd(flavor: Flavor):
         format=args.format[0] if args.format is not None else None,
         dry_run=args.dryrun,
         capture=(not args.verbose) if args.verbose is not None else False,
+        use_defaults=args.yes,
     )
     # check if the filename is actually a compiled instrument already:
     if args.output_file is None and filename.exists() and access(filename, X_OK):
         binary = filename
         name = filename.stem
+        has_parameters = None  # unknown for a pre-compiled binary
     elif not filename.exists() or not access(filename, R_OK):
         raise RuntimeError(f'{filename} does not exist or is not readable')
     else:
@@ -310,15 +312,27 @@ def mccode_run_cmd(flavor: Flavor):
             # Read the provided .instr file, including all specified .instr and .comp files along the way
             instrument = reader.get_instrument(filename)
         name = instrument.name
+        has_parameters = len(instrument.parameters) > 0
         # Generate the C binary for the instrument -- will output to, e.g., {instrument.name}.out, in the current directory
         # unless if output_file was specified
         binary, target = mccode_compile(instrument, args.output_file, flavor=flavor, target=target, config=config)
 
     if not len(parameters):
         from loguru import logger
-        logger.error("Interactive parameter entry does not currently work")
-        logger.info(f"Execute `{binary} --list-parameters` to check expected parameters")
-        return
+        if args.yes:
+            # --yes was given: run with --yes so the binary uses all default values
+            pass
+        elif has_parameters is False:
+            # instrument has no parameters at all — safe to run without any
+            pass
+        else:
+            # No parameters, no --yes flag: would enter interactive mode in the binary
+            logger.error(
+                "No parameters provided. Pass -y/--yes to use instrument default values, "
+                "or specify parameters explicitly."
+            )
+            logger.info(f"Execute `{binary} --list-parameters` to see the expected parameters")
+            return
 
     mccode_run_scan(name, binary, target, parameters, args.directory, args.mesh, **runtime)
 
@@ -332,8 +346,8 @@ def mcxtrace_cmd():
 
 
 def mcstas_run(instrument, parameters, directory, **kwargs):
-    mccode_run(instrument, Flavor.MCSTAS, parameters, directory, **kwargs)
+    return mccode_run(instrument, Flavor.MCSTAS, parameters, directory, **kwargs)
 
 
 def mcxtrace_run(instrument, parameters, directory, **kwargs):
-    mccode_run(instrument, Flavor.MCXTRACE, parameters, directory, **kwargs)
+    return mccode_run(instrument, Flavor.MCXTRACE, parameters, directory, **kwargs)
