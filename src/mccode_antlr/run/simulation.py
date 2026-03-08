@@ -36,6 +36,33 @@ class Simulation:
         self._compile_dir: Path | None = None
         self._tmpdir = None  # TemporaryDirectory when compile() owns the dir
 
+    def source(
+        self,
+        directory: str | Path | None = None,
+        *,
+        main: bool = True,
+        trace: bool = True,
+        portable: bool = False,
+        runtime: bool = True,
+        embed: bool = False,
+        verbose: bool = False,
+        line_directives: bool = False,
+    ):
+        from mccode_antlr.translators.c import CTargetVisitor
+        directory = directory or Path()
+        config = {
+            'default_main': main,
+            'enable_trace': trace,
+            'portable': portable,
+            'include_runtime': runtime,
+            'embed_instrument_file': embed,
+            'verbose': verbose,
+            'output': directory / f'{self.instr.name}.c',
+        }
+        visitor = CTargetVisitor(self.instr, flavor=self.flavor, config=config,
+                                 verbose=verbose, line_directives=line_directives)
+        visitor.save(filename=config['output'])
+
     def compile(
         self,
         directory: str | Path | None = None,
