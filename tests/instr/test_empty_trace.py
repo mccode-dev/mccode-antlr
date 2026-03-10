@@ -1,10 +1,20 @@
 from unittest import TestCase
 
 
+def _make_expected_expr(val, data_type):
+    """Create an Expr matching what the parser produces for a given value and data type."""
+    from mccode_antlr.common import Expr, DataType
+    if data_type == DataType.str:
+        return Expr.string(val)
+    if data_type == DataType.int:
+        return Expr.integer(val)
+    return Expr.float(val)
+
+
 class TestInstrEmptyTrace(TestCase):
     def test_parse_empty_trace(self):
         from mccode_antlr.instr import Instr
-        from mccode_antlr.common import InstrumentParameter, Expr, Value, DataType
+        from mccode_antlr.common import InstrumentParameter, Expr, DataType
         from mccode_antlr.loader import parse_mcstas_instr
         instr_source = """
         DEFINE INSTRUMENT test_parse(par0=3.14159, double par1 = 49, int par2 =     1010110
@@ -26,11 +36,11 @@ class TestInstrEmptyTrace(TestCase):
             self.assertTrue(isinstance(p, InstrumentParameter))
             self.assertEqual(p.name, f'par{i}')
             self.assertTrue(isinstance(p.value, Expr))
-            self.assertEqual(p.value, Value(val, DataType.from_name(d_type)))
+            self.assertEqual(p.value, _make_expected_expr(val, DataType.from_name(d_type)))
 
     def test_assemble_empty_trace(self):
         from mccode_antlr.instr import Instr
-        from mccode_antlr.common import InstrumentParameter, Expr, Value, DataType
+        from mccode_antlr.common import InstrumentParameter, Expr, DataType
         from mccode_antlr.utils import make_assembler
 
         assembler = make_assembler('test_assemble')
@@ -46,9 +56,9 @@ class TestInstrEmptyTrace(TestCase):
         #      b. a dict with entries 'unit' and 'value'
         #      c. a plain value
         #    in each of these cases, Expr.best converts the provided value if it is not already an Expr object
-        assembler.parameters(InstrumentParameter('par2', '', Expr.int(1010110)),
+        assembler.parameters(InstrumentParameter('par2', '', Expr.integer(1010110)),
                              'string par3 = "this is a long string with spaces"',
-                             InstrumentParameter('par4', '', Expr.str('"the-fourth_parameter"')),
+                             InstrumentParameter('par4', '', Expr.string('"the-fourth_parameter"')),
                              'int par5=-9', par6=[Expr.float(None), ''], par7=191, par8=dict(unit='', value='"whoa!"'))
 
         instr = assembler.instrument
@@ -63,4 +73,4 @@ class TestInstrEmptyTrace(TestCase):
             self.assertTrue(isinstance(par, InstrumentParameter))
             self.assertEqual(par.name, f'par{i}')
             self.assertTrue(isinstance(par.value, Expr))
-            self.assertEqual(par.value, Value(val, DataType.from_name(d_type)))
+            self.assertEqual(par.value, _make_expected_expr(val, DataType.from_name(d_type)))

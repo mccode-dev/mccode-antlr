@@ -1,5 +1,4 @@
 from mccode_antlr.common import Expr
-from mccode_antlr.common.expression import OpStyle
 
 def test_Orient_add_sub_simple():
     from mccode_antlr.common import Expr
@@ -97,10 +96,10 @@ def test_rotation_matrix_composition():
 
 def test_code_generation_equivalence():
     """Test C and Python code generation"""
+    import sympy
     expr = Expr.parse('sin(x) + cos(y)')
     c_code = str(expr)  # Should be valid C
-    assert c_code == "(sin(x) + cos(y))"
-    for i in expr.expr:
-        i.style = OpStyle.PYTHON
-    py_code = str(expr)  # Should be valid Python
-    assert py_code == "(sin(x) + cos(y))"
+    # SymPy may reorder additive terms; check both parts are present
+    assert 'sin(x)' in c_code and 'cos(y)' in c_code
+    py_code = expr.to_python()  # Should be valid Python
+    assert 'math.sin(x)' in py_code and 'math.cos(y)' in py_code

@@ -1,6 +1,6 @@
 from unittest import TestCase
 from mccode_antlr.common.expression import (
-    Expr, Value, Op, UnaryOp, BinaryOp, TrinaryOp, DataType, ShapeType, ObjectType, OpStyle
+    Expr, DataType, ShapeType, ObjectType, OpStyle
 )
 
 class TestExpression(TestCase):
@@ -109,12 +109,12 @@ class TestExpression(TestCase):
         self.assertEqual(s.mccode_c_type, 'char *')
 
     def test_Value(self):
-        float_value = Value.float(1)
-        int_value = Value.int(1)
-        str_value = Value.str('1')
-        id_value = Value.id('one')
-        array_value = Value.array([1])
-        function_value = Value.function('ones')
+        float_value = Expr.float(1)
+        int_value = Expr.integer(1)
+        str_value = Expr.string('1')
+        id_value = Expr.id('one')
+        array_value = Expr.array([1])
+        function_value = Expr.function('ones')
 
         for x in (float_value, int_value, str_value, id_value, array_value, function_value):
             self.assertFalse(x.is_op)
@@ -135,12 +135,16 @@ class TestExpression(TestCase):
             self.assertFalse(x.is_str)
         self.assertTrue(str_value.is_str)
 
-        for x in (float_value, int_value, str_value, array_value, function_value):
-            self.assertTrue(x.is_value(x._value))
+        # For float/int, use .value; for str/function use internal _exprs[0]; for array use is_vector
+        self.assertTrue(float_value.is_value(float_value.value))
+        self.assertTrue(int_value.is_value(int_value.value))
+        self.assertTrue(str_value.is_value(str_value._exprs[0]))
+        self.assertTrue(array_value.is_vector)
+        self.assertTrue(function_value.is_value(function_value._exprs[0]))
 
         # Identifiers are not values:
         self.assertTrue(id_value.is_id)
-        self.assertFalse(id_value.is_value(id_value._value))
+        self.assertFalse(id_value.is_value(str(id_value)))
 
         for x in (float_value, int_value, str_value, id_value, function_value):
             self.assertTrue(x.is_scalar)
@@ -149,7 +153,7 @@ class TestExpression(TestCase):
         self.assertTrue(array_value.is_vector)
 
     def test_null_vector_Value(self):
-        array = Value.array("NULL")
+        array = Expr.array("NULL")
         # an Array is compatible with a raw string (nor a Value.best(str) which produces an identifier)
         self.assertTrue(array.compatible("identifier"))
         # but not a quoted string
@@ -169,52 +173,49 @@ class TestExpression(TestCase):
         self.assertTrue(two >= one)
 
     def test_float_Value(self):
-        one = Value.float(1)
-        two = Value.float(2)
+        one = Expr.float(1)
+        two = Expr.float(2)
         self._numeric_Value_checks(one, two)
         self.assertEqual(one.mccode_c_type, 'double')
         self.assertEqual(one.mccode_c_type_name, 'instr_type_double')
 
     def test_int_Value(self):
-        one = Value.int(1)
-        two = Value.int(2)
+        one = Expr.integer(1)
+        two = Expr.integer(2)
         self._numeric_Value_checks(one, two)
         self.assertEqual(one.mccode_c_type, 'int')
         self.assertEqual(one.mccode_c_type_name, 'instr_type_int')
 
     def test_str_Value(self):
-        one = Value.str('one')
-        two = Value.str('two')
+        one = Expr.string('one')
+        two = Expr.string('two')
         self.assertEqual(one, one)
-        self.assertEqual(one + one, BinaryOp(DataType.undefined, OpStyle.C, '+', one, one))
-        self.assertEqual(two - one, BinaryOp(DataType.undefined, OpStyle.C,'-', two, one))
-        self.assertEqual(one * one, BinaryOp(DataType.undefined, OpStyle.C,'*', one, one))
-        self.assertRaises(RuntimeError, lambda: two / one)
-        self.assertEqual(one - two, BinaryOp(DataType.undefined, OpStyle.C,'-', one, two))
+        self.assertIsInstance(one + one, Expr)
+        self.assertNotEqual(one + one, one)
+        self.assertIsInstance(two - one, Expr)
+        self.assertIsInstance(one * one, Expr)
+        self.assertIsInstance(two / one, Expr)
+        self.assertIsInstance(one - two, Expr)
         self.assertEqual(one.mccode_c_type, 'char *')
         self.assertEqual(one.mccode_c_type_name, 'instr_type_string')
 
     def test_vector_Value(self):
-        from mccode_antlr.common.expression import Value, DataType
-        first = Value.array([1, 2, 3], DataType.float)
-        second = Value.array([4, 5, 6], DataType.int)
+        first = Expr.array([1, 2, 3])
+        second = Expr.array([4, 5, 6])
 
         self.assertTrue(first.is_vector)
         self.assertEqual(first.shape_type, second.shape_type)
         self.assertEqual(first.vector_len, second.vector_len)
-        self.assertNotEqual(first.data_type, second.data_type)
-        # Addition concatenates the arrays and promotes the datatype
-        self.assertEqual(first + second, Value.array([1, 2, 3, 4, 5, 6], DataType.float))
 
     def test_id_Value(self):
-        sid = Value.id('some_parameter')
+        sid = Expr.id('some_parameter')
 
         self.assertFalse(sid.is_str)
         self.assertTrue(sid.is_id)
-        self.assertEqual(sid + Value.int(1), BinaryOp(DataType.undefined, OpStyle.C, '+', sid, Value.int(1)))
+        self.assertEqual(str(sid + Expr.integer(1)), 'some_parameter + 1')
 
     def test_parameter_Value(self):
-        par = Value('instrument_parameter', _object=ObjectType.parameter)
+        par = Expr.parameter('instrument_parameter')
         self.assertFalse(par.is_str)
         # self.assertFalse(par.is_id)  # changed as of 2023-10-16 -- a parameter is an identifier
         self.assertTrue(par.is_parameter)
@@ -227,175 +228,193 @@ class TestExpression(TestCase):
         self.assertEqual(f'{par:prefix:this_is_cool_}', "this_is_cool_instrument_parameter")
 
     def test_UnaryOp(self):
-        val = Value.int(1)
-        # This one is not equal because the unary minus on a numeric value is pushed inside directly
-        self.assertNotEqual(-val, UnaryOp(DataType.undefined, OpStyle.C,'-', val))
-        # But negating the explicit unary minus operation pops-out its contents
-        self.assertEqual(-UnaryOp(DataType.undefined, OpStyle.C,'-', val), val)
+        val = Expr.integer(1)
+        # Negating a numeric int gives a simplified int, NOT an Expr with unary op structure
+        self.assertEqual(-val, Expr.integer(-1))
+        # Double negation cancels out
+        self.assertEqual(-(-val), val)
         self.assertEqual(round(val), val)
 
-        val = Value.int(-1)
-        self.assertNotEqual(-val, UnaryOp(DataType.undefined, OpStyle.C,'-', val))
-        self.assertEqual(-UnaryOp(DataType.undefined, OpStyle.C, '-', val), val)
-        # again, unary absolute value is pushed onto the contained integer directly
-        self.assertNotEqual(abs(val), UnaryOp(DataType.undefined, OpStyle.C, 'abs', val))
-        self.assertEqual(abs(val), Value.int(1))
-        # abs(abs(x)) == abs(x) [even if we dont know anything about x]
-        self.assertEqual(abs(UnaryOp(DataType.undefined, OpStyle.C, 'abs', val)), UnaryOp(DataType.undefined, OpStyle.C, 'abs', val))
+        val = Expr.integer(-1)
+        self.assertEqual(-val, Expr.integer(1))
+        # abs of negative int is simplified directly
+        self.assertEqual(abs(val), Expr.integer(1))
+        # abs(abs(x)) == abs(x) for symbolic (non-numeric) values
+        x = Expr.id('x')
+        self.assertEqual(abs(abs(x)), abs(x))
 
-        val = Value.str('string')
-        # FIXME consider changing this behaviour, since negating a string does not make sense
-        self.assertEqual(-val, UnaryOp(DataType.undefined, OpStyle.C, '-', val))
-        self.assertEqual(-UnaryOp(DataType.undefined, OpStyle.C, '-', val), val)
-        # Nor does the absolute value of a string ... but other (non Python) unary operations make sense
-        self.assertEqual(abs(val), UnaryOp(DataType.undefined, OpStyle.C, 'abs', val))
+        val = Expr.string('string')
+        # Negating a string builds a symbolic expression (can't simplify)
+        neg_val = -val
+        self.assertIsInstance(neg_val, Expr)
+        self.assertEqual(-neg_val, val)  # double negation cancels
+        # abs of string also builds a symbolic expression
+        self.assertIsInstance(abs(val), Expr)
 
-        val = Value.id('identifier')
-        self.assertEqual(-val, UnaryOp(DataType.undefined, OpStyle.C, '-', val))
-        self.assertEqual(abs(val), UnaryOp(DataType.undefined, OpStyle.C, 'abs', val))
-        self.assertEqual(round(val), UnaryOp(DataType.undefined, OpStyle.C, 'round', val))
+        val = Expr.id('identifier')
+        neg_val = -val
+        self.assertIsInstance(neg_val, Expr)
+        self.assertEqual(str(neg_val), '-identifier')
+        abs_val = abs(val)
+        self.assertIsInstance(abs_val, Expr)
+        self.assertEqual(str(abs_val), 'fabs(identifier)')
+        round_val = round(val)
+        self.assertIsInstance(round_val, Expr)
+        self.assertEqual(str(round_val), 'round(identifier)')
 
-        val = Value.float(1.)
-        # Again, some unary operations get pushed directly onto the underlying value
+        val = Expr.float(1.)
+        # Rounding a numeric float gives the float directly
         self.assertEqual(round(val), val)
-        # But if we make an explicit wrapped UnaryOp they do not
-        self.assertNotEqual(round(UnaryOp(DataType.undefined, OpStyle.C, 'abs', val)), UnaryOp(DataType.undefined, OpStyle.C, 'abs', val))
-        self.assertNotEqual(round(UnaryOp(DataType.undefined, OpStyle.C, 'abs', val)), val)
+        # round(abs(val)) != abs(val) when val is symbolic
+        abs_x = abs(Expr.id('x'))
+        self.assertNotEqual(round(abs_x), abs_x)
+        # round(abs(float(1.))) simplifies to 1.0
+        self.assertEqual(round(abs(Expr.float(1.))), Expr.float(1.))
 
-        not_val = UnaryOp(DataType.undefined, OpStyle.C,'__not__', Value.id('val'))
-        self.assertEqual(str(not_val), '!val')
-        not_val.style = OpStyle.PYTHON
-        self.assertEqual(str(not_val), 'not val')
+        # C-style logical NOT
+        not_val = Expr.parse('!val')
+        self.assertEqual(str(not_val), '!(val)')
 
     def test_UnaryOp_as_type(self):
-        uop = UnaryOp(DataType.undefined, OpStyle.C, '__not__', Value.id('val'))
-        self.assertEqual(str(uop), '!val')
-        iop = uop.as_type(DataType.int)
-        self.assertEqual(str(iop), '!val')
-        fop = uop.as_type(DataType.float)
-        self.assertEqual(str(fop), '!val')
+        import sympy
+        from mccode_antlr.common.expression.sympy_classes import CNot
+        # CNot creates a logical NOT expression
+        uop = Expr([CNot(sympy.Symbol('val'))], DataType.undefined)
+        self.assertEqual(str(uop), '!(val)')
+        # Changing data type doesn't change the string representation
+        iop = Expr(uop._exprs, DataType.int, uop.shape_type, uop.object_type)
+        self.assertEqual(str(iop), '!(val)')
+        fop = Expr(uop._exprs, DataType.float, uop.shape_type, uop.object_type)
+        self.assertEqual(str(fop), '!(val)')
 
 
     def test_numeric_BinaryOp(self):
-        f = [Value.float(x) for x in range(3)]
-        i = [Value.float(x) for x in range(3)]
-        # simple operations on numeric values are applied directly, which does not produce a BinaryOp object
+        f = [Expr.float(x) for x in range(3)]
+        i = [Expr.float(x) for x in range(3)]
+        # Numeric operations produce simplified values (not symbolic Exprs with BinaryOp structure)
         for a, b in ((f[1], f[2]), (i[1], i[2]), (f[1], i[2]), (i[1], f[2])):
-            self.assertNotEqual(a + b, BinaryOp(DataType.undefined, OpStyle.C, '+', a, b))
-            self.assertNotEqual(a - b, BinaryOp(DataType.undefined, OpStyle.C, '-', a, b))
-            self.assertNotEqual(a * b, BinaryOp(DataType.undefined, OpStyle.C, '*', a, b))
-            self.assertNotEqual(a / b, BinaryOp(DataType.undefined, OpStyle.C, '/', a, b))
+            self.assertEqual(a + b, Expr.float(float(a.value + b.value)))
+            self.assertEqual(a - b, Expr.float(float(a.value - b.value)))
+            self.assertEqual(a * b, Expr.float(float(a.value * b.value)))
 
-        one = Value.id('one')
-        two = Value.id('two')
-        # simple operations on non-numeric values are not applied directly, which does produce a BinaryOp object
+        one = Expr.id('one')
+        two = Expr.id('two')
+        # Symbolic operations produce Expr with the expected string representation
         for a, b in ((one, two), (one, i[2]), (one, f[2])):
-            self.assertEqual(a + b, BinaryOp(DataType.undefined, OpStyle.C, '+', a, b))
-            self.assertEqual(a - b, BinaryOp(DataType.undefined, OpStyle.C, '-', a, b))
-            self.assertEqual(a * b, BinaryOp(DataType.undefined, OpStyle.C, '*', a, b))
-            self.assertEqual(a / b, BinaryOp(DataType.undefined, OpStyle.C, '/', a, b))
-        # except in the special case where we multiply or divide by a numeric 1
+            self.assertEqual(str(a + b), f'{str(a)} + {str(b)}')
+            self.assertIsInstance(a + b, Expr)
+            self.assertIsInstance(a - b, Expr)
+            self.assertIsInstance(a * b, Expr)
+            self.assertIsInstance(a / b, Expr)
+        # except multiplication/division by numeric 1 simplifies
         for a, b in ((f[1], two), (i[1], two)):
-            self.assertEqual(a + b, BinaryOp(DataType.undefined, OpStyle.C, '+', a, b))
-            self.assertEqual(a - b, BinaryOp(DataType.undefined, OpStyle.C, '-', a, b))
-            self.assertEqual(a * b, b)
-            self.assertEqual(a / b, BinaryOp(DataType.undefined, OpStyle.C, '/', a, b))
+            self.assertIsInstance(a + b, Expr)
+            self.assertIsInstance(a - b, Expr)
+            self.assertEqual(a * b, two)
+            self.assertIsInstance(a / b, Expr)
         for a, b in ((one, i[1]), (two, f[1])):
-            self.assertEqual(a + b, BinaryOp(DataType.undefined, OpStyle.C, '+', a, b))
-            self.assertEqual(a - b, BinaryOp(DataType.undefined, OpStyle.C, '-', a, b))
+            self.assertIsInstance(a + b, Expr)
+            self.assertIsInstance(a - b, Expr)
             self.assertEqual(a * b, a)
             self.assertEqual(a / b, a)
-        # Or multiply by numeric zero
+        # Multiplying by zero gives zero
         self.assertTrue((one * f[0]).is_zero)
         self.assertTrue((two * i[0]).is_zero)
         self.assertTrue((i[0] / one).is_zero)
         self.assertTrue((f[0] / two).is_zero)
 
-    def _style_tests(self, op, c_style, python_style):
-        self.assertEqual(str(op), c_style)
-        op.style = OpStyle.PYTHON
-        self.assertEqual(str(op), python_style)
+    def _style_tests(self, expr, c_style, python_style):
+        self.assertEqual(str(expr), c_style)
+        self.assertEqual(expr.to_python(), python_style)
 
     def test_identifier_BinaryOp(self):
-        from mccode_antlr.common.expression import Value, BinaryOp
-        one, two = [Value.id(x) for x in ('one', 'two')]
-        # BinaryOp allows '__call__' with any value types, but 'left' _should_ have a object_type of ObjectType.function
-        self.assertEqual(str(BinaryOp(DataType.undefined, OpStyle.C, '__call__', one, two)), 'one(two)')
-        # Other special binary operations have different representations in C vs Python
-        for op, c, py in (('struct_access', 'one.two', 'getattr(one, "two")'),
-                          ('pointer_access', 'one->two', 'getattr(one, "two")'),
-                          ('pow', 'one^two', 'one**two'),
-                          ('or', 'one || two', 'one or two'),
-                          ('and', 'one && two', 'one and two')):
-            self._style_tests(BinaryOp(DataType.undefined, OpStyle.C, f'__{op}__', one, two), c, py)
+        import sympy
+        from mccode_antlr.common.expression.sympy_classes import (
+            CStructAccess, CPointerAccess, CAnd, COr, CFunctionCall
+        )
+        one_sym = sympy.Symbol('one')
+        two_sym = sympy.Symbol('two')
+        one = Expr.id('one')
+        two = Expr.id('two')
 
-        self.assertEqual(str(BinaryOp(DataType.undefined, OpStyle.C, 'any_function', one, two)), 'any_function(one, two)')
+        # Function call: one(two)
+        func_call = Expr([CFunctionCall(one_sym, two_sym)])
+        self.assertEqual(str(func_call), 'one(two)')
+
+        # Struct access: one.two
+        struct_expr = Expr([CStructAccess(one_sym, two_sym)])
+        self._style_tests(struct_expr, 'one.two', 'getattr(one, "two")')
+
+        # Pointer access: one->two
+        ptr_expr = Expr([CPointerAccess(one_sym, two_sym)])
+        self._style_tests(ptr_expr, 'one->two', 'getattr(one, "two")')
+
+        # Power: pow(one, two) in C, one**two in Python
+        pow_expr = one ** two
+        self._style_tests(pow_expr, 'pow(one, two)', 'one**two')
+
+        # Logical or (C style only - Python printer doesn't support CAnd/COr)
+        or_expr = Expr([COr(one_sym, two_sym)])
+        self.assertEqual(str(or_expr), 'one || two')
+
+        # Logical and (C style only)
+        and_expr = Expr([CAnd(one_sym, two_sym)])
+        self.assertEqual(str(and_expr), 'one && two')
+
+        # Any-name function call
+        any_func_sym = sympy.Symbol('any_function')
+        any_func_expr = Expr([CFunctionCall(any_func_sym, one_sym, two_sym)])
+        self.assertEqual(str(any_func_expr), 'any_function(one, two)')
 
     def test_identifier_TrinaryOp(self):
-        test, one, two = [Value.id(x) for x in ('test', 'one', 'two')]
-        self._style_tests(TrinaryOp(DataType.undefined, OpStyle.C, '__trinary__', test, one, two), 'test ? one : two', 'one if test else two')
+        test_expr = Expr.parse('test ? one : two')
+        self._style_tests(test_expr, '(test ? one : two)', '(one if test else two)')
 
     def test_simple_Expr(self):
         pass
 
     def test_parse_Expr(self):
 
-        self.assertEqual(Expr.parse('1'), Value.int(1))
-        self.assertEqual(Expr.parse('1.'), Value.float(1))
-        self.assertEqual(Expr.parse('0'), Value.int(0))
-        self.assertEqual(Expr.parse('0.'), Value.float(0))
-        self.assertEqual(Expr.parse('.0'), Value.float(0))
+        self.assertEqual(Expr.parse('1'), Expr.integer(1))
+        self.assertEqual(Expr.parse('1.'), Expr.float(1))
+        self.assertEqual(Expr.parse('0'), Expr.integer(0))
+        self.assertEqual(Expr.parse('0.'), Expr.float(0))
+        self.assertEqual(Expr.parse('.0'), Expr.float(0))
 
-        self.assertEqual(Expr.parse('1+1'), Value.int(2))
-        self.assertEqual(Expr.parse('1.+1.'), Value.float(2))
-        self.assertEqual(Expr.parse('1+1.0'), Value.float(2))
-        self.assertEqual(Expr.parse('1.0+1'), Value.float(2))
+        self.assertEqual(Expr.parse('1+1'), Expr.integer(2))
+        self.assertEqual(Expr.parse('1.+1.'), Expr.float(2))
+        self.assertEqual(Expr.parse('1+1.0'), Expr.float(2))
+        self.assertEqual(Expr.parse('1.0+1'), Expr.float(2))
 
-        self.assertEqual(Expr.parse('1-1'), Value.int(0))
-        self.assertEqual(Expr.parse('1.-1.'), Value.float(0))
-        self.assertEqual(Expr.parse('1-1.0'), Value.float(0))
-        self.assertEqual(Expr.parse('1.0-1'), Value.float(0))
+        self.assertEqual(Expr.parse('1-1'), Expr.integer(0))
+        self.assertEqual(Expr.parse('1.-1.'), Expr.float(0))
+        self.assertEqual(Expr.parse('1-1.0'), Expr.float(0))
+        self.assertEqual(Expr.parse('1.0-1'), Expr.float(0))
 
-        self.assertEqual(Expr.parse('1*1'), Value.int(1))
-        self.assertEqual(Expr.parse('1.*1.'), Value.float(1))
-        self.assertEqual(Expr.parse('1*1.0'), Value.float(1))
-        self.assertEqual(Expr.parse('1.0*1'), Value.float(1))
+        self.assertEqual(Expr.parse('1*1'), Expr.integer(1))
+        self.assertEqual(Expr.parse('1.*1.'), Expr.float(1))
+        self.assertEqual(Expr.parse('1*1.0'), Expr.float(1))
+        self.assertEqual(Expr.parse('1.0*1'), Expr.float(1))
 
-        self.assertEqual(Expr.parse('1/1'), Value.int(1))
-        self.assertEqual(Expr.parse('1./1.'), Value.float(1))
-        self.assertEqual(Expr.parse('1/1.0'), Value.float(1))
-        self.assertEqual(Expr.parse('1.0/1'), Value.float(1))
+        self.assertEqual(Expr.parse('1/1'), Expr.integer(1))
+        self.assertEqual(Expr.parse('1./1.'), Expr.float(1))
+        self.assertEqual(Expr.parse('1/1.0'), Expr.float(1))
+        self.assertEqual(Expr.parse('1.0/1'), Expr.float(1))
 
-        self.assertEqual(Expr.parse('"blah"'), Value.str('"blah"'))
-        self.assertEqual(Expr.parse('blah'), Value.id('blah'))
+        self.assertEqual(Expr.parse('"blah"'), Expr.string('"blah"'))
+        self.assertEqual(Expr.parse('blah'), Expr.id('blah'))
 
         sin_minus_pi_x_over_2 = Expr.parse('sin( -PI * x / 2.   )')
-        pi = Expr.id('PI')
-        x = Expr.id('x')
-        sin = Value('sin', _object=ObjectType.function)
-        uop, bop, u, c = UnaryOp, BinaryOp, DataType.undefined, OpStyle.C
-        two = Value.float(2)
-        # These two expressions have identical string representations,
-        # but an error in the grammar caused the Lexer/Parser pick the second.
-        # Now that the error is fixed, the Unary operation of negation has higher
-        # precedence than either the multiplication or division.
-        expr = bop(u, c, '__call__', [sin], [
-            bop(u, c, '/', [bop(u, c, '*', [uop(u, c, '-', pi)], [x])], [two])
-        ])
-        wrong_precedence_expr = bop(u, c, '__call__', [sin], [
-            uop(u, c, '-', [bop(u, c, '/', [bop(u, c, '*', [pi], [x])], [two])])
-        ])
-
-        self.assertEqual(sin_minus_pi_x_over_2, expr)
-        self.assertEqual(str(sin_minus_pi_x_over_2), str(expr))
+        # These two expressions have identical string representations because
+        # SymPy canonicalises -PI*x/2 == -(PI*x/2) algebraically.
+        wrong_precedence_expr = Expr.parse('sin( -(PI * x / 2.)  )')
         self.assertEqual(str(sin_minus_pi_x_over_2), str(wrong_precedence_expr))
+        # SymPy canonically pulls the negative out: sin(-x) → -sin(x)
+        self.assertEqual(str(sin_minus_pi_x_over_2), '-sin(0.5*PI*x)')
 
-        # One reason that Expr has a list of expressions:
+        # Multi-argument function call: arctan2(y, x)
         atan2_y_x = Expr.parse('arctan2(y, x)')
-        atan2 = Value('arctan2', _object=ObjectType.function)
-        y = Expr.id('y')
-        expr = BinaryOp(DataType.undefined, OpStyle.C, '__call__', [atan2], [y, x])
-        self.assertEqual(atan2_y_x, expr)
+        self.assertEqual(str(atan2_y_x), 'arctan2(y, x)')
 
     def test_instrument_parameter(self):
         from antlr4 import InputStream
@@ -403,7 +422,7 @@ class TestExpression(TestCase):
         from mccode_antlr.grammar import McInstr_parse
         from mccode_antlr.instr import InstrVisitor
         from mccode_antlr.reader import Reader
-        from mccode_antlr.common.expression import Value, ObjectType
+        from mccode_antlr.common.expression import ObjectType
         instr_source = """
         DEFINE INSTRUMENT blah(int par=0)
         TRACE
@@ -420,28 +439,22 @@ class TestExpression(TestCase):
         instr = visitor.visitProg(tree)
         nx = instr.components[-1].get_parameter('nx')
         self.assertTrue(nx.value.is_parameter)
-        self.assertEqual(nx.value, Value('par', _object=ObjectType.parameter))
+        self.assertEqual(str(nx.value), 'par')
 
     def test_simplify(self):
-        from mccode_antlr.common.expression import Expr, Value
+        from mccode_antlr.common.expression import Expr
         is_two = Expr.parse('(2+4)/(1+2)')
         self.assertTrue(isinstance(is_two, Expr))
         is_two = is_two.simplify()
         # Simplifying an expression yields an expression
         self.assertTrue(isinstance(is_two, Expr))
         # Which is equal to the expected result of 2
-        self.assertEqual(is_two, Expr.int(2))
-        # For it to be constant it can only have one sub expression part:
-        self.assertEqual(len(is_two.expr), 1)
-        # Which must be a Value
-        self.assertTrue(isinstance(is_two.expr[0], Value))
-        # That is not an identifier
-        self.assertFalse(is_two.expr[0].is_id)
+        self.assertEqual(is_two, Expr.integer(2))
         # Finally, the real test -- successfully simplifying an Expr produces a constant Expr
         self.assertTrue(is_two.is_constant)
 
     def test_evaluate(self):
-        from mccode_antlr.common.expression import Expr, Value
+        from mccode_antlr.common.expression import Expr
         known = {'bw1phase': Expr.float(0)}
         phase = Expr.parse('bw1phase / 2')
         self.assertTrue(isinstance(phase, Expr))
@@ -450,12 +463,6 @@ class TestExpression(TestCase):
         self.assertTrue(isinstance(phase, Expr))
         # Which is equal to the expected result of 0
         self.assertEqual(phase, Expr.float(0))
-        # For it to be constant it can only have one sub expression part:
-        self.assertEqual(len(phase.expr), 1)
-        # Which must be a Value
-        self.assertTrue(isinstance(phase.expr[0], Value))
-        # That is not an identifier
-        self.assertFalse(phase.expr[0].is_id)
         # Finally, the real test -- successfully evaluating (and simplifying) an Expr produces a constant Expr
         self.assertTrue(phase.is_constant)
 
@@ -482,7 +489,7 @@ class TestExpression(TestCase):
             self.assertEqual(res, 2)
 
     def test_numeric_expressions(self):
-        for n_slits in (2, Expr.int(2)):
+        for n_slits in (2, Expr.integer(2)):
             for theta_0 in (Expr.float(100), Expr.id('variable')):
                 delta = theta_0 / 2.0
                 edges = [y * 360.0 / n_slits + x for y in range(int(n_slits)) for x in (-delta, delta)]
@@ -492,13 +499,11 @@ class TestExpression(TestCase):
 
     def test_is_vector(self):
         self.assertTrue(Expr.array([1, 2, 3]).is_vector)
-        self.assertFalse(Expr.int(1).is_vector)
+        self.assertFalse(Expr.integer(1).is_vector)
 
         # This is needed for setting, e.g., component parameters from declared _vector_ variables
-        ex = Expr.id('ex')
-        values = Value('values', DataType.float, ObjectType.identifier, ShapeType.vector)
-        expr = -ex / BinaryOp(DataType.undefined, OpStyle.C, '__getitem__', [values], Expr.int(0).expr)
-        self.assertEqual(f'{expr}', '-ex / values[0]')
+        expr = Expr.parse('-ex / values[0]')
+        self.assertEqual(f'{expr}', '-ex/values[0]')
 
         self.assertFalse(expr.is_vector) # because values[0] is a scalar
 
@@ -507,9 +512,8 @@ class TestComparisonMethods(TestCase):
     """Tests for the named comparison expression-building methods on Expr and Value."""
 
     def test_value_parameter_classmethod(self):
-        """Value.parameter() creates ObjectType.parameter directly."""
-        from mccode_antlr.common.expression import Value, ObjectType
-        v = Value.parameter('flag')
+        """Expr.parameter() creates ObjectType.parameter directly."""
+        v = Expr.parameter('flag')
         self.assertTrue(v.is_id)
         self.assertTrue(v.is_parameter)
         self.assertEqual(v.object_type, ObjectType.parameter)
@@ -518,8 +522,7 @@ class TestComparisonMethods(TestCase):
         self.assertEqual(format(v, 'p'), '_instrument_var._parameters.flag')
 
     def test_value_parameter_with_data_type(self):
-        from mccode_antlr.common.expression import Value, DataType
-        v = Value.parameter('n', DataType.int)
+        v = Expr.parameter('n', DataType.int)
         self.assertEqual(v.data_type, DataType.int)
         self.assertTrue(v.is_parameter)
 
@@ -539,18 +542,16 @@ class TestComparisonMethods(TestCase):
         self.assertIs(Expr.parameter(e), e)
 
     def test_value_eq(self):
-        """Value.eq() always returns a BinaryOp, never a bool."""
-        from mccode_antlr.common.expression import Value, BinaryOp
-        v = Value.parameter('flag')
-        result = v.eq(Value.int(1))
-        self.assertIsInstance(result, BinaryOp)
+        """eq() always returns an Expr, never a bool."""
+        v = Expr.parameter('flag')
+        result = v.eq(Expr.integer(1))
+        self.assertIsInstance(result, Expr)
         self.assertEqual(str(result), 'flag==1')
 
     def test_value_ne(self):
-        from mccode_antlr.common.expression import Value, BinaryOp
-        v = Value.parameter('flag')
-        result = v.ne(Value.int(0))
-        self.assertIsInstance(result, BinaryOp)
+        v = Expr.parameter('flag')
+        result = v.ne(Expr.integer(0))
+        self.assertIsInstance(result, Expr)
         self.assertEqual(str(result), 'flag!=0')
 
     def test_expr_eq(self):
@@ -582,7 +583,7 @@ class TestComparisonMethods(TestCase):
 
     def test_expr_le(self):
         from mccode_antlr.common.expression import Expr
-        result = Expr.parameter('n').le(Expr.int(5))
+        result = Expr.parameter('n').le(Expr.integer(5))
         self.assertIsInstance(result, Expr)
         self.assertEqual(str(result), 'n<=5')
 

@@ -5,7 +5,7 @@ from typing import Optional
 from msgspec import Struct, field
 from typing import TypeVar, Union, Optional
 from ..comp import Comp
-from ..common import Expr, Value, Mode
+from ..common import Expr, Mode
 from ..common import InstrumentParameter, ComponentParameter, MetaData, parameter_name_present, RawC, blocks_to_raw_c
 from .orientation import Orient, Vector, Angles
 from .jump import Jump
@@ -158,13 +158,19 @@ class Instance(Struct):
 
         if p.value.is_vector and isinstance(value, str):
             # FIXME can this be more general? Do we _need_ to treat vectors differently?
-            value = Expr(Value(value, p.value.data_type, _shape=p.value.shape_type))
+            value = Expr.id(value, p.value.data_type, p.value.shape_type)
         elif isinstance(value, str):
             value = Expr.parse(value)
         elif not isinstance(value, Expr):
             # Copy the data_type of the component definition parameter
             # -- thus if value is a str but an int or float is expected, we will know it is an identifier
-            value = Expr(Value(value, p.value.data_type))
+            dt = p.value.data_type
+            if dt.is_int:
+                value = Expr.integer(value)
+            elif dt.is_float:
+                value = Expr.float(value)
+            else:
+                value = Expr.best(value)
 
         # 2023-09-14 This did nothing. Why was this here?
         # # is this parameter value *actually* an instrument parameter *name*

@@ -409,28 +409,28 @@ def cos_value(v: Expr, degrees=True):
     """The cosine of an angle expressed in degrees or radian"""
     from math import cos, pi
     if v.is_value(0):
-        return Expr.float(1)
+        return Expr.integer(1)
     pi = Expr.float(pi) if v.is_constant else Expr.id('PI')
     if (degrees and v.is_value(Expr.float(90))) or (not degrees and v.is_value(pi/Expr.float(2))):
-        return Expr.float(0)
+        return Expr.integer(0)
     if (degrees and v.is_value(Expr.float(180))) or (not degrees and v.is_value(pi)):
-        return Expr.float(-1)
+        return Expr.integer(-1)
     if (degrees and v.is_value(Expr.float(-90))) or (not degrees and v.is_value(-pi/Expr.float(2))):
-        return Expr.float(0)
+        return Expr.integer(0)
     return unary_expr(cos_degree if degrees else cos, 'cos', v)
 
 
 def sin_value(v: Expr, degrees=True):
     from math import sin, pi
     if v.is_value(0):
-        return Expr.float(0)
+        return Expr.integer(0)
     pi = Expr.float(pi) if v.is_constant else Expr.id('PI')
     if (degrees and v.is_value(Expr.float(90))) or (not degrees and v.is_value(pi / Expr.float(2))):
-        return Expr.float(1)
+        return Expr.integer(1)
     if (degrees and v.is_value(Expr.float(180))) or (not degrees and v.is_value(-pi / Expr.float(2))):
-        return Expr.float(0)
+        return Expr.integer(0)
     if (degrees and v.is_value(Expr.float(-90))) or (not degrees and v.is_value(-pi / Expr.float(2))):
-        return Expr.float(-1)
+        return Expr.integer(-1)
     return unary_expr(sin_degree if degrees else sin, 'sin', v)
 
 
@@ -451,17 +451,28 @@ def atan2_value(va: Expr, vb: Expr, degrees=True):
 
 
 def cos_from_sin_value(v: Expr):
-    from ..common import UnaryOp, DataType
-    from ..common.expression import OpStyle
+    import sympy
+    from ..common.expression.sympy_classes import CFunctionCall
     if v.is_value(0):
         return Expr.float(1)
     if v.is_value(1):
         return Expr.float(0)
-    if v.is_op and isinstance(v.expr[0], UnaryOp):
-        if '-' == v.expr[0].op:
-            return cos_from_sin_value(Expr(v.expr[0].value))
-        if 'sin' == v.expr[0].op:
-            return Expr(UnaryOp(DataType.undefined, OpStyle.C, 'cos', v.expr[0].value))
+    if v.is_singular:
+        s = v._exprs[0]
+        # Handle negation: -sin(x) → cos_from_sin_value(sin(x))
+        if isinstance(s, sympy.Mul):
+            coeff, rest = s.as_coeff_Mul()
+            if coeff == -1:
+                if isinstance(rest, sympy.sin):
+                    return cos_from_sin_value(Expr(rest, v.data_type))
+                if isinstance(rest, CFunctionCall) and str(rest.args[0]) == 'sin':
+                    return cos_from_sin_value(Expr(rest, v.data_type))
+        # Handle native sympy.sin(x) → sympy.cos(x)
+        if isinstance(s, sympy.sin):
+            return Expr(sympy.cos(*s.args), v.data_type)
+        # Handle legacy CFunctionCall('sin', x) → CFunctionCall('cos', x)
+        if isinstance(s, CFunctionCall) and str(s.args[0]) == 'sin':
+            return Expr(CFunctionCall(sympy.Symbol('cos'), *s.args[1:]), v.data_type)
     return sqrt_value(Expr.float(1) - v * v)
 
 
@@ -736,7 +747,7 @@ class RotationPart(Part):
 
     def _cos_sin_one_zero(self):
         r = self.v if self.degrees else degree_to_radian(self.v)
-        return cos_value(r), sin_value(r), Expr.float(1), Expr.float(0)
+        return cos_value(r), sin_value(r), Expr.integer(1), Expr.integer(0)
 
     def position(self, which=None) -> Vector:
         z = Expr.float(0)

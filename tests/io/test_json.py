@@ -1,5 +1,5 @@
 from mccode_antlr.io.json import to_json, from_json
-from mccode_antlr.common.expression import Value, Expr
+from mccode_antlr.common.expression import Expr
 
 
 def assert_round_trip(obj):
@@ -20,25 +20,22 @@ def test_simple_instr_json():
     assert instr == reconstituted
 
 
-def assert_scalar_expr_round_trip(value: Value):
-    expr = Expr(value)
+def assert_scalar_expr_round_trip(expr: Expr):
     ret = assert_round_trip(expr)
-    assert len(ret.expr) == 1
-    assert ret.expr[0] == value
+    assert ret == expr
     assert str(expr) == str(ret)
-    assert str(value) == str(ret.expr[0])
 
 
 def test_str_expr_json_round_trip():
-    assert_scalar_expr_round_trip(Value.str('some string'))
+    assert_scalar_expr_round_trip(Expr.string('some string'))
 
 
 def test_int_expr_json_round_trip():
-    assert_scalar_expr_round_trip(Value.int(1))
+    assert_scalar_expr_round_trip(Expr.integer(1))
 
 
 def test_float_expr_json_round_trip():
-    assert_scalar_expr_round_trip(Value.float(1))
+    assert_scalar_expr_round_trip(Expr.float(1))
 
 
 def test_instrument_parameter_json_round_trip():
