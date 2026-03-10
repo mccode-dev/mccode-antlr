@@ -176,4 +176,4 @@ cond = Expr.parameter("verbose").eq(1)   # verbose == 1
 cond = Expr.parameter("mode").ne(Expr.parameter("other"))
 ```
 
-See [API: Expressions](api/expression.md) for the full `Expr` and `Value` API.
+See [API: Expressions](api/expression.md) for the full `Expr` API.
