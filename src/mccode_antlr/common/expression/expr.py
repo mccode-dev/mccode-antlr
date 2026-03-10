@@ -301,6 +301,14 @@ class Expr(msgspec.Struct, dict=True, eq=False):
                 or isinstance(self._exprs[0], McCodeParameter))
 
     @property
+    def is_float(self) -> bool:
+        return self.data_type == DataType.float
+
+    @property
+    def is_int(self) -> bool:
+        return self.data_type == DataType.int
+
+    @property
     def is_str(self) -> bool:
         return self.is_singular and self.data_type == DataType.str
 
