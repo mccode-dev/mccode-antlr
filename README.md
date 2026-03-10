@@ -21,7 +21,7 @@ particle ray-tracing languages.
 pip install mccode_antlr
 
 mcstas-antlr my_instrument.instr   # translate to C
-mcrun-antlr  my_instrument.instr -n 1e6 --E_i=5.0   # compile & run
+mcrun-antlr  my_instrument.instr -n 1e6 E_i=5.0   # compile & run
 ```
 
 ### Python API
