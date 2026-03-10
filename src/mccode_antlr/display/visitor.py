@@ -94,6 +94,12 @@ def _split_args(text: str) -> list[str]:
 
 
 _QUOTED_STR = re.compile(r'^["\'](.+?)["\']$')
+_C_CAST_ANYWHERE = re.compile(r'\((?:double|float|int|long|unsigned|char)\)\s*')
+
+
+def _strip_casts(s: str) -> str:
+    """Remove all C-style type casts (e.g. ``(double)``) from an expression."""
+    return _C_CAST_ANYWHERE.sub('', s)
 
 
 def _parse_arg(s: str, local_vars: dict[str, Expr]) -> Expr | str:
@@ -102,6 +108,7 @@ def _parse_arg(s: str, local_vars: dict[str, Expr]) -> Expr | str:
     m = _QUOTED_STR.match(s)
     if m:
         return m.group(1)  # string literal like "xy"
+    s = _strip_casts(s)
     # Substitute known local variables into the expression text so that
     # Expr.parse can handle them as identifiers
     try:
@@ -213,6 +220,16 @@ class DisplayVisitor(CVisitor):
         if ctx.expression() is None:
             return
         text = _literal(ctx.expression()).strip()
+        # Check for a plain assignment: name = expr
+        m = re.match(r'^(\w+)\s*=\s*(.+)$', text, re.DOTALL)
+        if m:
+            var_name, expr_text = m.group(1), _strip_casts(m.group(2).strip())
+            try:
+                val = Expr.parse(expr_text).evaluate(self._local_vars)
+                self._local_vars[var_name] = val
+            except Exception:
+                pass
+            return
         self._try_extract_call(text)
 
     def visitSelectionStatement(self, ctx: CParser.SelectionStatementContext):
