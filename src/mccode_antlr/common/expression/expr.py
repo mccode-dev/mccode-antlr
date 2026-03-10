@@ -552,6 +552,40 @@ class Expr(msgspec.Struct, dict=True, eq=False):
     def __abs__(self):
         return Expr([sympy.Abs(e) for e in self._exprs], self.data_type, self.shape_type, self.object_type)
 
+    def __invert__(self):
+        from .sympy_classes import CBitwiseNot
+        return Expr(CBitwiseNot(self._exprs[0]), DataType.int)
+
+    def __and__(self, other):
+        from .sympy_classes import CBitwiseAnd
+        rhs = _to_sympy(other)
+        return Expr(CBitwiseAnd(self._exprs[0], rhs), DataType.int)
+
+    def __rand__(self, other):
+        from .sympy_classes import CBitwiseAnd
+        lhs = _to_sympy(other)
+        return Expr(CBitwiseAnd(lhs, self._exprs[0]), DataType.int)
+
+    def __or__(self, other):
+        from .sympy_classes import CBitwiseOr
+        rhs = _to_sympy(other)
+        return Expr(CBitwiseOr(self._exprs[0], rhs), DataType.int)
+
+    def __ror__(self, other):
+        from .sympy_classes import CBitwiseOr
+        lhs = _to_sympy(other)
+        return Expr(CBitwiseOr(lhs, self._exprs[0]), DataType.int)
+
+    def __xor__(self, other):
+        from .sympy_classes import CBitwiseXor
+        rhs = _to_sympy(other)
+        return Expr(CBitwiseXor(self._exprs[0], rhs), DataType.int)
+
+    def __rxor__(self, other):
+        from .sympy_classes import CBitwiseXor
+        lhs = _to_sympy(other)
+        return Expr(CBitwiseXor(lhs, self._exprs[0]), DataType.int)
+
     def __round__(self, n=None):
         from .sympy_classes import CRound
         if self.data_type == DataType.int:
