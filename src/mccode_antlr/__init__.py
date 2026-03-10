@@ -33,4 +33,6 @@ class Flavor(IntEnum):
         return options[self]
 
 
-__all__ = ["__author__", "__affiliation__", "__version__", "version", "Flavor"]
+from . import display
+
+__all__ = ["__author__", "__affiliation__", "__version__", "version", "Flavor", "display"]
