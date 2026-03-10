@@ -37,12 +37,15 @@ expr
   | Identifier '(' args+=expr (',' args+=expr)* ')' #ExpressionFunctionCall
   | '(' expr ')'                                    #ExpressionGrouping
   | ('+' | '-') expr                                #ExpressionUnaryPM
-  | <assoc=right> base=expr '^' exponent=expr       #ExpressionExponentiation
+  | Tilde expr                                      #ExpressionBitwiseNot
   | left=expr ('*' | '/') right=expr                #ExpressionBinaryMD
   | left=expr ('+' | '-') right=expr                #ExpressionBinaryPM
   | left=expr '%' right=expr                        #ExpressionBinaryMod
   | left=expr '>>' right=expr                       #ExpressionBinaryRightShift
   | left=expr '<<' right=expr                       #ExpressionBinaryLeftShift
+  | left=expr '&' right=expr                        #ExpressionBitwiseAnd
+  | left=expr '^' right=expr                        #ExpressionBitwiseXor
+  | left=expr '|' right=expr                        #ExpressionBitwiseOr
   | Identifier                                      #ExpressionIdentifier
   | left=expr '!=' right=expr                       #ExpressionBinaryNotEqual
   | left=expr '==' right=expr                       #ExpressionBinaryEqual

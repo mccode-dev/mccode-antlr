@@ -3,6 +3,7 @@ from .expression import Expr, ObjectType, ShapeType, DataType
 from .expression.sympy_classes import (
     CPointerAccess, CStructAccess, CArrayIndex, CFunctionCall,
     CLeftShift, CRightShift, CTernary, CAnd, COr, CNot,
+    CBitwiseAnd, CBitwiseOr, CBitwiseXor, CBitwiseNot,
 )
 import sympy
 
@@ -94,10 +95,6 @@ def visitExpressionInteger(obj, ctx):
 def visitExpressionZero(obj, ctx):
     return Expr.integer(0)
 
-def visitExpressionExponentiation(obj, ctx):
-    base, exponent = [obj.visit(ex) for ex in ctx.expr()]
-    return base ** exponent
-
 def visitExpressionBinaryPM(obj, ctx):
     left, right = [obj.visit(ex) for ex in ctx.expr()]
     return left + right if ctx.Minus() is None else left - right
@@ -130,6 +127,29 @@ def visitExpressionBinaryRightShift(obj, ctx):
     l_sym = left._exprs[0] if isinstance(left, Expr) else sympy.sympify(left)
     r_sym = right._exprs[0] if isinstance(right, Expr) else sympy.sympify(right)
     return Expr(CRightShift(l_sym, r_sym), DataType.int)
+
+def visitExpressionBitwiseAnd(obj, ctx):
+    left, right = [obj.visit(ex) for ex in ctx.expr()]
+    l_sym = left._exprs[0] if isinstance(left, Expr) else sympy.sympify(left)
+    r_sym = right._exprs[0] if isinstance(right, Expr) else sympy.sympify(right)
+    return Expr(CBitwiseAnd(l_sym, r_sym), DataType.int)
+
+def visitExpressionBitwiseOr(obj, ctx):
+    left, right = [obj.visit(ex) for ex in ctx.expr()]
+    l_sym = left._exprs[0] if isinstance(left, Expr) else sympy.sympify(left)
+    r_sym = right._exprs[0] if isinstance(right, Expr) else sympy.sympify(right)
+    return Expr(CBitwiseOr(l_sym, r_sym), DataType.int)
+
+def visitExpressionBitwiseXor(obj, ctx):
+    left, right = [obj.visit(ex) for ex in ctx.expr()]
+    l_sym = left._exprs[0] if isinstance(left, Expr) else sympy.sympify(left)
+    r_sym = right._exprs[0] if isinstance(right, Expr) else sympy.sympify(right)
+    return Expr(CBitwiseXor(l_sym, r_sym), DataType.int)
+
+def visitExpressionBitwiseNot(obj, ctx):
+    expr = obj.visit(ctx.expr())
+    e_sym = expr._exprs[0] if isinstance(expr, Expr) else sympy.sympify(expr)
+    return Expr(CBitwiseNot(e_sym), DataType.int)
 
 def visitInitializerlist(obj, ctx):
     args = [obj.visit(x) for x in ctx.expr()]
@@ -201,13 +221,16 @@ common_visitors = (
     ('visitExpressionIdentifier', visitExpressionIdentifier),
     ('visitExpressionInteger', visitExpressionInteger),
     ('visitExpressionZero', visitExpressionZero),
-    ('visitExpressionExponentiation', visitExpressionExponentiation),
     ('visitExpressionBinaryPM', visitExpressionBinaryPM),
     ('visitExpressionFunctionCall', visitExpressionFunctionCall),
     ('visitExpressionBinaryMD', visitExpressionBinaryMD),
     ('visitExpressionBinaryMod', visitExpressionBinaryMod),
     ('visitExpressionBinaryLeftShift', visitExpressionBinaryLeftShift),
     ('visitExpressionBinaryRightShift', visitExpressionBinaryRightShift),
+    ('visitExpressionBitwiseAnd', visitExpressionBitwiseAnd),
+    ('visitExpressionBitwiseOr', visitExpressionBitwiseOr),
+    ('visitExpressionBitwiseXor', visitExpressionBitwiseXor),
+    ('visitExpressionBitwiseNot', visitExpressionBitwiseNot),
     ('visitInitializerlist', visitInitializerlist),
     ('visitExpressionUnaryLogic', visitExpressionUnaryLogic),
     ('visitExpressionBinaryLogic', visitExpressionBinaryLogic),

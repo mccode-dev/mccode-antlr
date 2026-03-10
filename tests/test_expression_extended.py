@@ -786,6 +786,67 @@ class TestMiscellaneousEdgeCases(TestCase):
         
         result = base ** exp
         self.assertEqual(result.simplify(), Expr.integer(8))
+
+    def test_bitwise_and_parse(self):
+        """Test bitwise AND operator parsing and printing."""
+        expr = Expr.parse('a & b')
+        self.assertEqual(str(expr), '(a & b)')
+
+    def test_bitwise_or_parse(self):
+        """Test bitwise OR operator parsing and printing."""
+        expr = Expr.parse('a | b')
+        self.assertEqual(str(expr), '(a | b)')
+
+    def test_bitwise_xor_parse(self):
+        """Test bitwise XOR operator parsing and printing."""
+        expr = Expr.parse('a ^ b')
+        self.assertEqual(str(expr), '(a ^ b)')
+
+    def test_bitwise_not_parse(self):
+        """Test bitwise NOT operator parsing and printing."""
+        expr = Expr.parse('~a')
+        self.assertEqual(str(expr), '(~a)')
+
+    def test_bitwise_dunder_and(self):
+        """Test Expr.__and__ dunder method."""
+        a = Expr.id('a')
+        b = Expr.id('b')
+        result = a & b
+        self.assertIsInstance(result, Expr)
+        self.assertEqual(str(result), '(a & b)')
+
+    def test_bitwise_dunder_or(self):
+        """Test Expr.__or__ dunder method."""
+        a = Expr.id('a')
+        b = Expr.id('b')
+        result = a | b
+        self.assertIsInstance(result, Expr)
+        self.assertEqual(str(result), '(a | b)')
+
+    def test_bitwise_dunder_xor(self):
+        """Test Expr.__xor__ dunder method."""
+        a = Expr.id('a')
+        b = Expr.id('b')
+        result = a ^ b
+        self.assertIsInstance(result, Expr)
+        self.assertEqual(str(result), '(a ^ b)')
+
+    def test_bitwise_dunder_invert(self):
+        """Test Expr.__invert__ dunder method."""
+        a = Expr.id('a')
+        result = ~a
+        self.assertIsInstance(result, Expr)
+        self.assertEqual(str(result), '(~a)')
+
+    def test_bitwise_data_type_is_int(self):
+        """Bitwise operations always produce DataType.int."""
+        from mccode_antlr.common.expression.types import DataType
+        a = Expr.id('a')
+        b = Expr.id('b')
+        self.assertEqual((a & b).data_type, DataType.int)
+        self.assertEqual((a | b).data_type, DataType.int)
+        self.assertEqual((a ^ b).data_type, DataType.int)
+        self.assertEqual((~a).data_type, DataType.int)
     
     def test_reverse_operations(self):
         """Test reverse operations (1 + expr, etc)."""

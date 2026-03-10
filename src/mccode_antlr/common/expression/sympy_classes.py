@@ -133,6 +133,34 @@ class CNot(Function):
         return None
 
 
+class CBitwiseAnd(Function):
+    """C bitwise AND operator: ``a & b``."""
+    @classmethod
+    def eval(cls, *args):
+        return None
+
+
+class CBitwiseOr(Function):
+    """C bitwise OR operator: ``a | b``."""
+    @classmethod
+    def eval(cls, *args):
+        return None
+
+
+class CBitwiseXor(Function):
+    """C bitwise XOR operator: ``a ^ b``."""
+    @classmethod
+    def eval(cls, *args):
+        return None
+
+
+class CBitwiseNot(Function):
+    """C bitwise NOT operator: ``~a``."""
+    @classmethod
+    def eval(cls, *args):
+        return None
+
+
 # ---------------------------------------------------------------------------
 # Sentinel for "no value" (represents Value(None) from the old system)
 # ---------------------------------------------------------------------------
@@ -160,5 +188,9 @@ SYMPY_NAMESPACE: dict = {
     'CAnd': CAnd,
     'COr': COr,
     'CNot': CNot,
+    'CBitwiseAnd': CBitwiseAnd,
+    'CBitwiseOr': CBitwiseOr,
+    'CBitwiseXor': CBitwiseXor,
+    'CBitwiseNot': CBitwiseNot,
     'UNSET_SYMPY': UNSET_SYMPY,
 }

@@ -8,7 +8,8 @@ from sympy.printing.pycode import PythonCodePrinter
 from .sympy_classes import (
     McCodeParameter, CStructAccess, CPointerAccess, CTernary,
     CArrayIndex, CIntDiv, CLeftShift, CRightShift, CRound,
-    CFunctionCall, CInitializerList, CAnd, COr, CNot, UNSET_SYMPY,
+    CFunctionCall, CInitializerList, CAnd, COr, CNot,
+    CBitwiseAnd, CBitwiseOr, CBitwiseXor, CBitwiseNot, UNSET_SYMPY,
 )
 
 
@@ -92,6 +93,18 @@ class McCodeCPrinter(C99CodePrinter):
 
     def _print_CNot(self, expr):
         return f'!({self._print(expr.args[0])})'
+
+    def _print_CBitwiseAnd(self, expr):
+        return f'({self._print(expr.args[0])} & {self._print(expr.args[1])})'
+
+    def _print_CBitwiseOr(self, expr):
+        return f'({self._print(expr.args[0])} | {self._print(expr.args[1])})'
+
+    def _print_CBitwiseXor(self, expr):
+        return f'({self._print(expr.args[0])} ^ {self._print(expr.args[1])})'
+
+    def _print_CBitwiseNot(self, expr):
+        return f'(~{self._print(expr.args[0])})'
 
     # --- Compact relational operators (no spaces, matching McCode convention) ---
 
@@ -178,6 +191,27 @@ class McCodePyPrinter(PythonCodePrinter):
 
     def _print_Or(self, expr):
         return ' or '.join(self._print(a) for a in expr.args)
+
+    def _print_CAnd(self, expr):
+        return ' and '.join(self._print(a) for a in expr.args)
+
+    def _print_COr(self, expr):
+        return ' or '.join(self._print(a) for a in expr.args)
+
+    def _print_CNot(self, expr):
+        return f'not ({self._print(expr.args[0])})'
+
+    def _print_CBitwiseAnd(self, expr):
+        return f'({self._print(expr.args[0])} & {self._print(expr.args[1])})'
+
+    def _print_CBitwiseOr(self, expr):
+        return f'({self._print(expr.args[0])} | {self._print(expr.args[1])})'
+
+    def _print_CBitwiseXor(self, expr):
+        return f'({self._print(expr.args[0])} ^ {self._print(expr.args[1])})'
+
+    def _print_CBitwiseNot(self, expr):
+        return f'(~{self._print(expr.args[0])})'
 
 
 # Module-level singletons to avoid repeated construction
