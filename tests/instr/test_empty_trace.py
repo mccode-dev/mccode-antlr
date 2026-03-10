@@ -1,10 +1,20 @@
 from unittest import TestCase
 
 
+def _make_expected_expr(val, data_type):
+    """Create an Expr matching what the parser produces for a given value and data type."""
+    from mccode_antlr.common import Expr, DataType
+    if data_type == DataType.str:
+        return Expr.str(val)
+    if data_type == DataType.int:
+        return Expr.int(val)
+    return Expr.float(val)
+
+
 class TestInstrEmptyTrace(TestCase):
     def test_parse_empty_trace(self):
         from mccode_antlr.instr import Instr
-        from mccode_antlr.common import InstrumentParameter, Expr, Value, DataType
+        from mccode_antlr.common import InstrumentParameter, Expr, DataType
         from mccode_antlr.loader import parse_mcstas_instr
         instr_source = """
         DEFINE INSTRUMENT test_parse(par0=3.14159, double par1 = 49, int par2 =     1010110
@@ -26,11 +36,11 @@ class TestInstrEmptyTrace(TestCase):
             self.assertTrue(isinstance(p, InstrumentParameter))
             self.assertEqual(p.name, f'par{i}')
             self.assertTrue(isinstance(p.value, Expr))
-            self.assertEqual(p.value, Value(val, DataType.from_name(d_type)))
+            self.assertEqual(p.value, _make_expected_expr(val, DataType.from_name(d_type)))
 
     def test_assemble_empty_trace(self):
         from mccode_antlr.instr import Instr
-        from mccode_antlr.common import InstrumentParameter, Expr, Value, DataType
+        from mccode_antlr.common import InstrumentParameter, Expr, DataType
         from mccode_antlr.utils import make_assembler
 
         assembler = make_assembler('test_assemble')
@@ -63,4 +73,4 @@ class TestInstrEmptyTrace(TestCase):
             self.assertTrue(isinstance(par, InstrumentParameter))
             self.assertEqual(par.name, f'par{i}')
             self.assertTrue(isinstance(par.value, Expr))
-            self.assertEqual(par.value, Value(val, DataType.from_name(d_type)))
+            self.assertEqual(par.value, _make_expected_expr(val, DataType.from_name(d_type)))

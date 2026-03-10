@@ -111,7 +111,8 @@ class ComponentVectorParameterTestCase(unittest.TestCase):
         return instr
 
     def _check_instr_0_properties(self, instr):
-        from mccode_antlr.common.expression import DataType, ShapeType, Expr, Value
+        from mccode_antlr.common.expression import DataType, ShapeType, Expr
+        import sympy
         self.assertEqual(len(instr.components), 2)
         self.assertEqual(instr.components[0].name, 'origin')
         self.assertEqual(instr.components[1].name, 'one')
@@ -123,10 +124,10 @@ class ComponentVectorParameterTestCase(unittest.TestCase):
         self.assertTrue(value.is_vector)
         # Now weirdness
         self.assertTrue(isinstance(value, Expr))
-        self.assertEqual(len(value.expr), 1)
-        self.assertTrue(isinstance(value.expr[0], Value))
+        self.assertEqual(len(value._exprs), 1)
+        self.assertTrue(isinstance(value._exprs[0], sympy.Symbol))
         #
-        self.assertEqual(value.expr[0].value, "declared_array")
+        self.assertEqual(str(value._exprs[0]), "declared_array")
         # the _actual_ value is defined in the instrument declare section, we would need to compile the instrument
         # to access it -- this should be done later
 

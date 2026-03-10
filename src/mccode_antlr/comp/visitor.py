@@ -84,18 +84,20 @@ class CompVisitor(McCompVisitor):
         return ComponentParameter(name=name, value=Expr.str(default))
 
     def visitComponentParameterVector(self, ctx: Parser.ComponentParameterVectorContext):
-        from ..common import Value, DataType, ShapeType
+        from ..common import DataType, ShapeType
         name = str(ctx.Identifier(0))
         if ctx.Assign() is not None and ctx.initializerlist() is not None:
             value = self.visit(ctx.initializerlist())
-            value.data_type = DataType.float
+            value._data_type = DataType.float
         else:
             default = None
             if ctx.Assign() is not None:
                 default = "NULL"
                 if ctx.Identifier(1) is not None:
                     default = str(ctx.Identifier(1))
-            value = Expr(Value(default, DataType.float, _shape=ShapeType.vector))
+            value = Expr.id(default, DataType.float, ShapeType.vector) if default is not None else Expr._null()
+            value._data_type = DataType.float
+            value._shape_type = ShapeType.vector
         return ComponentParameter(name=name, value=value)
 
     def visitComponentParameterSymbol(self, ctx: Parser.ComponentParameterSymbolContext):
@@ -117,18 +119,20 @@ class CompVisitor(McCompVisitor):
         return self.visitComponentParameterVector(ctx)
 
     def visitComponentParameterIntegerArray(self, ctx: Parser.ComponentParameterIntegerArrayContext):
-        from ..common import Value, DataType, ShapeType
+        from ..common import DataType, ShapeType
         name = str(ctx.Identifier(0))
         if ctx.Assign() is not None and ctx.initializerlist() is not None:
             value = self.visit(ctx.initializerlist())
-            value.data_type = DataType.int
+            value._data_type = DataType.int
         else:
             default = None
             if ctx.Assign() is not None:
                 default = "NULL"
                 if ctx.Identifier(1) is not None:
                     default = str(ctx.Identifier(1))
-            value = Expr(Value(default, DataType.int, _shape=ShapeType.vector))
+            value = Expr.id(default, DataType.int, ShapeType.vector) if default is not None else Expr._null()
+            value._data_type = DataType.int
+            value._shape_type = ShapeType.vector
         return ComponentParameter(name=name, value=value)
 
     def visitDependency(self, ctx: Parser.DependencyContext):

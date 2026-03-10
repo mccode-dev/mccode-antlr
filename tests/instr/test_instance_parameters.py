@@ -127,15 +127,14 @@ class TestInstrInstanceParameters(TestCase):
         bwc1.set_parameters(theta_0="bw_disk_open_angle", radius='1+2+3+4', nslit='(2+4)/(1+2)', yheight=0.1,
                             nu="bw1speed", phase="bw1phase/2")
 
-        for par in ('theta_0', 'nslit', 'nu', 'phase'):
+        for par in ('theta_0', 'nu', 'phase'):
             self.assertFalse(bwc1.get_parameter(par).value.is_constant)
-        for par in ('radius', 'yheight'):
+        for par in ('radius', 'yheight', 'nslit'):
             self.assertTrue(bwc1.get_parameter(par).value.is_constant)
 
-        # nslit is not a constant parameter because the expression parsing does not simplify grouped expressions
-        nslit = bwc1.get_parameter('nslit').value.simplify()
-        # But explicitly simplifying the expression is possible (in this simple case) and yields a constant value
-        self.assertTrue(nslit.simplify().is_constant)
+        # nslit = '(2+4)/(1+2)' is simplified immediately by SymPy to 2
+        nslit = bwc1.get_parameter('nslit').value
+        self.assertTrue(nslit.is_constant)
 
         phase = bwc1.get_parameter('phase').value  # == bw1phase / 2
         # In contrast, phase is Expr(BinaryOp('/', Expr.id('bw1phase'), Expr.int(2))) which can't be simplified

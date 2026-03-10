@@ -455,8 +455,8 @@ def evaluate_c_defined_variables(
 
 
 def _get_expr(type_name: str, initial_value: str) -> Expr:
-    from ..common import DataType, Value
-    expr = Expr(Value(None)) if initial_value is None else Expr.parse(initial_value)
+    from ..common import DataType
+    expr = Expr._null() if initial_value is None else Expr.parse(initial_value)
     expr.data_type = DataType.from_name(type_name)
     return expr
 

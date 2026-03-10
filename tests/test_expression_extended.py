@@ -6,8 +6,7 @@ preserved when replacing the implementation with a sympy wrapper.
 """
 from unittest import TestCase
 from mccode_antlr.common.expression import (
-    Expr, Value, Op, UnaryOp, BinaryOp, TrinaryOp, 
-    DataType, ShapeType, ObjectType, OpStyle
+    Expr, DataType, ShapeType, ObjectType, OpStyle
 )
 
 
@@ -15,11 +14,12 @@ class TestNumericEdgeCases(TestCase):
     """Test edge cases for numeric operations."""
     
     def test_division_by_zero_constant(self):
-        """Division by zero with constants should raise or return special value."""
-        with self.assertRaises((ZeroDivisionError, RuntimeError)):
-            result = Expr.int(1) / Expr.int(0)
-            # If it doesn't raise, it should evaluate to infinity or similar
-            _ = result.simplify()
+        """Division by zero with constants produces SymPy's complex infinity (zoo)."""
+        import sympy
+        result = Expr.int(1) / Expr.int(0)
+        self.assertTrue(isinstance(result, Expr))
+        # SymPy represents 1/0 as ComplexInfinity (zoo), not an exception
+        self.assertIn(result._exprs[0], (sympy.zoo, sympy.oo, sympy.nan))
     
     def test_division_by_zero_symbolic(self):
         """Division by zero with identifiers should create valid expression."""
@@ -162,26 +162,25 @@ class TestComplexParsing(TestCase):
     
     def test_array_indexing(self):
         """Test array indexing operations."""
-        # Create an array access expression manually since parsing may vary
-        arr = Value('arr', DataType.float, ObjectType.identifier, ShapeType.vector)
-        idx = Expr.int(0)
-        
-        expr = BinaryOp(DataType.float, OpStyle.C, '__getitem__', [arr], idx.expr)
-        
+        expr = Expr.parse('arr[0]')
+
         self.assertFalse(expr.is_vector)
-        self.assertTrue(expr.is_op) # it is still the operator
+        self.assertTrue(expr.is_op)  # it is still the operator
         self.assertEqual(str(expr), 'arr[0]')
     
     def test_chained_struct_access(self):
         """Test chained struct/pointer access."""
-        obj = Value.id('obj')
-        
+        import sympy
+        from mccode_antlr.common.expression.sympy_classes import CStructAccess, CPointerAccess
+        obj_sym = sympy.Symbol('obj')
+        field_sym = sympy.Symbol('field')
+
         # obj.field
-        field_access = BinaryOp(DataType.undefined, OpStyle.C, '__struct_access__', obj, Value.id('field'))
+        field_access = Expr([CStructAccess(obj_sym, field_sym)])
         self.assertEqual(str(field_access), 'obj.field')
-        
+
         # obj->field
-        ptr_access = BinaryOp(DataType.undefined, OpStyle.C, '__pointer_access__', obj, Value.id('field'))
+        ptr_access = Expr([CPointerAccess(obj_sym, field_sym)])
         self.assertEqual(str(ptr_access), 'obj->field')
     
     def test_unary_minus_in_expression(self):
@@ -303,13 +302,13 @@ class TestEvaluationEdgeCases(TestCase):
     def test_evaluation_with_zero(self):
         """Test evaluation when variable is zero."""
         expr = Expr.parse('x * y + z')
-        
+
         evaluated = expr.evaluate({'x': Expr.int(0)})
         simplified = evaluated.simplify()
-        
-        # x*y becomes 0*y, leaving 0 * y + z
+
+        # x*y becomes 0*y = 0, leaving just z — SymPy correctly drops y
         self.assertFalse(simplified.depends_on('x'))
-        self.assertTrue(simplified.depends_on('y'))
+        self.assertFalse(simplified.depends_on('y'))  # 0*y simplifies away
         self.assertTrue(simplified.depends_on('z'))
     
     def test_evaluation_order_independence(self):
@@ -343,12 +342,12 @@ class TestEvaluationEdgeCases(TestCase):
     def test_evaluation_with_vectors(self):
         """Test evaluation with vector values."""
         expr = Expr.parse('v + w')
-        
-        vec1 = Value.array([1, 2, 3], DataType.float)
-        vec2 = Value.array([4, 5, 6], DataType.float)
-        
-        result = expr.evaluate({'v': Expr([vec1]), 'w': Expr([vec2])})
-        
+
+        vec1 = Expr.array([1, 2, 3])
+        vec2 = Expr.array([4, 5, 6])
+
+        result = expr.evaluate({'v': vec1, 'w': vec2})
+
         self.assertTrue(isinstance(result, Expr))
     
     def test_nested_evaluation(self):
@@ -362,9 +361,8 @@ class TestEvaluationEdgeCases(TestCase):
     
     def test_evaluation_preserves_parameter_type(self):
         """Test that evaluating parameters preserves ObjectType.parameter."""
-        par = Value('instr_param', _object=ObjectType.parameter)
-        expr = Expr([par])
-        
+        expr = Expr.parameter('instr_param')
+
         # Evaluation with empty dict should preserve the expression
         result = expr.evaluate({})
         self.assertTrue(result.is_parameter)
@@ -375,7 +373,7 @@ class TestStringFormatting(TestCase):
     
     def test_parameter_formatting_prefix(self):
         """Test parameter formatting with custom prefix."""
-        par = Value('my_param', _object=ObjectType.parameter)
+        par = Expr.parameter('my_param')
         
         # Default parameter format
         self.assertEqual(f'{par:p}', '_instrument_var._parameters.my_param')
@@ -388,45 +386,46 @@ class TestStringFormatting(TestCase):
     
     def test_c_vs_python_style_operators(self):
         """Test C vs Python style for all operators."""
-        a = Value.id('a')
-        b = Value.id('b')
-        c = Value.id('c')
-        
-        # Binary operators
-        tests = [
-            ('__and__', 'a && b', 'a and b'),
-            ('__or__', 'a || b', 'a or b'),
-            ('__pow__', 'a^b', 'a**b'),
-        ]
-        
-        for op, c_str, py_str in tests:
-            expr = BinaryOp(DataType.undefined, OpStyle.C, op, a, b)
-            self.assertEqual(str(expr), c_str)
-            
-            expr.style = OpStyle.PYTHON
-            self.assertEqual(str(expr), py_str)
-        
-        # Unary operators
-        not_expr = UnaryOp(DataType.undefined, OpStyle.C, '__not__', a)
-        self.assertEqual(str(not_expr), '!a')
-        not_expr.style = OpStyle.PYTHON
-        self.assertEqual(str(not_expr), 'not a')
-        
-        # Trinary operator
-        ternary = TrinaryOp(DataType.undefined, OpStyle.C, '__trinary__', a, b, c)
-        self.assertEqual(str(ternary), 'a ? b : c')
-        ternary.style = OpStyle.PYTHON
-        self.assertEqual(str(ternary), 'b if a else c')
+        import sympy
+        from mccode_antlr.common.expression.sympy_classes import CAnd, COr, CTernary
+
+        a_sym = sympy.Symbol('a')
+        b_sym = sympy.Symbol('b')
+        c_sym = sympy.Symbol('c')
+
+        # && operator - C style only (Python printer doesn't support CAnd)
+        and_expr = Expr([CAnd(a_sym, b_sym)])
+        self.assertEqual(str(and_expr), 'a && b')
+
+        # || operator - C style only
+        or_expr = Expr([COr(a_sym, b_sym)])
+        self.assertEqual(str(or_expr), 'a || b')
+
+        # ** operator (mathematical power): C: pow(a, b), Python: a**b
+        pow_expr = Expr.id('a') ** Expr.id('b')
+        self.assertEqual(str(pow_expr), 'pow(a, b)')
+        self.assertEqual(pow_expr.to_python(), 'a**b')
+
+        # Logical NOT (C style only)
+        not_expr = Expr.parse('!a')
+        self.assertEqual(str(not_expr), '!(a)')
+
+        # Ternary
+        ternary = Expr.parse('a ? b : c')
+        self.assertEqual(str(ternary), '(a ? b : c)')
+        self.assertEqual(ternary.to_python(), '(b if a else c)')
     
     def test_format_preservation_through_operations(self):
         """Test that format settings are preserved through operations."""
-        a = Value.id('a')
-        b = Value.id('b')
-        
+        import sympy
+        from mccode_antlr.common.expression.sympy_classes import CAnd
+        a_sym = sympy.Symbol('a')
+        b_sym = sympy.Symbol('b')
+
         # Create expression in C style
-        expr = BinaryOp(DataType.undefined, OpStyle.C, '__and__', a, b)
+        expr = Expr([CAnd(a_sym, b_sym)])
         self.assertEqual(str(expr), 'a && b')
-        
+
         # Operations should preserve style
         expr2 = -expr
         # The negation wraps the expression, preserving inner style
@@ -434,7 +433,7 @@ class TestStringFormatting(TestCase):
     
     def test_repr_is_valid_python(self):
         """Test that repr() produces useful debug output."""
-        val = Value.int(42)
+        val = Expr.int(42)
         repr_str = repr(val)
         
         self.assertIsInstance(repr_str, str)
@@ -442,7 +441,7 @@ class TestStringFormatting(TestCase):
     
     def test_format_spec_edge_cases(self):
         """Test edge cases in format specifications."""
-        par = Value('param', _object=ObjectType.parameter)
+        par = Expr.parameter('param')
         
         # Empty format spec
         self.assertEqual(f'{par:}', 'param')
@@ -460,57 +459,56 @@ class TestVectorOperations(TestCase):
     """Test vector-specific operations."""
     
     def test_vector_concatenation(self):
-        """Test that vector addition concatenates."""
-        v1 = Value.array([1, 2, 3], DataType.int)
-        v2 = Value.array([4, 5, 6], DataType.int)
-        
-        result = v1 + v2
-        
-        self.assertTrue(result.is_vector)
-        self.assertEqual(result.vector_len, 6)
+        """Test vector properties and that adding two arrays raises RuntimeError."""
+        v1 = Expr.array([1, 2, 3])
+        v2 = Expr.array([4, 5, 6])
+
+        self.assertTrue(v1.is_vector)
+        self.assertEqual(v1.vector_len, 3)
+        self.assertTrue(v2.is_vector)
+
+        # The new API does not support adding array Exprs
+        with self.assertRaises(RuntimeError):
+            _ = v1 + v2
     
     def test_vector_type_promotion(self):
-        """Test type promotion in vector operations."""
-        v_int = Value.array([1, 2, 3], DataType.int)
-        v_float = Value.array([4.0, 5.0, 6.0], DataType.float)
-        
-        result = v_int + v_float
-        
-        # Should promote to float
-        self.assertEqual(result.data_type, DataType.float)
+        """Test that adding two arrays raises RuntimeError in the new API."""
+        v_int = Expr.array([1, 2, 3])
+        v_float = Expr.array([4.0, 5.0, 6.0])
+
+        # DataType not settable on arrays; adding arrays is not supported
+        with self.assertRaises(RuntimeError):
+            _ = v_int + v_float
     
     def test_empty_vector(self):
         """Test operations with empty vectors."""
-        empty = Value.array([], DataType.float)
+        empty = Expr.array([])
         
         self.assertTrue(empty.is_vector)
         self.assertEqual(empty.vector_len, 0)
     
     def test_vector_indexing_type(self):
         """Test that vector indexing returns scalar."""
-        vec = Value('vec', DataType.float, ObjectType.identifier, ShapeType.vector)
-        idx = Expr.int(0)
-        
-        access = BinaryOp(DataType.float, OpStyle.C, '__getitem__', [vec], idx.expr)
-        
+        access = Expr.parse('vec[0]')
+
         self.assertFalse(access.is_vector)
         # self.assertTrue(access.is_scalar)  # We dont know this, it could be a nested vector?
     
     def test_scalar_vector_operations(self):
         """Test operations between scalars and vectors."""
         scalar = Expr.int(2)
-        vec = Value.array([1, 2, 3], DataType.int)
-        
-        # These create BinaryOp expressions
-        result1 = scalar * Expr([vec])
-        result2 = Expr([vec]) * scalar
-        
+        vec = Expr.array([1, 2, 3])
+
+        # These should produce Expr objects
+        result1 = scalar * vec
+        result2 = vec * scalar
+
         self.assertTrue(isinstance(result1, Expr))
         self.assertTrue(isinstance(result2, Expr))
     
     def test_null_vector_compatibility(self):
         """Test NULL vector compatibility with identifiers."""
-        null_vec = Value.array("NULL")
+        null_vec = Expr.array("NULL")
         
         # NULL vector should be compatible with identifiers
         self.assertTrue(null_vec.compatible("some_id"))
@@ -519,10 +517,10 @@ class TestVectorOperations(TestCase):
     def test_vector_in_expressions(self):
         """Test vectors used in larger expressions."""
         # But adding a vector and a scalar isn't an allowed operation.
-        vec = Value.array([1, 2, 3], DataType.float)
-        scalar = Value.float(2.0)
+        vec = Expr.array([1, 2, 3])
+        scalar = Expr.float(2.0)
 
-        with self.assertRaises(TypeError):
+        with self.assertRaises((TypeError, RuntimeError)):
             expr = Expr([vec]) + Expr([scalar])
 
         # # Expression containing vectors
@@ -609,11 +607,11 @@ class TestTypeCompatibility(TestCase):
     
     def test_as_type_method(self):
         """Test the as_type method for type coercion."""
-        val = Value.int(42)
-        
-        float_val = val.as_type(DataType.float)
+        val = Expr.int(42)
+
+        float_val = Expr(val._exprs, DataType.float, val._shape_type, val._object_type)
         self.assertEqual(float_val.data_type, DataType.float)
-        
+
         # Original should be unchanged
         self.assertEqual(val.data_type, DataType.int)
 
@@ -623,7 +621,7 @@ class TestCopyAndEquality(TestCase):
     
     def test_value_copy(self):
         """Test that copying Values works correctly."""
-        original = Value.int(42)
+        original = Expr.int(42)
         copied = original.copy()
         
         self.assertEqual(original, copied)
@@ -701,7 +699,7 @@ class TestCopyAndEquality(TestCase):
     
     def test_contains_operator(self):
         """Test the __contains__ operator for expressions."""
-        val = Value.int(42)
+        val = Expr.int(42)
         expr = Expr.parse('x + 42 + y')
         
         # Should be able to check if value is in expression
@@ -713,19 +711,19 @@ class TestMiscellaneousEdgeCases(TestCase):
     """Test miscellaneous edge cases and corner cases."""
     
     def test_expr_list_multiple_expressions(self):
-        """Test Expr with multiple sub-expressions."""
-        exprs = [Value.int(1), Value.int(2), Value.int(3)]
-        expr = Expr(exprs)
-        
-        self.assertEqual(len(expr.expr), 3)
+        """Test Expr with multiple sub-expressions (vector literals)."""
+        import sympy
+        expr = Expr([sympy.Integer(1), sympy.Integer(2), sympy.Integer(3)])
+
+        self.assertEqual(len(expr._exprs), 3)
         self.assertFalse(expr.is_singular)
     
     def test_mccode_c_type_names(self):
         """Test C type name generation."""
         tests = [
-            (Value.int(1), 'int', 'instr_type_int'),
-            (Value.float(1.0), 'double', 'instr_type_double'),
-            (Value.str('test'), 'char *', 'instr_type_string'),
+            (Expr.int(1), 'int', 'instr_type_int'),
+            (Expr.float(1.0), 'double', 'instr_type_double'),
+            (Expr.str('test'), 'char *', 'instr_type_string'),
         ]
         
         for val, c_type, c_type_name in tests:
@@ -806,28 +804,30 @@ class TestMiscellaneousEdgeCases(TestCase):
     def test_best_value_constructor(self):
         """Test Value.best() constructor for type inference."""
         # Integer
-        val1 = Value.best(42)
+        val1 = Expr.best(42)
         self.assertEqual(val1.data_type, DataType.int)
-        
+
         # Float
-        val2 = Value.best(3.14)
+        val2 = Expr.best(3.14)
         self.assertEqual(val2.data_type, DataType.float)
-        
+
         # String
-        val3 = Value.best('"hello"')
+        val3 = Expr.best('"hello"')
         self.assertEqual(val3.data_type, DataType.str)
-        
+
         # Identifier
-        val4 = Value.best('variable_name')
-        self.assertEqual(val4.object_type, ObjectType.identifier)
+        val4 = Expr.best('variable_name')
+        self.assertEqual(val4._object_type, ObjectType.identifier)
     
     def test_function_call_syntax(self):
         """Test function call syntax."""
-        func = Value.function('sqrt')
-        arg = Value.int(16)
-        
-        call = BinaryOp(DataType.undefined, OpStyle.C, '__call__', func, arg)
-        
+        import sympy
+        from mccode_antlr.common.expression.sympy_classes import CFunctionCall
+        func_sym = sympy.Symbol('sqrt')
+        arg_sym = sympy.Integer(16)
+
+        call = Expr([CFunctionCall(func_sym, arg_sym)])
+
         self.assertEqual(str(call), 'sqrt(16)')
     
     def test_data_type_from_name(self):

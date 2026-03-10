@@ -72,7 +72,7 @@ class TestCompiledInstr(TestCase):
     @compiled_test
     def test_vector_component_parameter(self):
         """Some components can use vector parameters, which must be initialized by initializer lists"""
-        from mccode_antlr.common import Value
+        from mccode_antlr.common import Expr
         from mccode_antlr.loader import parse_mcstas_instr
         # TODO Update the registry with the new Conics_* components, then update this test (if necessary)
         instr = """
@@ -86,7 +86,7 @@ class TestCompiledInstr(TestCase):
         END
         """
         instr = parse_mcstas_instr(instr)
-        self.assertEqual(instr.components[0].get_parameter('radii').value, Value([0.05236, 0.03, 0.01, 0.0031416]))
+        self.assertEqual(instr.components[0].get_parameter('radii').value, Expr.array([0.05236, 0.03, 0.01, 0.0031416]))
 
         try:
             compile_and_run(instr, '-n 1000', run=True)
