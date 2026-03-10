@@ -166,7 +166,7 @@ class TestCompiledInstr(TestCase):
         instr = parse_mcstas_instr(instr_source)
         self.assertEqual(instr.name, 'Test_MCPL_output')
 
-        flag_params = tuple(ComponentParameter(k, Expr.str(v)) for k, v in [
+        flag_params = tuple(ComponentParameter(k, Expr.string(v)) for k, v in [
             ('userflag', '"flag"'), ('userflagcomment', '"Neutron Id"')])
         # weight_mode=0: use particle weights exactly as stored (avoids deprecated weight_mode=2 scaling)
         weight_mode_param = (ComponentParameter('weight_mode', Expr.float(0)),)

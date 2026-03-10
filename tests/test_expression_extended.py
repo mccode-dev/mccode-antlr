@@ -16,7 +16,7 @@ class TestNumericEdgeCases(TestCase):
     def test_division_by_zero_constant(self):
         """Division by zero with constants produces SymPy's complex infinity (zoo)."""
         import sympy
-        result = Expr.int(1) / Expr.int(0)
+        result = Expr.integer(1) / Expr.integer(0)
         self.assertTrue(isinstance(result, Expr))
         # SymPy represents 1/0 as ComplexInfinity (zoo), not an exception
         self.assertIn(result._exprs[0], (sympy.zoo, sympy.oo, sympy.nan))
@@ -24,10 +24,10 @@ class TestNumericEdgeCases(TestCase):
     def test_division_by_zero_symbolic(self):
         """Division by zero with identifiers should create valid expression."""
         x = Expr.id('x')
-        result = Expr.int(1) / x
+        result = Expr.integer(1) / x
         self.assertTrue(isinstance(result, Expr))
         # Should be able to evaluate when x is known
-        evaluated = result.evaluate({'x': Expr.int(2)})
+        evaluated = result.evaluate({'x': Expr.integer(2)})
         self.assertEqual(evaluated, Expr.float(0.5))
     
     def test_very_large_numbers(self):
@@ -44,8 +44,8 @@ class TestNumericEdgeCases(TestCase):
     
     def test_integer_division_types(self):
         """Integer division should return int, true division should return float."""
-        a = Expr.int(7)
-        b = Expr.int(3)
+        a = Expr.integer(7)
+        b = Expr.integer(3)
         
         true_div = a / b
         floor_div = a // b
@@ -54,29 +54,29 @@ class TestNumericEdgeCases(TestCase):
         self.assertEqual(floor_div.data_type, DataType.int)
         
         # Check actual values
-        self.assertEqual(floor_div.simplify(), Expr.int(2))
+        self.assertEqual(floor_div.simplify(), Expr.integer(2))
         seven_thirds = Expr.float(2.3333333)
         self.assertAlmostEqual(true_div.simplify(), seven_thirds)
     
     def test_negative_modulo(self):
         """Test modulo operations with negative numbers."""
-        a = Expr.int(-7)
-        b = Expr.int(3)
+        a = Expr.integer(-7)
+        b = Expr.integer(3)
         
         # Should handle negative operands
         result = a % b
         self.assertTrue(isinstance(result, Expr))
-        self.assertEqual(result.simplify(), Expr.int(2))
+        self.assertEqual(result.simplify(), Expr.integer(2))
 
         # Flipping both signs flips the sign but not magnitude of the result
         # In Python the modulo with a negative divisor should be negative
         self.assertEqual(7 % -3, -2)
         # This is not true for C, but we ignore this difference for the time being
-        self.assertEqual(-a % -b, Expr.int(-2))
+        self.assertEqual(-a % -b, Expr.integer(-2))
     
     def test_zero_times_infinity_symbolic(self):
         """Test 0 * x where x might be infinite."""
-        zero = Expr.int(0)
+        zero = Expr.integer(0)
         x = Expr.id('x')
         
         result = zero * x
@@ -84,7 +84,7 @@ class TestNumericEdgeCases(TestCase):
     
     def test_mixed_int_float_operations(self):
         """Test type promotion in mixed operations."""
-        i = Expr.int(5)
+        i = Expr.integer(5)
         f = Expr.float(2.5)
         
         tests = [
@@ -131,26 +131,26 @@ class TestComplexParsing(TestCase):
         """Test operator precedence in complex expressions."""
         # a + b * c should be a + (b * c)
         expr = Expr.parse('2 + 3 * 4')
-        self.assertEqual(expr.simplify(), Expr.int(14))
+        self.assertEqual(expr.simplify(), Expr.integer(14))
         
         # a * b + c * d
         expr2 = Expr.parse('2 * 3 + 4 * 5')
-        self.assertEqual(expr2.simplify(), Expr.int(26))
+        self.assertEqual(expr2.simplify(), Expr.integer(26))
         
         # a / b - c / d
         expr3 = Expr.parse('10 / 2 - 12 / 4')
-        self.assertEqual(expr3.simplify(), Expr.int(2))
+        self.assertEqual(expr3.simplify(), Expr.integer(2))
     
     def test_parentheses_grouping(self):
         """Test that parentheses override precedence correctly."""
         expr1 = Expr.parse('(2 + 3) * 4')
-        self.assertEqual(expr1.simplify(), Expr.int(20))
+        self.assertEqual(expr1.simplify(), Expr.integer(20))
         
         expr2 = Expr.parse('2 * (3 + 4)')
-        self.assertEqual(expr2.simplify(), Expr.int(14))
+        self.assertEqual(expr2.simplify(), Expr.integer(14))
         
         expr3 = Expr.parse('((2 + 3) * 4) / (5 - 3)')
-        self.assertEqual(expr3.simplify(), Expr.int(10))
+        self.assertEqual(expr3.simplify(), Expr.integer(10))
     
     def test_complex_nested_expression(self):
         """Test deeply nested complex expression."""
@@ -189,12 +189,12 @@ class TestComplexParsing(TestCase):
         
         self.assertTrue(expr.depends_on('x'))
         
-        evaluated = expr.evaluate({'x': Expr.int(5)})
+        evaluated = expr.evaluate({'x': Expr.integer(5)})
         # no need to simplify, since it has already greedily performed a simplification
-        self.assertEqual(evaluated, Expr.int(-7))
+        self.assertEqual(evaluated, Expr.integer(-7))
         # and simplifying in this case doesn't change anything
         simplified = evaluated.simplify()
-        self.assertEqual(simplified, Expr.int(-7))
+        self.assertEqual(simplified, Expr.integer(-7))
 
 
 class TestSimplificationEdgeCases(TestCase):
@@ -222,7 +222,7 @@ class TestSimplificationEdgeCases(TestCase):
     def test_multiplication_identity_symbolic(self):
         """Test that 1 * x = x."""
         x = Expr.id('x')
-        one = Expr.int(1)
+        one = Expr.integer(1)
         
         self.assertEqual(one * x, x)
         self.assertEqual(x * one, x)
@@ -230,7 +230,7 @@ class TestSimplificationEdgeCases(TestCase):
     def test_division_identity_symbolic(self):
         """Test that x / 1 = x."""
         x = Expr.id('x')
-        one = Expr.int(1)
+        one = Expr.integer(1)
         
         self.assertEqual(x / one, x)
     
@@ -249,7 +249,7 @@ class TestSimplificationEdgeCases(TestCase):
         simplified = expr.simplify()
         
         # self.assertTrue(simplified.is_constant)
-        self.assertEqual(simplified, Expr.int(15))
+        self.assertEqual(simplified, Expr.integer(15))
     
     def test_partial_simplification(self):
         """Test expressions that can only partially simplify."""
@@ -262,8 +262,8 @@ class TestSimplificationEdgeCases(TestCase):
         self.assertTrue(simplified.depends_on('x'))
         
         # When x=0, should evaluate to 20
-        evaluated = simplified.evaluate({'x': Expr.int(0)})
-        self.assertEqual(evaluated.simplify(), Expr.int(20))
+        evaluated = simplified.evaluate({'x': Expr.integer(0)})
+        self.assertEqual(evaluated.simplify(), Expr.integer(20))
     
     def test_simplification_preserves_type(self):
         """Test that simplification preserves data types."""
@@ -272,7 +272,7 @@ class TestSimplificationEdgeCases(TestCase):
         
         self.assertEqual(simplified.data_type, DataType.float)
         
-        expr_int = Expr.int(2) + Expr.int(3)
+        expr_int = Expr.integer(2) + Expr.integer(3)
         simplified_int = expr_int.simplify()
         
         self.assertEqual(simplified_int.data_type, DataType.int)
@@ -283,7 +283,7 @@ class TestSimplificationEdgeCases(TestCase):
         simplified = expr.simplify()
         
         self.assertTrue(simplified.is_constant)
-        self.assertEqual(simplified, Expr.int(3))
+        self.assertEqual(simplified, Expr.integer(3))
 
 
 class TestEvaluationEdgeCases(TestCase):
@@ -294,7 +294,7 @@ class TestEvaluationEdgeCases(TestCase):
         expr = Expr.parse('a + b * c')
         
         # Only know 'b'
-        partial = expr.evaluate({'b': Expr.int(2)})
+        partial = expr.evaluate({'b': Expr.integer(2)})
         self.assertTrue(partial.depends_on('a'))
         self.assertTrue(partial.depends_on('c'))
         self.assertFalse(partial.depends_on('b'))
@@ -303,7 +303,7 @@ class TestEvaluationEdgeCases(TestCase):
         """Test evaluation when variable is zero."""
         expr = Expr.parse('x * y + z')
 
-        evaluated = expr.evaluate({'x': Expr.int(0)})
+        evaluated = expr.evaluate({'x': Expr.integer(0)})
         simplified = evaluated.simplify()
 
         # x*y becomes 0*y = 0, leaving just z — SymPy correctly drops y
@@ -316,13 +316,13 @@ class TestEvaluationEdgeCases(TestCase):
         expr = Expr.parse('a + b + c')
         
         known = {
-            'a': Expr.int(1),
-            'b': Expr.int(2),
-            'c': Expr.int(3)
+            'a': Expr.integer(1),
+            'b': Expr.integer(2),
+            'c': Expr.integer(3)
         }
         
         result = expr.evaluate(known).simplify()
-        self.assertEqual(result, Expr.int(6))
+        self.assertEqual(result, Expr.integer(6))
     
     def test_evaluation_with_expressions(self):
         """Test evaluation where known values are themselves expressions."""
@@ -354,7 +354,7 @@ class TestEvaluationEdgeCases(TestCase):
         """Test evaluation of nested expressions."""
         expr = Expr.parse('sin(x * PI)')
         
-        evaluated = expr.evaluate({'x': Expr.int(1)})
+        evaluated = expr.evaluate({'x': Expr.integer(1)})
         
         self.assertFalse(evaluated.depends_on('x'))
         self.assertTrue(evaluated.depends_on('PI'))
@@ -433,7 +433,7 @@ class TestStringFormatting(TestCase):
     
     def test_repr_is_valid_python(self):
         """Test that repr() produces useful debug output."""
-        val = Expr.int(42)
+        val = Expr.integer(42)
         repr_str = repr(val)
         
         self.assertIsInstance(repr_str, str)
@@ -496,7 +496,7 @@ class TestVectorOperations(TestCase):
     
     def test_scalar_vector_operations(self):
         """Test operations between scalars and vectors."""
-        scalar = Expr.int(2)
+        scalar = Expr.integer(2)
         vec = Expr.array([1, 2, 3])
 
         # These should produce Expr objects
@@ -586,7 +586,7 @@ class TestTypeCompatibility(TestCase):
     
     def test_type_promotion_in_operations(self):
         """Test that operations promote types correctly."""
-        int_val = Expr.int(5)
+        int_val = Expr.integer(5)
         float_val = Expr.float(2.5)
         
         # int + float -> float
@@ -598,16 +598,16 @@ class TestTypeCompatibility(TestCase):
         self.assertEqual(result.data_type, DataType.float)
         
         # int / int -> float (true division)
-        result = int_val / Expr.int(2)
+        result = int_val / Expr.integer(2)
         self.assertEqual(result.data_type, DataType.float)
         
         # int // int -> int (floor division)
-        result = int_val // Expr.int(2)
+        result = int_val // Expr.integer(2)
         self.assertEqual(result.data_type, DataType.int)
     
     def test_as_type_method(self):
         """Test the as_type method for type coercion."""
-        val = Expr.int(42)
+        val = Expr.integer(42)
 
         float_val = Expr(val._exprs, DataType.float, val.shape_type, val.object_type)
         self.assertEqual(float_val.data_type, DataType.float)
@@ -621,7 +621,7 @@ class TestCopyAndEquality(TestCase):
     
     def test_value_copy(self):
         """Test that copying Values works correctly."""
-        original = Expr.int(42)
+        original = Expr.integer(42)
         copied = original.copy()
         
         self.assertEqual(original, copied)
@@ -641,7 +641,7 @@ class TestCopyAndEquality(TestCase):
         copied = original.copy()
         
         # Evaluate the copy
-        copied.evaluate({'x': Expr.int(1)})
+        copied.evaluate({'x': Expr.integer(1)})
         
         # Original should still depend on x
         self.assertTrue(original.depends_on('x'))
@@ -659,36 +659,36 @@ class TestCopyAndEquality(TestCase):
         expr1 = Expr.parse('2 * x')
         
         # Built manually
-        expr2 = Expr.int(2) * Expr.id('x')
+        expr2 = Expr.integer(2) * Expr.id('x')
         
         # These may or may not be equal depending on simplification
         # But at minimum, they should evaluate the same
-        result1 = expr1.evaluate({'x': Expr.int(3)})
-        result2 = expr2.evaluate({'x': Expr.int(3)})
+        result1 = expr1.evaluate({'x': Expr.integer(3)})
+        result2 = expr2.evaluate({'x': Expr.integer(3)})
         
         self.assertEqual(result1.simplify(), result2.simplify())
     
     def test_hash_consistency(self):
         """Test that hash is consistent with equality."""
-        expr1 = Expr.int(42)
-        expr2 = Expr.int(42)
+        expr1 = Expr.integer(42)
+        expr2 = Expr.integer(42)
         
         if expr1 == expr2:
             self.assertEqual(hash(expr1), hash(expr2))
     
     def test_equality_with_operations(self):
         """Test equality through various operations."""
-        a = Expr.int(2)
-        b = Expr.int(3)
+        a = Expr.integer(2)
+        b = Expr.integer(3)
         
-        self.assertEqual(a + b, Expr.int(5))
-        self.assertEqual(a * b, Expr.int(6))
-        self.assertEqual(b - a, Expr.int(1))
+        self.assertEqual(a + b, Expr.integer(5))
+        self.assertEqual(a * b, Expr.integer(6))
+        self.assertEqual(b - a, Expr.integer(1))
     
     def test_inequality_operations(self):
         """Test inequality comparisons."""
-        a = Expr.int(2)
-        b = Expr.int(3)
+        a = Expr.integer(2)
+        b = Expr.integer(3)
         
         self.assertTrue(a < b)
         self.assertTrue(a <= b)
@@ -699,7 +699,7 @@ class TestCopyAndEquality(TestCase):
     
     def test_contains_operator(self):
         """Test the __contains__ operator for expressions."""
-        val = Expr.int(42)
+        val = Expr.integer(42)
         expr = Expr.parse('x + 42 + y')
         
         # Should be able to check if value is in expression
@@ -721,9 +721,9 @@ class TestMiscellaneousEdgeCases(TestCase):
     def test_mccode_c_type_names(self):
         """Test C type name generation."""
         tests = [
-            (Expr.int(1), 'int', 'instr_type_int'),
+            (Expr.integer(1), 'int', 'instr_type_int'),
             (Expr.float(1.0), 'double', 'instr_type_double'),
-            (Expr.str('test'), 'char *', 'instr_type_string'),
+            (Expr.string('test'), 'char *', 'instr_type_string'),
         ]
         
         for val, c_type, c_type_name in tests:
@@ -732,18 +732,18 @@ class TestMiscellaneousEdgeCases(TestCase):
     
     def test_is_zero_detection(self):
         """Test is_zero property."""
-        self.assertTrue(Expr.int(0).is_zero)
+        self.assertTrue(Expr.integer(0).is_zero)
         self.assertTrue(Expr.float(0.0).is_zero)
-        self.assertFalse(Expr.int(1).is_zero)
+        self.assertFalse(Expr.integer(1).is_zero)
         self.assertFalse(Expr.id('x').is_zero)
         
         # Zero from operation
-        result = Expr.int(5) - Expr.int(5)
+        result = Expr.integer(5) - Expr.integer(5)
         self.assertTrue(result.is_zero)
     
     def test_is_constant_detection(self):
         """Test is_constant property."""
-        self.assertTrue(Expr.int(42).is_constant)
+        self.assertTrue(Expr.integer(42).is_constant)
         self.assertTrue(Expr.float(3.14).is_constant)
         self.assertFalse(Expr.id('x').is_constant)
         
@@ -765,7 +765,7 @@ class TestMiscellaneousEdgeCases(TestCase):
     
     def test_abs_operations(self):
         """Test absolute value operations."""
-        self.assertEqual(abs(Expr.int(-5)), Expr.int(5))
+        self.assertEqual(abs(Expr.integer(-5)), Expr.integer(5))
         self.assertEqual(abs(Expr.float(-3.14)), Expr.float(3.14))
         
         # abs(abs(x)) == abs(x)
@@ -781,11 +781,11 @@ class TestMiscellaneousEdgeCases(TestCase):
     
     def test_power_operations(self):
         """Test power/exponentiation operations."""
-        base = Expr.int(2)
-        exp = Expr.int(3)
+        base = Expr.integer(2)
+        exp = Expr.integer(3)
         
         result = base ** exp
-        self.assertEqual(result.simplify(), Expr.int(8))
+        self.assertEqual(result.simplify(), Expr.integer(8))
     
     def test_reverse_operations(self):
         """Test reverse operations (1 + expr, etc)."""

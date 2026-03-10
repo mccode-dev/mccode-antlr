@@ -110,8 +110,8 @@ class TestExpression(TestCase):
 
     def test_Value(self):
         float_value = Expr.float(1)
-        int_value = Expr.int(1)
-        str_value = Expr.str('1')
+        int_value = Expr.integer(1)
+        str_value = Expr.string('1')
         id_value = Expr.id('one')
         array_value = Expr.array([1])
         function_value = Expr.function('ones')
@@ -180,15 +180,15 @@ class TestExpression(TestCase):
         self.assertEqual(one.mccode_c_type_name, 'instr_type_double')
 
     def test_int_Value(self):
-        one = Expr.int(1)
-        two = Expr.int(2)
+        one = Expr.integer(1)
+        two = Expr.integer(2)
         self._numeric_Value_checks(one, two)
         self.assertEqual(one.mccode_c_type, 'int')
         self.assertEqual(one.mccode_c_type_name, 'instr_type_int')
 
     def test_str_Value(self):
-        one = Expr.str('one')
-        two = Expr.str('two')
+        one = Expr.string('one')
+        two = Expr.string('two')
         self.assertEqual(one, one)
         self.assertIsInstance(one + one, Expr)
         self.assertNotEqual(one + one, one)
@@ -212,7 +212,7 @@ class TestExpression(TestCase):
 
         self.assertFalse(sid.is_str)
         self.assertTrue(sid.is_id)
-        self.assertEqual(str(sid + Expr.int(1)), 'some_parameter + 1')
+        self.assertEqual(str(sid + Expr.integer(1)), 'some_parameter + 1')
 
     def test_parameter_Value(self):
         par = Expr.parameter('instrument_parameter')
@@ -228,22 +228,22 @@ class TestExpression(TestCase):
         self.assertEqual(f'{par:prefix:this_is_cool_}', "this_is_cool_instrument_parameter")
 
     def test_UnaryOp(self):
-        val = Expr.int(1)
+        val = Expr.integer(1)
         # Negating a numeric int gives a simplified int, NOT an Expr with unary op structure
-        self.assertEqual(-val, Expr.int(-1))
+        self.assertEqual(-val, Expr.integer(-1))
         # Double negation cancels out
         self.assertEqual(-(-val), val)
         self.assertEqual(round(val), val)
 
-        val = Expr.int(-1)
-        self.assertEqual(-val, Expr.int(1))
+        val = Expr.integer(-1)
+        self.assertEqual(-val, Expr.integer(1))
         # abs of negative int is simplified directly
-        self.assertEqual(abs(val), Expr.int(1))
+        self.assertEqual(abs(val), Expr.integer(1))
         # abs(abs(x)) == abs(x) for symbolic (non-numeric) values
         x = Expr.id('x')
         self.assertEqual(abs(abs(x)), abs(x))
 
-        val = Expr.str('string')
+        val = Expr.string('string')
         # Negating a string builds a symbolic expression (can't simplify)
         neg_val = -val
         self.assertIsInstance(neg_val, Expr)
@@ -375,33 +375,33 @@ class TestExpression(TestCase):
 
     def test_parse_Expr(self):
 
-        self.assertEqual(Expr.parse('1'), Expr.int(1))
+        self.assertEqual(Expr.parse('1'), Expr.integer(1))
         self.assertEqual(Expr.parse('1.'), Expr.float(1))
-        self.assertEqual(Expr.parse('0'), Expr.int(0))
+        self.assertEqual(Expr.parse('0'), Expr.integer(0))
         self.assertEqual(Expr.parse('0.'), Expr.float(0))
         self.assertEqual(Expr.parse('.0'), Expr.float(0))
 
-        self.assertEqual(Expr.parse('1+1'), Expr.int(2))
+        self.assertEqual(Expr.parse('1+1'), Expr.integer(2))
         self.assertEqual(Expr.parse('1.+1.'), Expr.float(2))
         self.assertEqual(Expr.parse('1+1.0'), Expr.float(2))
         self.assertEqual(Expr.parse('1.0+1'), Expr.float(2))
 
-        self.assertEqual(Expr.parse('1-1'), Expr.int(0))
+        self.assertEqual(Expr.parse('1-1'), Expr.integer(0))
         self.assertEqual(Expr.parse('1.-1.'), Expr.float(0))
         self.assertEqual(Expr.parse('1-1.0'), Expr.float(0))
         self.assertEqual(Expr.parse('1.0-1'), Expr.float(0))
 
-        self.assertEqual(Expr.parse('1*1'), Expr.int(1))
+        self.assertEqual(Expr.parse('1*1'), Expr.integer(1))
         self.assertEqual(Expr.parse('1.*1.'), Expr.float(1))
         self.assertEqual(Expr.parse('1*1.0'), Expr.float(1))
         self.assertEqual(Expr.parse('1.0*1'), Expr.float(1))
 
-        self.assertEqual(Expr.parse('1/1'), Expr.int(1))
+        self.assertEqual(Expr.parse('1/1'), Expr.integer(1))
         self.assertEqual(Expr.parse('1./1.'), Expr.float(1))
         self.assertEqual(Expr.parse('1/1.0'), Expr.float(1))
         self.assertEqual(Expr.parse('1.0/1'), Expr.float(1))
 
-        self.assertEqual(Expr.parse('"blah"'), Expr.str('"blah"'))
+        self.assertEqual(Expr.parse('"blah"'), Expr.string('"blah"'))
         self.assertEqual(Expr.parse('blah'), Expr.id('blah'))
 
         sin_minus_pi_x_over_2 = Expr.parse('sin( -PI * x / 2.   )')
@@ -449,7 +449,7 @@ class TestExpression(TestCase):
         # Simplifying an expression yields an expression
         self.assertTrue(isinstance(is_two, Expr))
         # Which is equal to the expected result of 2
-        self.assertEqual(is_two, Expr.int(2))
+        self.assertEqual(is_two, Expr.integer(2))
         # Finally, the real test -- successfully simplifying an Expr produces a constant Expr
         self.assertTrue(is_two.is_constant)
 
@@ -489,7 +489,7 @@ class TestExpression(TestCase):
             self.assertEqual(res, 2)
 
     def test_numeric_expressions(self):
-        for n_slits in (2, Expr.int(2)):
+        for n_slits in (2, Expr.integer(2)):
             for theta_0 in (Expr.float(100), Expr.id('variable')):
                 delta = theta_0 / 2.0
                 edges = [y * 360.0 / n_slits + x for y in range(int(n_slits)) for x in (-delta, delta)]
@@ -499,7 +499,7 @@ class TestExpression(TestCase):
 
     def test_is_vector(self):
         self.assertTrue(Expr.array([1, 2, 3]).is_vector)
-        self.assertFalse(Expr.int(1).is_vector)
+        self.assertFalse(Expr.integer(1).is_vector)
 
         # This is needed for setting, e.g., component parameters from declared _vector_ variables
         expr = Expr.parse('-ex / values[0]')
@@ -544,13 +544,13 @@ class TestComparisonMethods(TestCase):
     def test_value_eq(self):
         """eq() always returns an Expr, never a bool."""
         v = Expr.parameter('flag')
-        result = v.eq(Expr.int(1))
+        result = v.eq(Expr.integer(1))
         self.assertIsInstance(result, Expr)
         self.assertEqual(str(result), 'flag==1')
 
     def test_value_ne(self):
         v = Expr.parameter('flag')
-        result = v.ne(Expr.int(0))
+        result = v.ne(Expr.integer(0))
         self.assertIsInstance(result, Expr)
         self.assertEqual(str(result), 'flag!=0')
 
@@ -583,7 +583,7 @@ class TestComparisonMethods(TestCase):
 
     def test_expr_le(self):
         from mccode_antlr.common.expression import Expr
-        result = Expr.parameter('n').le(Expr.int(5))
+        result = Expr.parameter('n').le(Expr.integer(5))
         self.assertIsInstance(result, Expr)
         self.assertEqual(str(result), 'n<=5')
 

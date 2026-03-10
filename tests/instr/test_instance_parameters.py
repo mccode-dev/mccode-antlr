@@ -137,7 +137,7 @@ class TestInstrInstanceParameters(TestCase):
         self.assertTrue(nslit.is_constant)
 
         phase = bwc1.get_parameter('phase').value  # == bw1phase / 2
-        # In contrast, phase is Expr(BinaryOp('/', Expr.id('bw1phase'), Expr.int(2))) which can't be simplified
+        # In contrast, phase is Expr(BinaryOp('/', Expr.id('bw1phase'), Expr.integer(2))) which can't be simplified
         self.assertFalse(phase.simplify().is_constant)
 
         # But we can attempt to parse the declarations and instantiation blocks from the instrument

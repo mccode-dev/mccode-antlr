@@ -8,9 +8,6 @@ from loguru import logger
 from .sympy_classes import McCodeParameter, UNSET_SYMPY, SYMPY_NAMESPACE
 from .types import DataType, ObjectType, ShapeType
 
-# Alias to avoid clash with Expr.str classmethod when msgspec evaluates type annotations
-_str = str
-
 
 # ---------------------------------------------------------------------------
 # Internal helpers
@@ -61,17 +58,21 @@ def _to_sympy(value) -> sympy.Basic:
 class Expr(msgspec.Struct, dict=True, eq=False):
     """Symbolic expression with McCode-specific metadata."""
 
-    exprs: list[_str]
+    exprs: list[str]
     data_type: DataType = DataType.undefined
     shape_type: ShapeType = ShapeType.scalar
     object_type: ObjectType = ObjectType.value
 
     def __post_init__(self):
-        # Normalise exprs: accept sympy.Basic, list[sympy.Basic], or list[str]
-        if isinstance(self.exprs, sympy.Basic):
+        # NOTE: __post_init__ is called by msgspec after setting struct fields.
+        # The public struct constructor expects `exprs: list[str]` (srepr strings).
+        # Internally, factory classmethods (float, integer, string, id, …) pass
+        # sympy.Basic objects or lists thereof for convenience — this block
+        # normalises those to srepr strings and pre-populates the SymPy cache.
+        if isinstance(self.exprs, sympy.Basic):  # type: ignore[arg-type]
             sym = self.exprs
             self.__dict__['_cache'] = [sym]
-            self.exprs = [sympy.srepr(sym)]
+            self.exprs = [sympy.srepr(sym)]  # type: ignore[assignment]
         elif isinstance(self.exprs, list):
             if self.exprs and isinstance(self.exprs[0], sympy.Basic):
                 syms = list(self.exprs)
@@ -81,7 +82,7 @@ class Expr(msgspec.Struct, dict=True, eq=False):
         else:
             sym = sympy.sympify(self.exprs)
             self.__dict__['_cache'] = [sym]
-            self.exprs = [sympy.srepr(sym)]
+            self.exprs = [sympy.srepr(sym)]  # type: ignore[assignment]
 
         # Auto-promote scalar → vector when multiple elements
         if len(self.exprs) > 1 and self.shape_type == ShapeType.scalar:
@@ -146,7 +147,7 @@ class Expr(msgspec.Struct, dict=True, eq=False):
         return cls(sympy.Float(str(v)), DataType.float)
 
     @classmethod
-    def int(cls, value) -> 'Expr':
+    def integer(cls, value) -> 'Expr':
         if isinstance(value, cls):
             return cls(value._exprs, DataType.int, value.shape_type, value.object_type)
         try:
@@ -158,7 +159,7 @@ class Expr(msgspec.Struct, dict=True, eq=False):
         return cls(sympy.Integer(v), DataType.int)
 
     @classmethod
-    def str(cls, value) -> 'Expr':
+    def string(cls, value) -> 'Expr':
         if isinstance(value, cls):
             return cls(value._exprs, DataType.str, value.shape_type, value.object_type)
         if value is None:

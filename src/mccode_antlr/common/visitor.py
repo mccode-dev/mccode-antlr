@@ -89,10 +89,10 @@ def visitExpressionIdentifier(obj, ctx):
     return Expr.id(name)
 
 def visitExpressionInteger(obj, ctx):
-    return Expr.int(str(ctx.IntegerLiteral()))
+    return Expr.integer(str(ctx.IntegerLiteral()))
 
 def visitExpressionZero(obj, ctx):
-    return Expr.int(0)
+    return Expr.integer(0)
 
 def visitExpressionExponentiation(obj, ctx):
     base, exponent = [obj.visit(ex) for ex in ctx.expr()]
@@ -187,7 +187,7 @@ def visitExpressionBinaryGreater(obj, ctx):
 
 def visitExpressionString(obj, ctx):
     strings = ''.join(str(sl).strip('"') for sl in ctx.StringLiteral())
-    return Expr.str(f'"{strings}"')
+    return Expr.string(f'"{strings}"')
 
 
 common_visitors = (

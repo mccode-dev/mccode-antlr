@@ -166,7 +166,7 @@ class Instance(Struct):
             # -- thus if value is a str but an int or float is expected, we will know it is an identifier
             dt = p.value.data_type
             if dt.is_int:
-                value = Expr.int(value)
+                value = Expr.integer(value)
             elif dt.is_float:
                 value = Expr.float(value)
             else:

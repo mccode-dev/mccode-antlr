@@ -409,28 +409,28 @@ def cos_value(v: Expr, degrees=True):
     """The cosine of an angle expressed in degrees or radian"""
     from math import cos, pi
     if v.is_value(0):
-        return Expr.int(1)
+        return Expr.integer(1)
     pi = Expr.float(pi) if v.is_constant else Expr.id('PI')
     if (degrees and v.is_value(Expr.float(90))) or (not degrees and v.is_value(pi/Expr.float(2))):
-        return Expr.int(0)
+        return Expr.integer(0)
     if (degrees and v.is_value(Expr.float(180))) or (not degrees and v.is_value(pi)):
-        return Expr.int(-1)
+        return Expr.integer(-1)
     if (degrees and v.is_value(Expr.float(-90))) or (not degrees and v.is_value(-pi/Expr.float(2))):
-        return Expr.int(0)
+        return Expr.integer(0)
     return unary_expr(cos_degree if degrees else cos, 'cos', v)
 
 
 def sin_value(v: Expr, degrees=True):
     from math import sin, pi
     if v.is_value(0):
-        return Expr.int(0)
+        return Expr.integer(0)
     pi = Expr.float(pi) if v.is_constant else Expr.id('PI')
     if (degrees and v.is_value(Expr.float(90))) or (not degrees and v.is_value(pi / Expr.float(2))):
-        return Expr.int(1)
+        return Expr.integer(1)
     if (degrees and v.is_value(Expr.float(180))) or (not degrees and v.is_value(-pi / Expr.float(2))):
-        return Expr.int(0)
+        return Expr.integer(0)
     if (degrees and v.is_value(Expr.float(-90))) or (not degrees and v.is_value(-pi / Expr.float(2))):
-        return Expr.int(-1)
+        return Expr.integer(-1)
     return unary_expr(sin_degree if degrees else sin, 'sin', v)
 
 
@@ -747,7 +747,7 @@ class RotationPart(Part):
 
     def _cos_sin_one_zero(self):
         r = self.v if self.degrees else degree_to_radian(self.v)
-        return cos_value(r), sin_value(r), Expr.int(1), Expr.int(0)
+        return cos_value(r), sin_value(r), Expr.integer(1), Expr.integer(0)
 
     def position(self, which=None) -> Vector:
         z = Expr.float(0)

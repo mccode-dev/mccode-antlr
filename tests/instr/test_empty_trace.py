@@ -5,9 +5,9 @@ def _make_expected_expr(val, data_type):
     """Create an Expr matching what the parser produces for a given value and data type."""
     from mccode_antlr.common import Expr, DataType
     if data_type == DataType.str:
-        return Expr.str(val)
+        return Expr.string(val)
     if data_type == DataType.int:
-        return Expr.int(val)
+        return Expr.integer(val)
     return Expr.float(val)
 
 
@@ -56,9 +56,9 @@ class TestInstrEmptyTrace(TestCase):
         #      b. a dict with entries 'unit' and 'value'
         #      c. a plain value
         #    in each of these cases, Expr.best converts the provided value if it is not already an Expr object
-        assembler.parameters(InstrumentParameter('par2', '', Expr.int(1010110)),
+        assembler.parameters(InstrumentParameter('par2', '', Expr.integer(1010110)),
                              'string par3 = "this is a long string with spaces"',
-                             InstrumentParameter('par4', '', Expr.str('"the-fourth_parameter"')),
+                             InstrumentParameter('par4', '', Expr.string('"the-fourth_parameter"')),
                              'int par5=-9', par6=[Expr.float(None), ''], par7=191, par8=dict(unit='', value='"whoa!"'))
 
         instr = assembler.instrument

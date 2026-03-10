@@ -27,11 +27,11 @@ def assert_scalar_expr_round_trip(expr: Expr):
 
 
 def test_str_expr_json_round_trip():
-    assert_scalar_expr_round_trip(Expr.str('some string'))
+    assert_scalar_expr_round_trip(Expr.string('some string'))
 
 
 def test_int_expr_json_round_trip():
-    assert_scalar_expr_round_trip(Expr.int(1))
+    assert_scalar_expr_round_trip(Expr.integer(1))
 
 
 def test_float_expr_json_round_trip():

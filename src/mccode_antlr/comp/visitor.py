@@ -74,14 +74,14 @@ class CompVisitor(McCompVisitor):
         if ctx.Assign() is not None:
             # protect against a literal '0' provided ... which doesn't match IntegerLiteral for some reason
             value = 0 if ctx.expr() is None else self.visit(ctx.expr())
-        return ComponentParameter(name=name, value=Expr.int(value))
+        return ComponentParameter(name=name, value=Expr.integer(value))
 
     def visitComponentParameterString(self, ctx: Parser.ComponentParameterStringContext):
         name = str(ctx.Identifier())
         default = None
         if ctx.Assign() is not None:
             default = 'NULL' if ctx.StringLiteral() is None else str(ctx.StringLiteral())
-        return ComponentParameter(name=name, value=Expr.str(default))
+        return ComponentParameter(name=name, value=Expr.string(default))
 
     def visitComponentParameterVector(self, ctx: Parser.ComponentParameterVectorContext):
         from ..common import DataType, ShapeType
@@ -112,7 +112,7 @@ class CompVisitor(McCompVisitor):
         default = None
         if ctx.Assign() is not None and ctx.expr() is not None:
             default = str(self.visit(ctx.expr()))
-        return ComponentParameter(name=name, value=Expr.str(default))
+        return ComponentParameter(name=name, value=Expr.string(default))
 
     def visitComponentParameterDoubleArray(self, ctx: Parser.ComponentParameterDoubleArrayContext):
         # 'vector' is really just an alias for 'double *', right?
@@ -189,7 +189,7 @@ class CompVisitor(McCompVisitor):
 
     def visitExpressionMyself(self, ctx: Parser.ExpressionMyselfContext):
         # The even-worse expression use of MYSELF to refer to the current being-constructed component's name
-        return Expr.str(self.instance.name)
+        return Expr.string(self.instance.name)
 
     def multi_block(self, part: str, ctx: Parser.Multi_blockContext):
         """Common visitor for {part} unparsed_block? ((INHERIT identifier)|(EXTEND unparsed_block))*
