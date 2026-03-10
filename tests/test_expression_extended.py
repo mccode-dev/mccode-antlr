@@ -609,7 +609,7 @@ class TestTypeCompatibility(TestCase):
         """Test the as_type method for type coercion."""
         val = Expr.int(42)
 
-        float_val = Expr(val._exprs, DataType.float, val._shape_type, val._object_type)
+        float_val = Expr(val._exprs, DataType.float, val.shape_type, val.object_type)
         self.assertEqual(float_val.data_type, DataType.float)
 
         # Original should be unchanged
@@ -817,7 +817,7 @@ class TestMiscellaneousEdgeCases(TestCase):
 
         # Identifier
         val4 = Expr.best('variable_name')
-        self.assertEqual(val4._object_type, ObjectType.identifier)
+        self.assertEqual(val4.object_type, ObjectType.identifier)
     
     def test_function_call_syntax(self):
         """Test function call syntax."""

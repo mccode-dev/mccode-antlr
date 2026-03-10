@@ -2,10 +2,14 @@
 from __future__ import annotations
 
 import sympy
+import msgspec
 from loguru import logger
 
 from .sympy_classes import McCodeParameter, UNSET_SYMPY, SYMPY_NAMESPACE
 from .types import DataType, ObjectType, ShapeType
+
+# Alias to avoid clash with Expr.str classmethod when msgspec evaluates type annotations
+_str = str
 
 
 # ---------------------------------------------------------------------------
@@ -54,29 +58,40 @@ def _to_sympy(value) -> sympy.Basic:
 # Public Expr class
 # ---------------------------------------------------------------------------
 
-class Expr:
+class Expr(msgspec.Struct, dict=True, eq=False):
     """Symbolic expression with McCode-specific metadata."""
 
-    __slots__ = ('_exprs', '_data_type', '_shape_type', '_object_type')
+    exprs: list[_str]
+    data_type: DataType = DataType.undefined
+    shape_type: ShapeType = ShapeType.scalar
+    object_type: ObjectType = ObjectType.value
 
-    def __init__(
-        self,
-        exprs,
-        data_type: DataType = DataType.undefined,
-        shape_type: ShapeType = ShapeType.scalar,
-        object_type: ObjectType = ObjectType.value,
-    ):
-        if isinstance(exprs, list):
-            self._exprs: list[sympy.Basic] = exprs
-            if len(exprs) > 1 and shape_type == ShapeType.scalar:
-                shape_type = ShapeType.vector
-        elif isinstance(exprs, sympy.Basic):
-            self._exprs = [exprs]
+    def __post_init__(self):
+        # Normalise exprs: accept sympy.Basic, list[sympy.Basic], or list[str]
+        if isinstance(self.exprs, sympy.Basic):
+            sym = self.exprs
+            self.__dict__['_cache'] = [sym]
+            self.exprs = [sympy.srepr(sym)]
+        elif isinstance(self.exprs, list):
+            if self.exprs and isinstance(self.exprs[0], sympy.Basic):
+                syms = list(self.exprs)
+                self.__dict__['_cache'] = syms
+                self.exprs = [sympy.srepr(e) for e in syms]
+            # else: already list[str], nothing to do
         else:
-            self._exprs = [sympy.sympify(exprs)]
-        self._data_type: DataType = data_type
-        self._shape_type: ShapeType = shape_type
-        self._object_type: ObjectType = object_type
+            sym = sympy.sympify(self.exprs)
+            self.__dict__['_cache'] = [sym]
+            self.exprs = [sympy.srepr(sym)]
+
+        # Auto-promote scalar → vector when multiple elements
+        if len(self.exprs) > 1 and self.shape_type == ShapeType.scalar:
+            self.shape_type = ShapeType.vector
+
+    @property
+    def _exprs(self) -> list[sympy.Basic]:
+        if '_cache' not in self.__dict__:
+            self.__dict__['_cache'] = [eval(s, SYMPY_NAMESPACE) for s in self.exprs]  # noqa: S307
+        return self.__dict__['_cache']
 
     # ------------------------------------------------------------------
     # Serialisation
@@ -84,10 +99,10 @@ class Expr:
 
     def to_dict(self) -> dict:
         return {
-            'exprs': [sympy.srepr(e) for e in self._exprs],
-            'data_type': self._data_type.value,
-            'shape_type': self._shape_type.value,
-            'object_type': self._object_type.value,
+            'exprs': list(self.exprs),
+            'data_type': int(self.data_type),
+            'shape_type': int(self.shape_type),
+            'object_type': int(self.object_type),
         }
 
     @classmethod
@@ -117,7 +132,7 @@ class Expr:
     @classmethod
     def float(cls, value) -> 'Expr':
         if isinstance(value, cls):
-            return cls(value._exprs, DataType.float, value._shape_type, value._object_type)
+            return cls(value._exprs, DataType.float, value.shape_type, value.object_type)
         if isinstance(value, str):
             # Preserve decimal string representation to avoid binary float imprecision
             return cls(sympy.Float(value), DataType.float) if value.lower() not in ('none', '') else cls(UNSET_SYMPY, DataType.float)
@@ -133,7 +148,7 @@ class Expr:
     @classmethod
     def int(cls, value) -> 'Expr':
         if isinstance(value, cls):
-            return cls(value._exprs, DataType.int, value._shape_type, value._object_type)
+            return cls(value._exprs, DataType.int, value.shape_type, value.object_type)
         try:
             v = int(value) if value is not None else None
         except (ValueError, TypeError):
@@ -145,7 +160,7 @@ class Expr:
     @classmethod
     def str(cls, value) -> 'Expr':
         if isinstance(value, cls):
-            return cls(value._exprs, DataType.str, value._shape_type, value._object_type)
+            return cls(value._exprs, DataType.str, value.shape_type, value.object_type)
         if value is None:
             return cls(UNSET_SYMPY, DataType.str)
         sym = sympy.Symbol(str(value), commutative=False)
@@ -242,7 +257,7 @@ class Expr:
         return ','.join(_PY_PRINTER.doprint(e) for e in self._exprs)
 
     def __repr__(self):
-        parts = [f'{self._shape_type} {self._data_type} {sympy.srepr(e)}' for e in self._exprs]
+        parts = [f'{self.shape_type} {self.data_type} {sympy.srepr(e)}' for e in self._exprs]
         return ','.join(parts)
 
     def __hash__(self):
@@ -275,22 +290,22 @@ class Expr:
 
     @property
     def is_id(self) -> bool:
-        return self.is_singular and self._object_type in (ObjectType.identifier, ObjectType.parameter)
+        return self.is_singular and self.object_type in (ObjectType.identifier, ObjectType.parameter)
 
     @property
     def is_parameter(self) -> bool:
         if not self.is_singular:
             return False
-        return (self._object_type == ObjectType.parameter
+        return (self.object_type == ObjectType.parameter
                 or isinstance(self._exprs[0], McCodeParameter))
 
     @property
     def is_str(self) -> bool:
-        return self.is_singular and self._data_type == DataType.str
+        return self.is_singular and self.data_type == DataType.str
 
     @property
     def is_scalar(self) -> bool:
-        return self.is_singular and self._shape_type in (ShapeType.scalar, ShapeType.unknown)
+        return self.is_singular and self.shape_type in (ShapeType.scalar, ShapeType.unknown)
 
     def is_value(self, value) -> bool:
         if not self.is_singular or self.is_id:
@@ -302,7 +317,7 @@ class Expr:
 
     @property
     def is_vector(self) -> bool:
-        return self._shape_type == ShapeType.vector
+        return self.shape_type == ShapeType.vector
 
     @property
     def vector_len(self) -> int:
@@ -315,7 +330,7 @@ class Expr:
         if not self.is_singular or self.is_id:
             return False
         e = self._exprs[0]
-        if self._data_type == DataType.str:
+        if self.data_type == DataType.str:
             return True
         return e.is_number or e is UNSET_SYMPY
 
@@ -344,9 +359,9 @@ class Expr:
         e = self._exprs[0]
         if e is UNSET_SYMPY:
             return None
-        if self._data_type == DataType.str:
+        if self.data_type == DataType.str:
             return e.name
-        if self._data_type == DataType.int or (e.is_integer is True):
+        if self.data_type == DataType.int or (e.is_integer is True):
             return int(e)
         return float(e)
 
@@ -359,30 +374,14 @@ class Expr:
         return self._exprs[-1]
 
     @property
-    def data_type(self) -> DataType:
-        return self._data_type
-
-    @data_type.setter
-    def data_type(self, dt: DataType):
-        self._data_type = dt
-
-    @property
-    def shape_type(self) -> ShapeType:
-        return self._shape_type
-
-    @shape_type.setter
-    def shape_type(self, st: ShapeType):
-        self._shape_type = st
-
-    @property
     def mccode_c_type(self) -> str:
-        if self._data_type == DataType.undefined:
+        if self.data_type == DataType.undefined:
             logger.critical(f'Why is data_type undefined for {self!r}?')
-        return self._data_type.mccode_c_type + self._shape_type.mccode_c_type
+        return self.data_type.mccode_c_type + self.shape_type.mccode_c_type
 
     @property
     def mccode_c_type_name(self) -> str:
-        dt, st = self._data_type, self._shape_type
+        dt, st = self.data_type, self.shape_type
         if dt == DataType.float and st == ShapeType.scalar:
             return "instr_type_double"
         if dt == DataType.int and st == ShapeType.scalar:
@@ -402,18 +401,18 @@ class Expr:
             if other.is_id or other.is_op:
                 return id_ok
             # Vector parameters are compatible with vector values
-            if self._shape_type == ShapeType.vector and other._shape_type == ShapeType.vector:
-                return self._data_type.compatible(other._data_type)
-            if self._shape_type == ShapeType.vector and not other.is_singular:
-                return self._data_type.compatible(other._data_type)
+            if self.shape_type == ShapeType.vector and other.shape_type == ShapeType.vector:
+                return self.data_type.compatible(other.data_type)
+            if self.shape_type == ShapeType.vector and not other.is_singular:
+                return self.data_type.compatible(other.data_type)
             if not self.is_singular or not other.is_singular:
                 return False
-            return (self._data_type.compatible(other._data_type)
-                    and self._shape_type.compatible(other._shape_type))
+            return (self.data_type.compatible(other.data_type)
+                    and self.shape_type.compatible(other.shape_type))
         try:
             o = Expr.best(other)
-            return (self._data_type.compatible(o._data_type)
-                    and self._shape_type.compatible(o._shape_type))
+            return (self.data_type.compatible(o.data_type)
+                    and self.shape_type.compatible(o.shape_type))
         except Exception:
             return False
 
@@ -460,14 +459,14 @@ class Expr:
         return _to_sympy(other)
 
     def _make_result(self, sym_result: sympy.Basic, op: str, other_dt: DataType) -> 'Expr':
-        dt = _promote(self._data_type, other_dt, op)
+        dt = _promote(self.data_type, other_dt, op)
         if dt == DataType.undefined:
             dt = _infer_data_type(sym_result)
         return Expr(sym_result, dt)
 
     def _get_dt(self, other) -> DataType:
         if isinstance(other, Expr):
-            return other._data_type
+            return other.data_type
         if isinstance(other, bool):
             return DataType.int
         if isinstance(other, int):
@@ -487,21 +486,21 @@ class Expr:
     def __mul__(self, other):
         if isinstance(other, Expr) and len(other._exprs) > 1:
             # Scalar * vector: distribute element-wise
-            dt = _promote(self._data_type, other._data_type, '*')
+            dt = _promote(self.data_type, other.data_type, '*')
             return Expr([self._exprs[0] * e for e in other._exprs], dt,
-                        ShapeType.vector, other._object_type)
+                        ShapeType.vector, other.object_type)
         if len(self._exprs) > 1:
             # Vector * scalar: distribute element-wise
             rhs = _to_sympy(other)
-            dt = _promote(self._data_type, self._get_dt(other), '*')
+            dt = _promote(self.data_type, self._get_dt(other), '*')
             return Expr([e * rhs for e in self._exprs], dt,
-                        ShapeType.vector, self._object_type)
+                        ShapeType.vector, self.object_type)
         rhs = self._prep_num_op('multiply', other)
         return self._make_result(self._exprs[0] * rhs, '*', self._get_dt(other))
 
     def __mod__(self, other):
         rhs = self._prep_num_op('mod', other)
-        return self._make_result(sympy.Mod(self._exprs[0], rhs), '%', self._data_type)
+        return self._make_result(sympy.Mod(self._exprs[0], rhs), '%', self.data_type)
 
     def __truediv__(self, other):
         rhs = self._prep_num_op('divide', other)
@@ -536,17 +535,17 @@ class Expr:
         return self._make_result(_to_sympy(other) ** self._exprs[0], '**', self._get_dt(other))
 
     def __neg__(self):
-        return Expr([-e for e in self._exprs], self._data_type, self._shape_type, self._object_type)
+        return Expr([-e for e in self._exprs], self.data_type, self.shape_type, self.object_type)
 
     def __pos__(self):
         return self
 
     def __abs__(self):
-        return Expr([sympy.Abs(e) for e in self._exprs], self._data_type, self._shape_type, self._object_type)
+        return Expr([sympy.Abs(e) for e in self._exprs], self.data_type, self.shape_type, self.object_type)
 
     def __round__(self, n=None):
         from .sympy_classes import CRound
-        if self._data_type == DataType.int:
+        if self.data_type == DataType.int:
             return self
 
         def _round_one(e):
@@ -556,7 +555,7 @@ class Expr:
                 return sympy.Float(str(rounded))
             return CRound(e)
 
-        return Expr([_round_one(e) for e in self._exprs], self._data_type, self._shape_type, self._object_type)
+        return Expr([_round_one(e) for e in self._exprs], self.data_type, self.shape_type, self.object_type)
 
     # ------------------------------------------------------------------
     # Python boolean comparisons (not expression-tree builders)
@@ -594,6 +593,9 @@ class Expr:
             except Exception:
                 return False
         return False
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
 
     def __lt__(self, other):
         if isinstance(other, Expr):
@@ -644,11 +646,11 @@ class Expr:
             except Exception:
                 s = e
             simplified.append(s)
-        result = Expr(simplified, self._data_type, self._shape_type, self._object_type)
+        result = Expr(simplified, self.data_type, self.shape_type, self.object_type)
         # If all elements are now pure numbers, update object_type to value
-        if (result._object_type in (ObjectType.identifier, ObjectType.parameter)
+        if (result.object_type in (ObjectType.identifier, ObjectType.parameter)
                 and all(e.is_number for e in result._exprs)):
-            result._object_type = ObjectType.value
+            result.object_type = ObjectType.value
         return result
 
     def evaluate(self, known: dict) -> 'Expr':
@@ -660,11 +662,11 @@ class Expr:
             elif isinstance(val, (int, float)):
                 sub_map[sym] = sympy.sympify(val)
         result = [e.subs(sub_map) for e in self._exprs]
-        evaluated = Expr(result, self._data_type, self._shape_type, self._object_type).simplify()
+        evaluated = Expr(result, self.data_type, self.shape_type, self.object_type).simplify()
         # After evaluation, if all free symbols are gone, it's now a value
-        if (evaluated._object_type in (ObjectType.identifier, ObjectType.parameter)
+        if (evaluated.object_type in (ObjectType.identifier, ObjectType.parameter)
                 and all(not e.free_symbols for e in evaluated._exprs)):
-            evaluated._object_type = ObjectType.value
+            evaluated.object_type = ObjectType.value
         return evaluated
 
     def depends_on(self, name: str) -> bool:
@@ -674,13 +676,19 @@ class Expr:
         return any(bool(target & e.free_symbols) for e in self._exprs)
 
     def copy(self) -> 'Expr':
-        return Expr(list(self._exprs), self._data_type, self._shape_type, self._object_type)
+        return Expr(list(self._exprs), self.data_type, self.shape_type, self.object_type)
 
     def verify_parameters(self, instrument_parameter_names: list[str]) -> None:
-        for i, e in enumerate(self._exprs):
+        cache = self._exprs  # ensure cache is populated
+        changed = False
+        for i, e in enumerate(cache):
             for name in instrument_parameter_names:
                 plain = sympy.Symbol(name)
                 if plain in e.free_symbols:
-                    self._exprs[i] = e.subs(plain, McCodeParameter(name))
-                    if isinstance(self._exprs[i], McCodeParameter):
-                        self._object_type = ObjectType.parameter
+                    cache[i] = e.subs(plain, McCodeParameter(name))
+                    if isinstance(cache[i], McCodeParameter):
+                        self.object_type = ObjectType.parameter
+                    changed = True
+        if changed:
+            self.exprs = [sympy.srepr(e) for e in cache]
+

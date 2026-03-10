@@ -120,12 +120,12 @@ class TestExpression(TestCase):
             self.assertFalse(x.is_op)
             self.assertFalse(x.is_zero)
 
-        self.assertEqual(float_value._object_type, ObjectType.value)
-        self.assertEqual(int_value._object_type, ObjectType.value)
-        self.assertEqual(str_value._object_type, ObjectType.value)
-        self.assertEqual(id_value._object_type, ObjectType.identifier)
-        self.assertEqual(array_value._object_type, ObjectType.value)
-        self.assertEqual(function_value._object_type, ObjectType.function)
+        self.assertEqual(float_value.object_type, ObjectType.value)
+        self.assertEqual(int_value.object_type, ObjectType.value)
+        self.assertEqual(str_value.object_type, ObjectType.value)
+        self.assertEqual(id_value.object_type, ObjectType.identifier)
+        self.assertEqual(array_value.object_type, ObjectType.value)
+        self.assertEqual(function_value.object_type, ObjectType.function)
 
         for x, y in ((float_value, ShapeType.scalar), (int_value, ShapeType.scalar), (str_value, ShapeType.scalar),
                      (id_value, ShapeType.scalar), (array_value, ShapeType.vector), (function_value, ShapeType.scalar)):
@@ -282,9 +282,9 @@ class TestExpression(TestCase):
         uop = Expr([CNot(sympy.Symbol('val'))], DataType.undefined)
         self.assertEqual(str(uop), '!(val)')
         # Changing data type doesn't change the string representation
-        iop = Expr(uop._exprs, DataType.int, uop._shape_type, uop._object_type)
+        iop = Expr(uop._exprs, DataType.int, uop.shape_type, uop.object_type)
         self.assertEqual(str(iop), '!(val)')
-        fop = Expr(uop._exprs, DataType.float, uop._shape_type, uop._object_type)
+        fop = Expr(uop._exprs, DataType.float, uop.shape_type, uop.object_type)
         self.assertEqual(str(fop), '!(val)')
 
 
@@ -516,7 +516,7 @@ class TestComparisonMethods(TestCase):
         v = Expr.parameter('flag')
         self.assertTrue(v.is_id)
         self.assertTrue(v.is_parameter)
-        self.assertEqual(v._object_type, ObjectType.parameter)
+        self.assertEqual(v.object_type, ObjectType.parameter)
         self.assertEqual(str(v), 'flag')
         # format spec 'p' must prepend the instrument variable prefix
         self.assertEqual(format(v, 'p'), '_instrument_var._parameters.flag')
