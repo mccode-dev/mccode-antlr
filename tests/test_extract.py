@@ -7,7 +7,7 @@ class TestExtract(TestCase):
         from mccode_antlr.grammar import McInstr_parse
         from mccode_antlr.instr import InstrVisitor
         from mccode_antlr.reader import Reader
-        from mccode_antlr.common.expression import Value
+        from mccode_antlr.common.expression import Expr
         from mccode_antlr.translators.c_listener import extract_c_declared_variables, evaluate_c_defined_variables
         instr_source = """
         DEFINE INSTRUMENT blah()
@@ -44,5 +44,5 @@ class TestExtract(TestCase):
         for init in instr.initialize:
             values.update(evaluate_c_defined_variables(variables, init.source, verbose=False))
 
-        self.assertEqual(values['par'], Value.float(1))
+        self.assertEqual(values['par'], Expr.float(1))
 

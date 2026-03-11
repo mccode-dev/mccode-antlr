@@ -5,7 +5,7 @@ from functools import lru_cache
 from io import StringIO
 from msgspec import Struct, field
 from typing import Optional
-from ..common import InstrumentParameter, MetaData, parameter_name_present, RawC, blocks_to_raw_c, Expr, Value
+from ..common import InstrumentParameter, MetaData, parameter_name_present, RawC, blocks_to_raw_c, Expr
 from ..reader import Registry
 from .instance import Instance, DepInstance, Comp
 from .group import Group, DependentGroup
@@ -693,14 +693,14 @@ class Instr(Struct):
                    remove_unused_parameters=False
                    ):
         from ..common import ComponentParameter
-        from ..common import Expr, Value, ObjectType
+        from ..common import Expr
         from .orientation import Vector, Angles
         if filename is None:
             filename = self.name + '.mcpl'
         if filename[0] != '"' or filename[-1] != '"':
             filename = '"' + filename + '"'
 
-        filename_parameter = ComponentParameter('filename', Expr(Value('mcpl_filename', _object=ObjectType.parameter)))
+        filename_parameter = ComponentParameter('filename', Expr.parameter('mcpl_filename'))
         first, second = self.split(after, remove_unused_parameters=remove_unused_parameters)
         mcpl_filename = InstrumentParameter.parse(f'string mcpl_filename = {filename}')
         first.add_parameter(mcpl_filename)
@@ -784,7 +784,7 @@ class Instr(Struct):
         for instance in self.components:
             instance.verify_parameters(self.parameters)
 
-    def check_expr(self, expr: int | float | str | Expr | Value):
+    def check_expr(self, expr: int | float | str | Expr):
         if not isinstance(expr, Expr):
             expr = Expr.best(expr)
         # check whether the expression contains any identifiers which are actually InstrumentParameters

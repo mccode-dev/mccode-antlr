@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from enum import Enum, IntEnum
+from enum import IntEnum
 
 
-class ObjectType(Enum):
+class ObjectType(IntEnum):
     value = 1
     initializer_list = 2
     identifier = 3
@@ -40,7 +40,7 @@ class ObjectType(Enum):
         return self == ObjectType.function
 
 
-class ShapeType(Enum):
+class ShapeType(IntEnum):
     unknown = 0
     scalar = 1
     vector = 2
@@ -72,7 +72,7 @@ class ShapeType(Enum):
         return ShapeType.unknown
 
 
-class DataType(Enum):
+class DataType(IntEnum):
     undefined = 0
     float = 1
     int = 2

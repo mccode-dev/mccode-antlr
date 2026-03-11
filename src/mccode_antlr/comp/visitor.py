@@ -74,17 +74,17 @@ class CompVisitor(McCompVisitor):
         if ctx.Assign() is not None:
             # protect against a literal '0' provided ... which doesn't match IntegerLiteral for some reason
             value = 0 if ctx.expr() is None else self.visit(ctx.expr())
-        return ComponentParameter(name=name, value=Expr.int(value))
+        return ComponentParameter(name=name, value=Expr.integer(value))
 
     def visitComponentParameterString(self, ctx: Parser.ComponentParameterStringContext):
         name = str(ctx.Identifier())
         default = None
         if ctx.Assign() is not None:
             default = 'NULL' if ctx.StringLiteral() is None else str(ctx.StringLiteral())
-        return ComponentParameter(name=name, value=Expr.str(default))
+        return ComponentParameter(name=name, value=Expr.string(default))
 
     def visitComponentParameterVector(self, ctx: Parser.ComponentParameterVectorContext):
-        from ..common import Value, DataType, ShapeType
+        from ..common import DataType, ShapeType
         name = str(ctx.Identifier(0))
         if ctx.Assign() is not None and ctx.initializerlist() is not None:
             value = self.visit(ctx.initializerlist())
@@ -95,7 +95,9 @@ class CompVisitor(McCompVisitor):
                 default = "NULL"
                 if ctx.Identifier(1) is not None:
                     default = str(ctx.Identifier(1))
-            value = Expr(Value(default, DataType.float, _shape=ShapeType.vector))
+            value = Expr.id(default, DataType.float, ShapeType.vector) if default is not None else Expr._null()
+            value.data_type = DataType.float
+            value.shape_type = ShapeType.vector
         return ComponentParameter(name=name, value=value)
 
     def visitComponentParameterSymbol(self, ctx: Parser.ComponentParameterSymbolContext):
@@ -110,14 +112,14 @@ class CompVisitor(McCompVisitor):
         default = None
         if ctx.Assign() is not None and ctx.expr() is not None:
             default = str(self.visit(ctx.expr()))
-        return ComponentParameter(name=name, value=Expr.str(default))
+        return ComponentParameter(name=name, value=Expr.string(default))
 
     def visitComponentParameterDoubleArray(self, ctx: Parser.ComponentParameterDoubleArrayContext):
         # 'vector' is really just an alias for 'double *', right?
         return self.visitComponentParameterVector(ctx)
 
     def visitComponentParameterIntegerArray(self, ctx: Parser.ComponentParameterIntegerArrayContext):
-        from ..common import Value, DataType, ShapeType
+        from ..common import DataType, ShapeType
         name = str(ctx.Identifier(0))
         if ctx.Assign() is not None and ctx.initializerlist() is not None:
             value = self.visit(ctx.initializerlist())
@@ -128,7 +130,9 @@ class CompVisitor(McCompVisitor):
                 default = "NULL"
                 if ctx.Identifier(1) is not None:
                     default = str(ctx.Identifier(1))
-            value = Expr(Value(default, DataType.int, _shape=ShapeType.vector))
+            value = Expr.id(default, DataType.int, ShapeType.vector) if default is not None else Expr._null()
+            value.data_type = DataType.int
+            value.shape_type = ShapeType.vector
         return ComponentParameter(name=name, value=value)
 
     def visitDependency(self, ctx: Parser.DependencyContext):
@@ -185,7 +189,7 @@ class CompVisitor(McCompVisitor):
 
     def visitExpressionMyself(self, ctx: Parser.ExpressionMyselfContext):
         # The even-worse expression use of MYSELF to refer to the current being-constructed component's name
-        return Expr.str(self.instance.name)
+        return Expr.string(self.instance.name)
 
     def multi_block(self, part: str, ctx: Parser.Multi_blockContext):
         """Common visitor for {part} unparsed_block? ((INHERIT identifier)|(EXTEND unparsed_block))*

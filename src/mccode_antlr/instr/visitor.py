@@ -61,7 +61,7 @@ class InstrVisitor(McInstrVisitor):
         name = str(ctx.Identifier())
         unit = None if ctx.instrument_parameter_unit() is None else self.visit(ctx.instrument_parameter_unit())
         value = None if ctx.Assign() is None else self.visit(ctx.expr())
-        return InstrumentParameter(name, unit, Expr.int(value))
+        return InstrumentParameter(name, unit, Expr.integer(value))
 
     def visitInstrumentParameterString(self, ctx: McInstrParser.InstrumentParameterStringContext):
         name = str(ctx.Identifier())
@@ -69,7 +69,7 @@ class InstrVisitor(McInstrVisitor):
         value = None
         if ctx.Assign() is not None:
             value = 'NULL' if ctx.StringLiteral() is None else str(ctx.StringLiteral())
-        return InstrumentParameter(name, unit, Expr.str(value))
+        return InstrumentParameter(name, unit, Expr.string(value))
 
     def visitInstrument_parameter_unit(self, ctx: McInstrParser.Instrument_parameter_unitContext):
         return str(ctx.StringLiteral())
@@ -122,7 +122,7 @@ class InstrVisitor(McInstrVisitor):
         else:
             # In the case of "AT (x, y, z) ABSOLUTE" or "AT (x, y, z) RELATIVE identifier"
             # We must use *the same* relative information for the rotation -- at[1] is None or a valid instance:
-            rotate = (Angles(Expr.int(0), Expr.int(0), Expr.int(0)), at[1])
+            rotate = (Angles(Expr.integer(0), Expr.integer(0), Expr.integer(0)), at[1])
         # Construct a new instance, possibly copying values from an existing instance:
         instance = Instance.from_instance(name, comp, at, rotate) if is_ref else Instance(name, comp, at, rotate, mode=self.mode)
         if ctx.instance_parameters() is not None:
@@ -191,7 +191,7 @@ class InstrVisitor(McInstrVisitor):
     def visitInstanceParameterNull(self, ctx: McInstrParser.InstanceParameterNullContext):
         from ..common import DataType
         name = str(ctx.Identifier())
-        value = Expr.str('NULL')
+        value = Expr.string('NULL')
         default = self.current_comp.get_parameter(name)
         if default is None:
             raise RuntimeError(f'{name} is not a known DEFINITION or SETTING parameter for {self.current_comp.name}')
@@ -207,7 +207,7 @@ class InstrVisitor(McInstrVisitor):
         return name, value
 
     def visitSplit(self, ctx: McInstrParser.SplitContext):
-        return Expr.int(10) if ctx.expr() is None else self.visit(ctx.expr())
+        return Expr.integer(10) if ctx.expr() is None else self.visit(ctx.expr())
 
     def visitWhen(self, ctx: McInstrParser.WhenContext):
         return self.visit(ctx.expr())
@@ -348,14 +348,14 @@ class InstrVisitor(McInstrVisitor):
     def visitExpressionPrevious(self, ctx: McInstrParser.ExpressionPreviousContext):
         # The very-special no-good expression use of PREVIOUS where it is replaced by the last component's name
         if len(self.state.components):
-            return Expr.str(self.state.components[-1].name)
+            return Expr.string(self.state.components[-1].name)
         elif self.destination is not None and len(self.destination.components):
-            return Expr.str(self.destination.components[-1].name)
+            return Expr.string(self.destination.components[-1].name)
         raise RuntimeError('PREVIOUS keyword used in expression before any components defined')
 
     def visitExpressionMyself(self, ctx: McInstrParser.ExpressionMyselfContext):
         # The even-worse expression use of MYSELF to refer to the current being-constructed component's name
-        return Expr.str(self.current_instance.name)
+        return Expr.string(self.current_instance.name)
 
     def multi_block(self, part: str, ctx: McInstrParser.Multi_blockContext):
         """Common visitor for {part} unparsed_block? ((INHERIT identifier)|(EXTEND unparsed_block))*
@@ -402,7 +402,7 @@ class InstrParametersVisitor(McInstrVisitor):
         name = str(ctx.Identifier())
         unit = None if ctx.instrument_parameter_unit() is None else self.visit(ctx.instrument_parameter_unit())
         value = None if ctx.Assign() is None else self.visit(ctx.expr())
-        return InstrumentParameter(name, unit, Expr.int(value))
+        return InstrumentParameter(name, unit, Expr.integer(value))
 
     def visitInstrumentParameterString(self, ctx: McInstrParser.InstrumentParameterStringContext):
         name = str(ctx.Identifier())
@@ -410,7 +410,7 @@ class InstrParametersVisitor(McInstrVisitor):
         value = None
         if ctx.Assign() is not None:
             value = 'NULL' if ctx.StringLiteral() is None else str(ctx.StringLiteral())
-        return InstrumentParameter(name, unit, Expr.str(value))
+        return InstrumentParameter(name, unit, Expr.string(value))
 
     def visitInstrument_parameter_unit(self, ctx: McInstrParser.Instrument_parameter_unitContext):
         return str(ctx.StringLiteral())
@@ -418,14 +418,14 @@ class InstrParametersVisitor(McInstrVisitor):
     def visitExpressionPrevious(self, ctx: McInstrParser.ExpressionPreviousContext):
         # The very-special no-good expression use of PREVIOUS where it is replaced by the last component's name
         if len(self.state.components):
-            return Expr.str(self.state.components[-1].name)
+            return Expr.string(self.state.components[-1].name)
         elif self.destination is not None and len(self.destination.components):
-            return Expr.str(self.destination.components[-1].name)
+            return Expr.string(self.destination.components[-1].name)
         raise RuntimeError('PREVIOUS keyword used in expression before any components defined')
 
     def visitExpressionMyself(self, ctx: McInstrParser.ExpressionMyselfContext):
         # The even-worse expression use of MYSELF to refer to the current being-constructed component's name
-        return Expr.str(self.current_instance.name)
+        return Expr.string(self.current_instance.name)
 
 
 

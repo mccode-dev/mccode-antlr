@@ -257,63 +257,22 @@ def _named_tuple_io(typename, names):
     return _NamedTupleIO
 
 
-def _op_io(typename, fields: list[str]):
-    class _OpIO:
-        @staticmethod
-        def load(group, **kwargs) -> typename:
-            from mccode_antlr.common.expression import DataType, OpStyle
-            _check_header(group, typename)
-            attrs = {name: group.attrs.get(name) for name in ('op', 'style_number', 'data_type_name')}
-            values = {name: HDF5IO.load(group[name], **kwargs) for name in fields}
-            if any(v is None for v in values.values()):
-                raise ValueError(f"Could not load values for {typename}")
-            data_type = DataType.from_name(attrs['data_type_name'])
-            style = OpStyle(attrs['style_number'])
-            op = typename(data_type, style, attrs['op'], **values)
-            if op.data_type != data_type:
-                raise ValueError(
-                    f"Loaded {typename} with data type {op.data_type}, but expected {attrs['data_type_name']}")
-            return op
-
-        @staticmethod
-        def save(group, data: typename, **kwargs):
-            _write_header(group, typename)
-            for name in ('op',):
-                if getattr(data, name) is not None:
-                    group.attrs[name] = getattr(data, name)
-            group.attrs['data_type_name'] = data.data_type.name
-            group.attrs['style_number'] = int(data.style)
-            for name in fields:
-                if getattr(data, name) is not None:
-                    HDF5IO.save(group=group.create_group(name), data=getattr(data, name), **kwargs)
-
-    return _OpIO
-
-
-class ValueIO:
-    from mccode_antlr.common.expression import Value
+class ExprIO:
+    """HDF5 serialization for the SymPy-backed Expr class."""
 
     @staticmethod
-    def load(group, **kwargs) -> Value:
-        from mccode_antlr.common.expression import ObjectType, DataType, ShapeType
-        # Since Value takes kwargs different from the calculated property names
-        names = {'_object': 'object_type_name', '_shape': 'shape_type_name',
-                 '_data': 'data_type_name'}
-        _check_header(group, ValueIO.Value)
-        types = {f: t.from_name(group.attrs.get(names[f]))
-                 for t, f in ((ObjectType, '_object'), (DataType, '_data'), (ShapeType, '_shape'))}
-        # A missing value is valid:
-        value = HDF5IO.load(group['value'], **kwargs) if 'value' in group else None
-        return ValueIO.Value(value, **types)
+    def load(group, **kwargs):
+        import json
+        from mccode_antlr.common.expression import Expr
+        _check_header(group, Expr)
+        return Expr.from_dict(json.loads(group.attrs['_expr_json']))
 
     @staticmethod
-    def save(group, data: Value, **kwargs):
-        _write_header(group, ValueIO.Value)
-        for name in ('object_type', 'data_type', 'shape_type'):
-            if getattr(data, name) is not None:
-                group.attrs[f'{name}_name'] = getattr(data, name).name
-        if data.value is not None:
-            HDF5IO.save(group=group.create_group('value'), data=data.value, **kwargs)
+    def save(group, data, **kwargs):
+        import json
+        from mccode_antlr.common.expression import Expr
+        _write_header(group, Expr)
+        group.attrs['_expr_json'] = json.dumps(data.to_dict())
 
 
 def _iterable_read_setup(typename, group):
@@ -398,7 +357,7 @@ class HDF5IO:
     import numpy as np
     from mccode_antlr.comp import Comp
     from mccode_antlr.common import InstrumentParameter, MetaData, ComponentParameter, RawC
-    from mccode_antlr.common.expression import Expr, TrinaryOp, BinaryOp, UnaryOp
+    from mccode_antlr.common.expression import Expr
     from mccode_antlr.instr.jump import Jump
     from mccode_antlr.instr.orientation import (Matrix, Vector, Angles, Rotation, Seitz, RotationX, RotationY,
                                                 RotationZ, TranslationPart, Orient, Parts, Part)
@@ -433,11 +392,7 @@ class HDF5IO:
         'Angles': _named_tuple_io(Angles, ('x', 'y', 'z')),
         'Jump': _dataclass_io(Jump, attrs=('target', 'relative_target', 'iterate', 'absolute_target'),
                               required=('condition',)),
-        'Value': ValueIO,
-        'Expr': _dataclass_io(Expr, optional=('expr',)),  # Not a dataclass, but sufficiently similar
-        'TrinaryOp': _op_io(TrinaryOp, ['first', 'second', 'third']),
-        'BinaryOp': _op_io(BinaryOp, ['left', 'right']),
-        'UnaryOp': _op_io(UnaryOp, ['value']),
+        'Expr': ExprIO,
         'list': ListIO,
         'tuple': TupleIO,
         'dict': DictIO,

@@ -1,4 +1,4 @@
-# Generated from McInstr.g4 by ANTLR 4.13.2
+# Generated from /home/g/PycharmProjects/mccode-antlr/src/grammar/McInstr.g4 by ANTLR 4.13.2
 from antlr4 import *
 if "." in __name__:
     from .McInstrParser import McInstrParser
@@ -244,6 +244,11 @@ class McInstrVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
+    # Visit a parse tree produced by McInstrParser#ExpressionBitwiseNot.
+    def visitExpressionBitwiseNot(self, ctx:McInstrParser.ExpressionBitwiseNotContext):
+        return self.visitChildren(ctx)
+
+
     # Visit a parse tree produced by McInstrParser#ExpressionBinaryLess.
     def visitExpressionBinaryLess(self, ctx:McInstrParser.ExpressionBinaryLessContext):
         return self.visitChildren(ctx)
@@ -254,6 +259,11 @@ class McInstrVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
+    # Visit a parse tree produced by McInstrParser#ExpressionBitwiseOr.
+    def visitExpressionBitwiseOr(self, ctx:McInstrParser.ExpressionBitwiseOrContext):
+        return self.visitChildren(ctx)
+
+
     # Visit a parse tree produced by McInstrParser#ExpressionBinaryLessEqual.
     def visitExpressionBinaryLessEqual(self, ctx:McInstrParser.ExpressionBinaryLessEqualContext):
         return self.visitChildren(ctx)
@@ -261,6 +271,11 @@ class McInstrVisitor(ParseTreeVisitor):
 
     # Visit a parse tree produced by McInstrParser#ExpressionArrayAccess.
     def visitExpressionArrayAccess(self, ctx:McInstrParser.ExpressionArrayAccessContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by McInstrParser#ExpressionBitwiseAnd.
+    def visitExpressionBitwiseAnd(self, ctx:McInstrParser.ExpressionBitwiseAndContext):
         return self.visitChildren(ctx)
 
 
@@ -324,11 +339,6 @@ class McInstrVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
-    # Visit a parse tree produced by McInstrParser#ExpressionExponentiation.
-    def visitExpressionExponentiation(self, ctx:McInstrParser.ExpressionExponentiationContext):
-        return self.visitChildren(ctx)
-
-
     # Visit a parse tree produced by McInstrParser#ExpressionBinaryLeftShift.
     def visitExpressionBinaryLeftShift(self, ctx:McInstrParser.ExpressionBinaryLeftShiftContext):
         return self.visitChildren(ctx)
@@ -361,6 +371,11 @@ class McInstrVisitor(ParseTreeVisitor):
 
     # Visit a parse tree produced by McInstrParser#ExpressionPointerAccess.
     def visitExpressionPointerAccess(self, ctx:McInstrParser.ExpressionPointerAccessContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by McInstrParser#ExpressionBitwiseXor.
+    def visitExpressionBitwiseXor(self, ctx:McInstrParser.ExpressionBitwiseXorContext):
         return self.visitChildren(ctx)
 
 
