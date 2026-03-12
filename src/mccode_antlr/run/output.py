@@ -47,7 +47,7 @@ def _load_one(path: Path) -> Any:
     return read_mccode_dat(path)
 
 
-def _collect_output(directory: Path) -> 'SimulationOutput':
+def _collect_output(directory: Path, tmpdir:Path | None=None) -> 'SimulationOutput':
     """Scan *directory* recursively and return a :class:`SimulationOutput`.
 
     Every file found is attempted with :func:`_load_one`.  Files that cannot
@@ -59,6 +59,7 @@ def _collect_output(directory: Path) -> 'SimulationOutput':
 
     loaded: dict[str, Any] = {}
     unrecognized: list[Path] = []
+    binary_files: list[Path] = []
     sim_file = None
 
     for path in Path(directory).rglob('*'):
@@ -75,6 +76,10 @@ def _collect_output(directory: Path) -> 'SimulationOutput':
                     sim_file = read_mccode_sim(path)
                 except Exception:
                     pass
+            continue
+        if ext in ('.mcpl', '.gz', '.mcpl.gz'):
+            # Skip even attempting to load these filetypes
+            binary_files.append(path)
             continue
 
         try:
@@ -97,7 +102,9 @@ def _collect_output(directory: Path) -> 'SimulationOutput':
         dats=dats,
         other=other,
         unrecognized=unrecognized,
+        binary_files=binary_files,
         sim_file=sim_file,
+        tmpdir=tmpdir,
     )
 
 
@@ -119,6 +126,7 @@ class SimulationOutput(Mapping):
     * :attr:`other`        — Files loaded by registered custom filters
     * :attr:`loaded`       — Union of *dats* and *other* keyed by stem
     * :attr:`unrecognized` — Files that could not be loaded
+    * :attr: binary_files  — MCPL/GZip files which an instrument might produce
     * :attr:`sim_file`     — Parsed ``mccode.sim`` metadata (or ``None``)
     * :attr:`directory`    — Output directory :class:`~pathlib.Path`
     """
@@ -129,13 +137,17 @@ class SimulationOutput(Mapping):
         dats: dict[str, Any],
         other: dict[str, Any],
         unrecognized: list[Path],
+        binary_files: list[Path],
         sim_file: Any | None,
+        tmpdir: Path | None,
     ):
         self._dats = dats
         self._other = other
         self._unrecognized = list(unrecognized)
+        self._binaries = list(binary_files)
         self._sim_file = sim_file
         self.directory = directory
+        self._tmpdir = tmpdir  # Optionally hold a reference to a temporary directory to keep it alive
 
     # ------------------------------------------------------------------
     # Mapping interface (proxies to dats for backward compatibility)
@@ -173,6 +185,11 @@ class SimulationOutput(Mapping):
     def unrecognized(self) -> list[Path]:
         """Paths of files that could not be loaded by any filter."""
         return list(self._unrecognized)
+
+    @property
+    def binary_files(self) -> list[Path]:
+        """Paths of binary files that were skipped."""
+        return list(self._binaries)
 
     @property
     def sim_file(self) -> Any | None:
