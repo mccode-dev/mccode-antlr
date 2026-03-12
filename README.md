@@ -50,6 +50,7 @@ instr.to_file("BrillouinSpec.instr")
 pip install mccode_antlr                 # latest release
 pip install "mccode_antlr[hdf5]"         # with HDF5 output
 pip install "mccode_antlr[mcpl]"         # with MCPL file support
+pip install "mccode_antlr[ipython]"      # with IPython/Jupyter matcher support
 
 # conda / mamba (conda-forge)
 conda install conda-forge::mccode-antlr
@@ -65,6 +66,29 @@ Full documentation — including a getting-started guide, core concepts, how-to
 guides, and API reference — is at:
 
 **https://mccode-dev.github.io/mccode-antlr/**
+
+## IPython / Jupyter completions
+
+`mccode_antlr` can register an IPython matcher for Python authoring with
+`Assembler` and `Simulation` objects:
+
+```python
+from mccode_antlr.integrations.ipython import register_ipython_matcher
+
+register_ipython_matcher()
+```
+
+Or in IPython / Jupyter:
+
+```python
+%load_ext mccode_antlr.integrations.ipython
+```
+
+This matcher is intended for Python-side completions such as component names,
+component parameter names, and simulation parameter names. It does not provide
+raw McCode DSL completion inside notebook cells. The `%load_ext` path is the
+recommended automatic registration mechanism; importing the module alone does
+not register the matcher as a side effect.
 
 ## Why ANTLR4?
 
