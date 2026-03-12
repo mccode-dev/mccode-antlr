@@ -419,10 +419,22 @@ class SimulationOutputUnitTests(unittest.TestCase):
         from tempfile import TemporaryDirectory
         with TemporaryDirectory() as tmpdir:
             out = self._make_output(tmpdir, extra_files=[
-                ('particle_output.mcpl', b'\x89MCPL binary data\x00'),
+                ('particle_output.bin', b'\x89fake binary data\x00'),
             ])
             unrecognized_names = [p.name for p in out.unrecognized]
-            self.assertIn('particle_output.mcpl', unrecognized_names)
+            self.assertIn('particle_output.bin', unrecognized_names)
+
+    def test_binary_files_contains_binary_files(self):
+        """Files with the extension .mcpl or .gz appear in .binary_files."""
+        from tempfile import TemporaryDirectory
+        with TemporaryDirectory() as tmpdir:
+            out = self._make_output(tmpdir, extra_files=[
+                ('particle_output.mcpl', b'\x89MCPL binary data\x00'),
+                ('particle_output.gz', b'GZPL binary data\x00'),
+            ])
+            binary_names = [p.name for p in out.binary_files]
+            self.assertIn('particle_output.mcpl', binary_names)
+            self.assertIn('particle_output.gz', binary_names)
 
     def test_non_dat_extension_with_mccode_format_is_loaded(self):
         """Files with non-.dat extensions that contain McCode format are loaded."""

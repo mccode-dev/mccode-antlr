@@ -179,14 +179,17 @@ def mccode_compile(instr, directory, flavor: Flavor, target: dict | None = None,
     return binary, def_target
 
 
-def mccode_run_compiled(binary, target, directory: Path | str, parameters: str, capture: bool = True, dry_run: bool = False, use_defaults: bool = False):
+def mccode_run_compiled(
+        binary, target, directory: Path | str, parameters: str, capture: bool = True,
+        dry_run: bool = False, use_defaults: bool = False, tmpdir: Path | None = None
+):
     from mccode_antlr.compiler.c import run_compiled_instrument
     from mccode_antlr.run.output import _collect_output
     from pathlib import Path
 
     yes_flag = '--yes ' if use_defaults else ''
     result = run_compiled_instrument(binary, target, f'--dir {directory} {yes_flag}{parameters}', capture=capture, dry_run=dry_run)
-    return result, _collect_output(Path(directory))
+    return result, _collect_output(Path(directory), tmpdir=tmpdir)
 
 
 def mccode_run_scan(name: str, binary, target, parameters, directory, grid: bool, capture: bool = True, dry_run: bool = False, use_defaults: bool = False, **r_args):

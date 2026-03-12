@@ -31,9 +31,9 @@ class Simulation:
     def __init__(self, instr: Instr, flavor: Flavor):
         self.instr = instr
         self.flavor = flavor
+        self.directory: Path | None = None
         self._binary: Path | None = None
         self._target: CBinaryTarget | None = None
-        self._compile_dir: Path | None = None
         self._tmpdir = None  # TemporaryDirectory when compile() owns the dir
 
     def source(
@@ -48,6 +48,10 @@ class Simulation:
         verbose: bool = False,
         line_directives: bool = False,
     ):
+        """
+        Output the C source code of the instrument to a specified directory or CWD.
+
+        """
         from mccode_antlr.translators.c import CTargetVisitor
         directory = directory or Path()
         config = {
@@ -74,6 +78,7 @@ class Simulation:
         gpu: bool = False,
         process_count: int = 0,
         force: bool = False,
+        create_directory: bool = True,
     ) -> 'Simulation':
         """Compile the instrument to a binary.
 
@@ -88,6 +93,7 @@ class Simulation:
         :param gpu: Compile with OpenACC GPU support.
         :param process_count: MPI process count (0 = system default).
         :param force: Re-compile even if the binary already exists.
+        :param create_directory: Create the directory if it doesn't exist.
         :returns: self, to allow method chaining.
         """
         from os import access, X_OK
@@ -102,11 +108,20 @@ class Simulation:
             if not isinstance(directory, Path):
                 directory = Path(directory)
 
+        if not directory.exists() and create_directory:
+            directory.mkdir(parents=True)
+        if not directory.exists():
+            raise RuntimeError(f"The directory {directory} does not exist, create it or pass `create_directory=True`.")
+        if not directory.is_dir():
+            raise RuntimeError(f"{directory} is not a directory.")
+
         binary_path = directory / self.instr.name
         if binary_path.exists() and access(binary_path, X_OK) and not force:
             self._binary = binary_path
             # Reconstruct a default target so run/scan work without knowing the original settings.
             self._target = CBinaryTarget(mpi=parallel, acc=gpu, count=process_count, nexus=False)
+        elif binary_path.exists() and not access(binary_path, X_OK) and not force:
+            raise RuntimeError(f"{binary_path} exists but is not an executable, overwrite by passing `force=True`.")
         else:
             target = {'mpi': parallel, 'acc': gpu, 'count': process_count, 'nexus': False}
             config = {'enable_trace': trace, 'embed_instrument_file': source, 'verbose': verbose}
@@ -114,7 +129,7 @@ class Simulation:
                 self.instr, binary_path, self.flavor, target=target, config=config, replace=True
             )
 
-        self._compile_dir = directory
+        self.directory = directory
         return self
 
     def _check_compiled(self):
@@ -125,7 +140,7 @@ class Simulation:
 
     def _default_output_dir(self, suffix: str = '') -> Path:
         from datetime import datetime
-        base = self._compile_dir if self._compile_dir is not None else Path('.')
+        base = self.directory if self.directory is not None else Path('.')
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         return base / f'{self.instr.name}{timestamp}{suffix}'
 
@@ -215,7 +230,11 @@ class Simulation:
         runtime_kwargs = self._build_runtime_kwargs(ncount, seed, trace, gravitation, bufsiz, fmt)
         args = regular_mccode_runtime_dict(runtime_kwargs)
         pars = mccode_runtime_parameters(args, concrete)
-        return mccode_run_compiled(self._binary, self._target, output_dir, pars, capture=capture, dry_run=dry_run, use_defaults=use_defaults)
+        return mccode_run_compiled(
+            self._binary, self._target, output_dir, pars,
+            capture=capture, dry_run=dry_run, use_defaults=use_defaults,
+            tmpdir=self._tmpdir
+        )
 
     def scan(
         self,
