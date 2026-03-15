@@ -46,6 +46,8 @@ test = ["gputil==1.4.0", 'pytest', "ipython>=8"]
 hdf5 = ["h5py>=3.11.0"]
 mcpl = ["mcpl>=2.2.0"]
 ipython = ["ipython>=8"]
+display = ["plotly>=5", "pythreejs", "k3d"]
+brep = ["build123d"]
 docs = [
     "mkdocs>=1.6",
     "mkdocs-material>=9.5",
@@ -65,6 +67,7 @@ mcc-antlr = "mccode_antlr.cli.compiler:mcstas_compile"
 mxc-antlr = "mccode_antlr.cli.compiler:mcxtrace_compile"
 mccode-antlr = "mccode_antlr.cli.management:mccode_management"
 mcfmt = "mccode_antlr.cli.format:mcfmt"
+mcdisplay-antlr-step = "mccode_antlr.cli.step:main"
 
 [tool.setuptools_scm]
 

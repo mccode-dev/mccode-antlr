@@ -4,7 +4,10 @@ extracts geometry :class:`~mccode_antlr.display.primitives.Primitive` objects.
 The visitor is driven by the full ANTLR C99 grammar (``CParser``/``CLexer``)
 so it correctly handles:
 
-- Plain primitive calls:  ``circle("xy", 0, 0, 0, r);``
+- Plain primitive calls (shorthand macro form):
+    ``circle("xy", 0, 0, 0, r);``
+- Same calls using the direct ``mcdis_*`` form:
+    ``mcdis_circle("xy", 0, 0, 0, r);``
 - Math in arguments:      ``multiline(5, -xw/2, -yh/2, 0, xw/2, yh/2, 0, ...);``
 - ``if``/``else`` guards: ``if (show_guide) { rectangle(...); }``
   → wrapped in :class:`~mccode_antlr.display.primitives.ConditionalBlock`
@@ -12,6 +15,8 @@ so it correctly handles:
   → wrapped in :class:`~mccode_antlr.display.primitives.LoopBlock`
 - Local variable declarations resolved via the McInstr expression grammar
   (same pattern as :class:`~mccode_antlr.translators.c_listener.EvalCVisitor`).
+
+All recognised call names are listed in :data:`_CANONICAL`.
 
 Public entry point::
 
@@ -31,6 +36,7 @@ from ..common.expression import Expr
 from .primitives import (
     Primitive, Magnify, Line, DashedLine, Multiline, Circle, Rectangle,
     Box, Sphere, Cylinder, Cone, ConditionalBlock, LoopBlock,
+    CircleNormal, Disc, Annulus, Polygon, Polyhedron,
 )
 
 # ---------------------------------------------------------------------------
@@ -39,11 +45,48 @@ from .primitives import (
 
 AnyBlock = Union[Primitive, ConditionalBlock, LoopBlock]
 
-_DISPLAY_PRIMITIVES = frozenset({
-    'magnify', 'line', 'dashed_line', 'multiline',
-    'rectangle', 'box', 'circle', 'sphere',
-    'cylinder', 'cone', 'polygon', 'polyhedron',
-})
+# Maps every recognised call name (both shorthand macro form and mcdis_* direct-call
+# form) to a canonical key consumed by _build_primitive.
+_CANONICAL: dict[str, str] = {
+    # --- shorthand macro names (used in component .comp source) ---
+    'magnify':          'magnify',
+    'line':             'line',
+    'dashed_line':      'dashed_line',
+    'multiline':        'multiline',
+    'circle':           'circle',
+    'Circle':           'circle_normal',
+    'new_circle':       'circle_normal',
+    'rectangle':        'rectangle',
+    'box':              'box',
+    'legacy_box':       'legacy_box',
+    'sphere':           'sphere',
+    'cylinder':         'cylinder',
+    'legacy_cylinder':  'legacy_cylinder',
+    'cone':             'cone',
+    'disc':             'disc',
+    'annulus':          'annulus',
+    'polygon':          'polygon',
+    'polyhedron':       'polyhedron',
+    # --- mcdis_* direct-call names (also valid in .comp source) ---
+    'mcdis_magnify':         'magnify',
+    'mcdis_line':            'line',
+    'mcdis_dashed_line':     'dashed_line',
+    'mcdis_multiline':       'multiline',
+    'mcdis_circle':          'circle',
+    'mcdis_Circle':          'circle_normal',
+    'mcdis_new_circle':      'circle_normal',
+    'mcdis_rectangle':       'rectangle',
+    'mcdis_box':             'box',
+    'mcdis_legacy_box':      'legacy_box',
+    'mcdis_sphere':          'sphere',
+    'mcdis_cylinder':        'cylinder',
+    'mcdis_legacy_cylinder': 'legacy_cylinder',
+    'mcdis_cone':            'cone',
+    'mcdis_disc':            'disc',
+    'mcdis_annulus':         'annulus',
+    'mcdis_polygon':         'polygon',
+    'mcdis_polyhedron':      'polyhedron',
+}
 
 
 def _literal(ctx) -> str:
@@ -120,7 +163,7 @@ def _parse_arg(s: str, local_vars: dict[str, Expr]) -> Expr | str:
 
 
 def _build_primitive(name: str, args: list, local_vars: dict[str, Expr]) -> Primitive | None:
-    """Construct the appropriate Primitive from a parsed call."""
+    """Construct the appropriate Primitive from a canonical name and parsed args."""
     # Always parse each arg through _parse_arg so quoted strings are unquoted
     # and expression strings are converted to Expr objects.
     parsed = [_parse_arg(str(a), local_vars) for a in args]
@@ -156,22 +199,73 @@ def _build_primitive(name: str, args: list, local_vars: dict[str, Expr]) -> Prim
             return Multiline(points)
         if name == 'circle':
             return Circle(_s(0), _e(1), _e(2), _e(3), _e(4))
+        if name == 'circle_normal':
+            return CircleNormal(_e(0), _e(1), _e(2), _e(3), _e(4), _e(5), _e(6))
         if name == 'rectangle':
             return Rectangle(_s(0), _e(1), _e(2), _e(3), _e(4), _e(5))
         if name == 'box':
+            # Old form: box(cx,cy,cz, xw,yh,zd)               — 6 args
+            # New form: box(x,y,z, w,h,l, thickness, nx,ny,nz) — 10 args
+            thickness = _e(6, 0) if len(parsed) > 6 else Expr.float(0)
+            nx = _e(7, 0) if len(parsed) > 7 else Expr.float(0)
+            ny = _e(8, 1) if len(parsed) > 8 else Expr.float(1)
+            nz = _e(9, 0) if len(parsed) > 9 else Expr.float(0)
+            return Box(_e(0), _e(1), _e(2), _e(3), _e(4), _e(5), thickness, nx, ny, nz)
+        if name == 'legacy_box':
+            # mcdis_legacy_box(x,y,z,width,height,length) — always 6 args, no thickness
             return Box(_e(0), _e(1), _e(2), _e(3), _e(4), _e(5))
         if name == 'sphere':
             return Sphere(_e(0), _e(1), _e(2), _e(3))
         if name == 'cylinder':
-            nx = _e(5, 0) if len(parsed) > 5 else Expr.float(0)
-            ny = _e(6, 1) if len(parsed) > 6 else Expr.float(1)
-            nz = _e(7, 0) if len(parsed) > 7 else Expr.float(0)
-            return Cylinder(_e(0), _e(1), _e(2), _e(3), _e(4), nx, ny, nz)
+            # Old form: cylinder(cx,cy,cz, r,h[, nx,ny,nz])        — 5 or 8 args
+            # New form: cylinder(x,y,z, r,h, thickness, nx,ny,nz)  — 9 args
+            # Distinguish: if arg[5] looks like a normal component (new form),
+            # use it as thickness; otherwise fall back to old nx position.
+            if len(parsed) == 9:
+                # unambiguously new form
+                thickness = _e(5, 0)
+                nx, ny, nz = _e(6, 0), _e(7, 1), _e(8, 0)
+            elif len(parsed) >= 8:
+                # old form had nx,ny,nz at positions 5,6,7
+                thickness = Expr.float(0)
+                nx, ny, nz = _e(5, 0), _e(6, 1), _e(7, 0)
+            else:
+                thickness = Expr.float(0)
+                nx, ny, nz = Expr.float(0), Expr.float(1), Expr.float(0)
+            return Cylinder(_e(0), _e(1), _e(2), _e(3), _e(4), thickness, nx, ny, nz)
+        if name == 'legacy_cylinder':
+            # mcdis_legacy_cylinder(x,y,z,r,height,N,nx,ny,nz) — N (int lines) is ignored
+            nx = _e(6, 0) if len(parsed) > 6 else Expr.float(0)
+            ny = _e(7, 1) if len(parsed) > 7 else Expr.float(1)
+            nz = _e(8, 0) if len(parsed) > 8 else Expr.float(0)
+            return Cylinder(_e(0), _e(1), _e(2), _e(3), _e(4),
+                            Expr.float(0), nx, ny, nz)
         if name == 'cone':
             nx = _e(5, 0) if len(parsed) > 5 else Expr.float(0)
             ny = _e(6, 1) if len(parsed) > 6 else Expr.float(1)
             nz = _e(7, 0) if len(parsed) > 7 else Expr.float(0)
             return Cone(_e(0), _e(1), _e(2), _e(3), _e(4), nx, ny, nz)
+        if name == 'disc':
+            return Disc(_e(0), _e(1), _e(2), _e(3), _e(4), _e(5), _e(6))
+        if name == 'annulus':
+            return Annulus(_e(0), _e(1), _e(2), _e(3), _e(4), _e(5), _e(6), _e(7))
+        if name == 'polygon':
+            # polygon(count, x1,y1,z1, ...) — variadic like multiline but closed
+            count_expr = _e(0)
+            try:
+                count = int(float(count_expr.simplify()))
+            except Exception:
+                count = (len(parsed) - 1) // 3
+            points = []
+            for i in range(count):
+                base = 1 + 3 * i
+                points.append((_e(base), _e(base + 1), _e(base + 2)))
+            return Polygon(points)
+        if name == 'polyhedron':
+            # polyhedron(json_str) — single quoted JSON string argument
+            raw = parsed[0] if parsed else ''
+            json_str = raw if isinstance(raw, str) else str(raw)
+            return Polyhedron(json_str)
     except Exception as exc:
         logger.debug(f'DisplayVisitor: error building {name}: {exc}')
     return None
@@ -297,10 +391,11 @@ class DisplayVisitor(CVisitor):
         if m is None:
             return
         name, args_text = m.group(1), m.group(2)
-        if name not in _DISPLAY_PRIMITIVES:
+        canonical = _CANONICAL.get(name)
+        if canonical is None:
             return
         raw_args = _split_args(args_text)
-        prim = _build_primitive(name, raw_args, self._local_vars)
+        prim = _build_primitive(canonical, raw_args, self._local_vars)
         if prim is not None:
             self._result.append(prim)
 

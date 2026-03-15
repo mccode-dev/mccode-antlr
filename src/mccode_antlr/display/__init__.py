@@ -28,6 +28,7 @@ from .instrument_display import InstrumentDisplay
 from .primitives import (
     Primitive, Magnify, Line, DashedLine, Multiline,
     Circle, Rectangle, Box, Sphere, Cylinder, Cone,
+    CircleNormal, Disc, Annulus, Polygon, Polyhedron,
     ConditionalBlock, LoopBlock,
 )
 from .visitor import parse_display_source
@@ -43,11 +44,16 @@ __all__ = [
     'DashedLine',
     'Multiline',
     'Circle',
+    'CircleNormal',
     'Rectangle',
     'Box',
     'Sphere',
     'Cylinder',
     'Cone',
+    'Disc',
+    'Annulus',
+    'Polygon',
+    'Polyhedron',
     'ConditionalBlock',
     'LoopBlock',
 ]
