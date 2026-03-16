@@ -71,7 +71,7 @@ class Comp(Struct):
         return comp
 
     def __hash__(self):
-        return hash(repr(self))
+        return hash(self.name)
 
     def has_parameter(self, name: str):
         return parameter_name_present(self.define, name) or parameter_name_present(self.setting, name)
