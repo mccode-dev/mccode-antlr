@@ -46,9 +46,13 @@ class Instance(Struct):
         return True
 
     def __hash__(self):
+        def _ref_id(ref):
+            return ref.name if ref is not None else None
         return hash((
-            self.name, self.type, self.at_relative, self.rotate_relative,
-            self.orientation, self.parameters, self.removable, self.cpu, self.split,
+            self.name, self.type,
+            (self.at_relative[0], _ref_id(self.at_relative[1])),
+            (self.rotate_relative[0], _ref_id(self.rotate_relative[1])),
+            self.parameters, self.removable, self.cpu, self.split,
             self.when, self.group, self.extend, self.jump, self.metadata, self.mode
         ))
 
