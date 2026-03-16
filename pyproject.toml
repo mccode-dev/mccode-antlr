@@ -21,6 +21,7 @@ dependencies = [
     'packaging',
     'pyyaml',
     "networkx>=3.0",
+    "scipp>=24.2.0",
 ]
 description = "ANTLR4 grammars for McStas and McXtrace"
 readme = "README.md"
@@ -48,6 +49,7 @@ mcpl = ["mcpl>=2.2.0"]
 ipython = ["ipython>=8"]
 display = ["plotly>=5", "pythreejs", "k3d"]
 brep = ["build123d"]
+scipp = ["scipp"]
 docs = [
     "mkdocs>=1.6",
     "mkdocs-material>=9.5",

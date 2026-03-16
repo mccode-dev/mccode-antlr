@@ -52,10 +52,11 @@ class TestCompiledInstr(TestCase):
         self.assertEqual(dats['m3'].data.shape, (3, 160, 100))
         self.assertEqual(dats['detector'].data.shape, (3, ))
 
+        zero =  0 * dats['m0']['I'].data.sum()  # scipp requires equal-units for comparison
         # Moving farther from the source means less (but finite) intensity in equivalent monitors
-        self.assertTrue(sum(sum(dats['m0']['I'])) > sum(sum(dats['m1']['I'])) > sum(sum(dats['m3']['I'])) > 0)
+        self.assertTrue(dats['m0']['I'].data.sum() > dats['m1']['I'].data.sum() > dats['m3']['I'].data.sum() > zero)
         # The detector has been positioned correctly to collect intensity
-        self.assertTrue(dats['detector']['I'] > 0)
+        self.assertTrue(dats['detector']['I'].data.sum() > zero)
 
     @compiled_test
     def test_assembled_parameters(self):

@@ -16,3 +16,4 @@
 *.pdb
 site/
 *.ipynb_checkpoints*
+uv.lock
