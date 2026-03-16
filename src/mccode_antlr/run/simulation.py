@@ -4,6 +4,7 @@ from pathlib import Path
 from mccode_antlr import Flavor
 from mccode_antlr.instr import Instr
 from mccode_antlr.compiler.c import CBinaryTarget
+from mccode_antlr.run.output import RunOutput
 
 
 class Simulation:
@@ -230,11 +231,13 @@ class Simulation:
         runtime_kwargs = self._build_runtime_kwargs(ncount, seed, trace, gravitation, bufsiz, fmt)
         args = regular_mccode_runtime_dict(runtime_kwargs)
         pars = mccode_runtime_parameters(args, concrete)
-        return mccode_run_compiled(
+        stdout, sim_out = mccode_run_compiled(
             self._binary, self._target, output_dir, pars,
             capture=capture, dry_run=dry_run, use_defaults=use_defaults,
             tmpdir=self._tmpdir
         )
+        return RunOutput(stdout.decode(), concrete, sim_out)
+
 
     def scan(
         self,
@@ -250,7 +253,7 @@ class Simulation:
         fmt: str | None = None,
         dry_run: bool = False,
         capture: bool = True,
-    ) -> list:
+    ) -> 'ScanOutput':
         """Run a parameter scan.
 
         :param parameters: Dict mapping instrument parameter names to range specifications.
@@ -278,10 +281,14 @@ class Simulation:
         :param fmt: Output data format.
         :param dry_run: Print commands without executing.
         :param capture: Capture subprocess output.
-        :returns: List of ``(result, dats)`` tuples, one per scan point.
+        :returns: :class:`~mccode_antlr.run.output.ScanOutput` with one
+            :class:`~mccode_antlr.run.output.RunOutput` per scan point and an
+            :attr:`~mccode_antlr.run.output.ScanOutput.axes` mapping of the
+            normalised parameter ranges.
         :raises RuntimeError: If :meth:`compile` has not been called first.
         """
         from mccode_antlr.run.runner import mccode_run_scan
+        from mccode_antlr.run.output import ScanOutput
 
         self._check_compiled()
 
@@ -299,7 +306,7 @@ class Simulation:
         output_dir = Path(output_dir)
 
         runtime_kwargs = self._build_runtime_kwargs(ncount, seed, trace, gravitation, bufsiz, fmt)
-        return mccode_run_scan(
+        list_stdout_output = mccode_run_scan(
             self.instr.name,
             self._binary,
             self._target,
@@ -310,6 +317,27 @@ class Simulation:
             dry_run=dry_run,
             use_defaults=use_defaults,
             **runtime_kwargs,
+        )
+
+        from mccode_antlr.run.range import parameters_to_scan
+        from mccode_antlr.run.output import RunOutput
+        _, names, scan_pts = parameters_to_scan(normalized, grid=grid)
+        scan_pts_list = list(scan_pts)
+        # When no parameters are varied there is one run with no varied params
+        if not scan_pts_list and list_stdout_output:
+            scan_pts_list = [[] for _ in list_stdout_output]
+        points = tuple(
+            RunOutput(
+                stdout=(stdout.decode() if isinstance(stdout, bytes) else stdout),
+                parameters=dict(zip(names, values)),
+                output=sim_out,
+            )
+            for (stdout, sim_out), values in zip(list_stdout_output, scan_pts_list)
+        )
+        return ScanOutput(
+            grid=grid,
+            points=points,
+            axes=normalized,
         )
 
     @staticmethod

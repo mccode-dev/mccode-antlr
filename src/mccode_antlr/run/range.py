@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterator, Mapping
 from typing import Union
 
 
@@ -278,11 +279,70 @@ def parameters_to_scan(parameters: dict[str, Union[list, MRange, EList, Singular
 
 
 def _make_scanned_parameter(s: str):
+    s = s.strip()
+    if s.startswith('[') and s.endswith(']'):
+        s = s[1:-1]
     if ':' in s:
         return MRange.from_str(s)
     elif ',' in s:
         return EList.from_str(s)
     return Singular.from_str(s)
+
+
+class Coords(Mapping):
+    """Axis coordinate access for simulation results, similar to :mod:`xarray` coords.
+
+    Values are :class:`ParameterValues` instances (:class:`MRange`, :class:`EList`,
+    :class:`Singular`) describing the axis each parameter takes in a scan, or bare
+    scalars for single-run results.
+
+    Supports both key access (``coords['a']``) and attribute access (``coords.a``).
+    """
+
+    def __init__(self, axes: dict[str, ParameterValues | object]):
+        self._axes: dict[str, ParameterValues | object] = dict(axes)
+
+    # --- Mapping interface ---------------------------------------------------
+
+    def __getitem__(self, key: str) -> ParameterValues | object:
+        return self._axes[key]
+
+    def __len__(self) -> int:
+        return len(self._axes)
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._axes)
+
+    def __contains__(self, key: object) -> bool:
+        return key in self._axes
+
+    # --- Attribute-style access (coords.a) -----------------------------------
+
+    def __getattr__(self, name: str) -> ParameterValues | object:
+        if name.startswith('_'):
+            raise AttributeError(name)
+        try:
+            return self._axes[name]
+        except KeyError:
+            raise AttributeError(f"Coords has no axis '{name}'") from None
+
+    # --- Representation ------------------------------------------------------
+
+    def __repr__(self) -> str:
+        if not self._axes:
+            return "Coords()"
+        lines = [f"Coords({len(self._axes)} axes):"]
+        for name, vals in self._axes.items():
+            if isinstance(vals, MRange):
+                detail = f"MRange [{vals.start}:{vals.step}:{vals.stop}], {len(vals)} pts"
+            elif isinstance(vals, EList):
+                detail = f"EList {vals.values}, {len(vals)} pts"
+            elif isinstance(vals, Singular):
+                detail = f"Singular({vals.value})"
+            else:
+                detail = repr(vals)
+            lines.append(f"  * {name}: {detail}")
+        return "\n".join(lines)
 
 
 def parse_command_line_parameters(unparsed: list[str]) -> dict[str, Union[Singular, EList, MRange]]:

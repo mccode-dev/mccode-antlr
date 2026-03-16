@@ -179,37 +179,36 @@ class SimulationCompileRunTests(unittest.TestCase):
 
     @compiled_test
     def test_run_single_point(self):
-        """run() executes a single simulation and returns (result, dats)."""
+        """run() executes a single simulation and returns a RunOutput."""
         from tempfile import TemporaryDirectory
-        from mccode_antlr.run import McStas
+        from mccode_antlr.run import McStas, RunOutput
 
         with TemporaryDirectory() as tmpdir:
             sim = McStas(_simple_instr()).compile(tmpdir)
-            result, dats = sim.run({'value': 1.5}, ncount=10, seed=1)
-            # result is a bytes object (captured stdout) or similar
-            self.assertIsNotNone(result)
-            self.assertIsInstance(dats, Mapping)  # SimulationOutput is a Mapping (dict-like)
-        """McStas(instr).compile(dir).run(params) works as a one-liner."""
-        from tempfile import TemporaryDirectory
-        from mccode_antlr.run import McStas
+            out = sim.run({'value': 1.5}, ncount=10, seed=1)
+            self.assertIsInstance(out, RunOutput)
+            self.assertIsNotNone(out.stdout)
+            self.assertIsInstance(out.output, Mapping)  # SimulationOutput is a Mapping
 
+        """McStas(instr).compile(dir).run(params) works as a one-liner."""
         with TemporaryDirectory() as tmpdir:
-            result, dats = McStas(_simple_instr()).compile(tmpdir).run({'value': 2.0}, ncount=5, seed=42)
-            self.assertIsNotNone(result)
+            out = McStas(_simple_instr()).compile(tmpdir).run({'value': 2.0}, ncount=5, seed=42)
+            self.assertIsInstance(out, RunOutput)
 
     @compiled_test
-    def test_scan_linear_returns_list(self):
-        """scan() with a range returns one (result, dats) per scan point."""
+    def test_scan_linear_returns_scan_output(self):
+        """scan() with a range returns a ScanOutput with one RunOutput per scan point."""
         from tempfile import TemporaryDirectory
-        from mccode_antlr.run import McStas
+        from mccode_antlr.run import McStas, ScanOutput, RunOutput
 
         with TemporaryDirectory() as tmpdir:
             sim = McStas(_counting_instr()).compile(tmpdir)
             results = sim.scan({'x': '1:1:3', 'y': 0.0}, ncount=5, seed=1)
+            self.assertIsInstance(results, ScanOutput)
             self.assertEqual(len(results), 3)
-            for result, dats in results:
-                self.assertIsNotNone(result)
-                self.assertIsInstance(dats, Mapping)
+            for point in results:
+                self.assertIsInstance(point, RunOutput)
+                self.assertIsInstance(point.output, Mapping)
 
     @compiled_test
     def test_scan_explicit_list(self):
@@ -249,37 +248,37 @@ class SimulationCompileRunTests(unittest.TestCase):
     def test_run_with_no_parameters_uses_defaults(self):
         """run() with no parameters passes --yes so binary uses compiled-in defaults."""
         from tempfile import TemporaryDirectory
-        from mccode_antlr.run import McStas
+        from mccode_antlr.run import McStas, RunOutput
 
         with TemporaryDirectory() as tmpdir:
             sim = McStas(_simple_instr()).compile(tmpdir)
-            result, dats = sim.run(ncount=5, seed=1)
-            self.assertIsNotNone(result)
-            self.assertIsInstance(dats, Mapping)
+            out = sim.run(ncount=5, seed=1)
+            self.assertIsInstance(out, RunOutput)
+            self.assertIsInstance(out.output, Mapping)
 
     @compiled_test
     def test_run_with_empty_dict_uses_defaults(self):
         """run({}) also passes --yes so the binary uses compiled-in defaults."""
         from tempfile import TemporaryDirectory
-        from mccode_antlr.run import McStas
+        from mccode_antlr.run import McStas, RunOutput
 
         with TemporaryDirectory() as tmpdir:
             sim = McStas(_simple_instr()).compile(tmpdir)
-            result, dats = sim.run({}, ncount=5, seed=1)
-            self.assertIsNotNone(result)
+            out = sim.run({}, ncount=5, seed=1)
+            self.assertIsInstance(out, RunOutput)
 
     @compiled_test
     def test_scan_with_no_parameters_uses_defaults(self):
         """scan() with no parameters runs once using --yes for compiled-in defaults."""
         from tempfile import TemporaryDirectory
-        from mccode_antlr.run import McStas
+        from mccode_antlr.run import McStas, ScanOutput
 
         with TemporaryDirectory() as tmpdir:
             sim = McStas(_simple_instr()).compile(tmpdir)
             results = sim.scan(ncount=5, seed=1)
+            self.assertIsInstance(results, ScanOutput)
             self.assertEqual(len(results), 1)
-            result, dats = results[0]
-            self.assertIsNotNone(result)
+            self.assertIsNotNone(results[0].stdout)
 
 
 # ---------------------------------------------------------------------------
@@ -528,15 +527,16 @@ class SimulationOutputUnitTests(unittest.TestCase):
 
     @compiled_test
     def test_run_returns_simulation_output(self):
-        """sim.run() returns a SimulationOutput, not a plain dict."""
+        """sim.run() returns a RunOutput whose .output is a SimulationOutput."""
         from tempfile import TemporaryDirectory
         from mccode_antlr.run import McStas, SimulationOutput
+        from mccode_antlr.run.output import RunOutput
 
         with TemporaryDirectory() as tmpdir:
             sim = McStas(_simple_instr()).compile(tmpdir)
-            result, out = sim.run(ncount=5, seed=1)
-            self.assertIsInstance(out, SimulationOutput)
-            self.assertIsNotNone(result)
+            result = sim.run(ncount=5, seed=1)
+            self.assertIsInstance(result, RunOutput)
+            self.assertIsInstance(result.output, SimulationOutput)
 
     @compiled_test
     def test_simulation_output_is_mapping(self):
@@ -547,12 +547,12 @@ class SimulationOutputUnitTests(unittest.TestCase):
 
         with TemporaryDirectory() as tmpdir:
             sim = McStas(_simple_instr()).compile(tmpdir)
-            result, out = sim.run(ncount=5, seed=1)
-            self.assertIsInstance(out, Mapping)
+            result = sim.run(ncount=5, seed=1)
+            self.assertIsInstance(result.output, Mapping)
             # dict-like operations must work
-            _ = list(out.keys())
-            _ = list(out.values())
-            _ = list(out.items())
+            _ = list(result.output.keys())
+            _ = list(result.output.values())
+            _ = list(result.output.items())
 
 
 if __name__ == '__main__':
