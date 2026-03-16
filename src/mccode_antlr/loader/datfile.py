@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from warnings import deprecated
+from typing_extensions import deprecated
 
 from dataclasses import dataclass, field
 from typing import Any, Union
