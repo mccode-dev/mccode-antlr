@@ -44,3 +44,17 @@ def mcpl_compiled_test(method):
             return method(*args, **kwargs)
     return method
 
+
+@cache
+def scipp_available():
+    from importlib.util import find_spec
+    return find_spec('scipp') is not None
+
+
+def scipp_test(method):
+    if not scipp_available():
+        @pytest.mark.skip(reason='scipp is not available')
+        def no_scipp(*args, **kwargs):
+            return method(*args, **kwargs)
+        return no_scipp
+    return method

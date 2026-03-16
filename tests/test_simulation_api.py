@@ -7,7 +7,7 @@ import pytest
 
 from mccode_antlr.loader import parse_mcstas_instr
 from mccode_antlr.test import compiled_test
-
+from mccode_antlr.test import scipp_test
 
 # ---------------------------------------------------------------------------
 # Minimal instrument fixtures
@@ -378,12 +378,14 @@ class SimulationOutputUnitTests(unittest.TestCase):
 
         return _collect_output(d)
 
+    @scipp_test
     def test_dats_contains_known_dat_file(self):
         from tempfile import TemporaryDirectory
         with TemporaryDirectory() as tmpdir:
             out = self._make_output(tmpdir)
             self.assertIn('mon', out.dats)
 
+    @scipp_test
     def test_mapping_interface_getitem(self):
         """out['mon'] works like the old dats['mon']."""
         from tempfile import TemporaryDirectory
@@ -392,12 +394,14 @@ class SimulationOutputUnitTests(unittest.TestCase):
             item = out['mon']
             self.assertIsNotNone(item)
 
+    @scipp_test
     def test_mapping_interface_len(self):
         from tempfile import TemporaryDirectory
         with TemporaryDirectory() as tmpdir:
             out = self._make_output(tmpdir)
             self.assertEqual(len(out), 1)  # only 'mon'; .sim is excluded
 
+    @scipp_test
     def test_mapping_interface_iter(self):
         from tempfile import TemporaryDirectory
         with TemporaryDirectory() as tmpdir:
@@ -435,6 +439,7 @@ class SimulationOutputUnitTests(unittest.TestCase):
             self.assertIn('particle_output.mcpl', binary_names)
             self.assertIn('particle_output.gz', binary_names)
 
+    @scipp_test
     def test_non_dat_extension_with_mccode_format_is_loaded(self):
         """Files with non-.dat extensions that contain McCode format are loaded."""
         from tempfile import TemporaryDirectory
@@ -502,6 +507,7 @@ class SimulationOutputUnitTests(unittest.TestCase):
         finally:
             _LOAD_FILTERS.pop('.xyz', None)
 
+    @scipp_test
     def test_loaded_combines_dats_and_other(self):
         """out.loaded includes both dats and other keyed entries."""
         from tempfile import TemporaryDirectory
