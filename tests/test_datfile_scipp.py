@@ -7,6 +7,8 @@ import tempfile
 
 import numpy as np
 
+from mccode_antlr.test import scipp_test
+
 # ---------------------------------------------------------------------------
 # Helpers to write minimal McCode .dat content to a temp file
 # ---------------------------------------------------------------------------
@@ -136,47 +138,57 @@ class TestDatFile0D(unittest.TestCase):
         from mccode_antlr.loader.datfile import read_mccode_dat
         return read_mccode_dat(self.path)
 
+    @scipp_test
     def test_type(self):
         from mccode_antlr.loader.datfile import DatFile0D
         dat = self._load()
         self.assertIsInstance(dat, DatFile0D)
 
+    @scipp_test
     def test_dataset_keys(self):
         import scipp as sc
         dat = self._load()
         self.assertIn('I', dat.dataset)
         self.assertIn('N', dat.dataset)
 
+    @scipp_test
     def test_I_value(self):
         dat = self._load()
         self.assertAlmostEqual(float(dat.dataset['I'].value), 1234.5, places=3)
 
+    @scipp_test
     def test_I_variance(self):
         dat = self._load()
         self.assertAlmostEqual(float(dat.dataset['I'].variance), 6.78 ** 2, places=3)
 
+    @scipp_test
     def test_N_value(self):
         dat = self._load()
         self.assertAlmostEqual(float(dat.dataset['N'].value), 9000, places=1)
 
+    @scipp_test
     def test_getitem_I_err(self):
         dat = self._load()
         self.assertAlmostEqual(float(dat['I_err']), 6.78, places=3)
 
+    @scipp_test
     def test_backward_compat_data_property(self):
         dat = self._load()
         arr = dat.data[0]
         self.assertAlmostEqual(float(arr), 1234.5, places=3)
 
+    @scipp_test
     def test_backward_compat_variables_property(self):
         dat = self._load()
         self.assertIn('I', dat.variables)
         self.assertIn('N', dat.variables)
 
+    @scipp_test
     def test_metadata_accessible(self):
         dat = self._load()
         self.assertEqual(dat.metadata['component'], 'Monitor_0D')
 
+    @scipp_test
     def test_add_combines_correctly(self):
         dat1 = self._load()
         dat2 = self._load()  # independent load
@@ -198,55 +210,66 @@ class TestDatFile1D(unittest.TestCase):
         from mccode_antlr.loader.datfile import read_mccode_dat
         return read_mccode_dat(self.path)
 
+    @scipp_test
     def test_type(self):
         from mccode_antlr.loader.datfile import DatFile1D
         dat = self._load()
         self.assertIsInstance(dat, DatFile1D)
 
+    @scipp_test
     def test_dataset_keys(self):
         dat = self._load()
         self.assertIn('I', dat.dataset)
         self.assertIn('N', dat.dataset)
 
+    @scipp_test
     def test_I_shape(self):
         dat = self._load()
         self.assertEqual(dat.dataset['I'].shape, (5,))
 
+    @scipp_test
     def test_I_values(self):
         dat = self._load()
         np.testing.assert_allclose(dat.dataset['I'].values, [1, 2, 3, 4, 5])
 
+    @scipp_test
     def test_I_variances(self):
         dat = self._load()
         expected = np.array([0.1, 0.2, 0.3, 0.4, 0.5]) ** 2
         np.testing.assert_allclose(dat.dataset['I'].variances, expected, rtol=1e-5)
 
+    @scipp_test
     def test_x_coord_present(self):
         dat = self._load()
         self.assertTrue(len(dat.dataset['I'].coords) > 0)
 
+    @scipp_test
     def test_x_coord_values(self):
         dat = self._load()
         # First coordinate (the x axis) should have 5 bin centres 0.5…4.5
         coord = next(iter(dat.dataset['I'].coords.values()))
         np.testing.assert_allclose(coord.values, [0.5, 1.5, 2.5, 3.5, 4.5], rtol=1e-5)
 
+    @scipp_test
     def test_x_coord_unit(self):
         import scipp as sc
         dat = self._load()
         coord = next(iter(dat.dataset['I'].coords.values()))
         self.assertEqual(coord.unit, sc.Unit('m'))
 
+    @scipp_test
     def test_backward_compat_data(self):
         dat = self._load()
         arr = dat.data[0]
         np.testing.assert_allclose(arr, [1, 2, 3, 4, 5])
 
+    @scipp_test
     def test_getitem_I_err(self):
         dat = self._load()
         err = dat['I_err']
         np.testing.assert_allclose(err, [0.1, 0.2, 0.3, 0.4, 0.5], rtol=1e-5)
 
+    @scipp_test
     def test_add_propagates_variance(self):
         dat1 = self._load()
         dat2 = self._load()  # independent load
@@ -269,20 +292,24 @@ class TestDatFile2D(unittest.TestCase):
         from mccode_antlr.loader.datfile import read_mccode_dat
         return read_mccode_dat(self.path)
 
+    @scipp_test
     def test_type(self):
         from mccode_antlr.loader.datfile import DatFile2D
         dat = self._load()
         self.assertIsInstance(dat, DatFile2D)
 
+    @scipp_test
     def test_I_shape(self):
         dat = self._load()
         self.assertEqual(dat.dataset['I'].shape, (2, 3))
 
+    @scipp_test
     def test_I_values(self):
         dat = self._load()
         expected = np.array([[10, 20, 30], [40, 50, 60]], dtype=float)
         np.testing.assert_allclose(dat.dataset['I'].values, expected)
 
+    @scipp_test
     def test_y_coord_unit(self):
         import scipp as sc
         dat = self._load()
@@ -294,6 +321,7 @@ class TestDatFile2D(unittest.TestCase):
                 break
         self.assertIsNotNone(y_coord, "Expected a coord with angstrom unit for y-axis [AA]")
 
+    @scipp_test
     def test_add_propagates_variance(self):
         dat1 = self._load()
         dat2 = self._load()  # independent load
@@ -305,31 +333,37 @@ class TestDatFile2D(unittest.TestCase):
 
 
 class TestUnitMapping(unittest.TestCase):
+    @scipp_test
     def test_angstrom(self):
         import scipp as sc
         from mccode_antlr.loader._units import parse_mccode_unit
         self.assertEqual(parse_mccode_unit('AA'), sc.Unit('angstrom'))
 
+    @scipp_test
     def test_inverse_angstrom(self):
         import scipp as sc
         from mccode_antlr.loader._units import parse_mccode_unit
         self.assertEqual(parse_mccode_unit('AA^-1'), sc.Unit('1/angstrom'))
 
+    @scipp_test
     def test_microseconds(self):
         import scipp as sc
         from mccode_antlr.loader._units import parse_mccode_unit
         self.assertEqual(parse_mccode_unit('microseconds'), sc.Unit('us'))
 
+    @scipp_test
     def test_mccode_escape(self):
         import scipp as sc
         from mccode_antlr.loader._units import parse_mccode_unit
         self.assertEqual(parse_mccode_unit('\\gms'), sc.Unit('us'))
 
+    @scipp_test
     def test_meters(self):
         import scipp as sc
         from mccode_antlr.loader._units import parse_mccode_unit
         self.assertEqual(parse_mccode_unit('m'), sc.Unit('m'))
 
+    @scipp_test
     def test_label_unit_parsing(self):
         import scipp as sc
         from mccode_antlr.loader._units import parse_mccode_label_unit
@@ -337,6 +371,7 @@ class TestUnitMapping(unittest.TestCase):
         self.assertEqual(label, 'x-axis')
         self.assertEqual(unit, sc.Unit('m'))
 
+    @scipp_test
     def test_label_without_unit(self):
         import scipp as sc
         from mccode_antlr.loader._units import parse_mccode_label_unit
