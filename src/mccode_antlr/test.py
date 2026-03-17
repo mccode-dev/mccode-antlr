@@ -58,3 +58,18 @@ def scipp_test(method):
             return method(*args, **kwargs)
         return no_scipp
     return method
+
+
+@cache
+def ipython_available():
+    from importlib.util import find_spec
+    return find_spec('IPython') is not None
+
+
+def ipython_test(method):
+    if not scipp_available():
+        @pytest.mark.skip(reason='ipython is not available')
+        def no_ipython(*args, **kwargs):
+            return method(*args, **kwargs)
+        return no_ipython
+    return method
