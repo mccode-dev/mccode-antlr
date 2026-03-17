@@ -21,6 +21,7 @@ jobs:
       matrix:
         platform: [windows-latest, macos-latest, ubuntu-latest]
         python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+        strategy: [".", ".[test,hdf5,mcpl]"]
 
     steps:
     - uses: actions/checkout@v6
@@ -38,8 +39,10 @@ jobs:
       if: runner.os == 'Windows'
       uses: ilammy/msvc-dev-cmd@v1
 
-    - name: Build and install with testing dependencies including HDF5 and MCPL
-      run: pip install --verbose '.[test,hdf5,mcpl]'
+    - name: "Build and install strategy = ${{ matrix.strategy }}"
+      run: |
+        pip install --verbose ${{ matrix.strategy }}
+        pip install --verbose pytest
 
     - name: Locate pooch cache directory
       id: pooch-cache-dir

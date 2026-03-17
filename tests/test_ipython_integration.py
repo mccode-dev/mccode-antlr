@@ -2,19 +2,12 @@ from __future__ import annotations
 
 from textwrap import dedent
 
-from IPython.core.completer import CompletionContext, IPCompleter, provisionalcompleter
-
 from mccode_antlr import Flavor
 from mccode_antlr.assembler import Assembler
-from mccode_antlr.integrations.ipython import (
-    McCodeIPythonMatcher,
-    load_ipython_extension,
-    register_ipython_matcher,
-    unload_ipython_extension,
-)
 from mccode_antlr.loader import parse_mcstas_instr
 from mccode_antlr.reader.registry import InMemoryRegistry
 from mccode_antlr.run import McStas
+from mccode_antlr.test import ipython_test
 
 
 COMPONENTS = InMemoryRegistry(
@@ -63,7 +56,8 @@ def _labels(result) -> list[str]:
     return [completion.text for completion in result['completions']]
 
 
-def _ctx(text: str) -> CompletionContext:
+def _ctx(text: str) -> 'CompletionContext':
+    from IPython.core.completer import CompletionContext
     cursor = len(text)
     line = text.count('\n')
     token = text.split()[-1] if text.split() else ''
@@ -76,7 +70,9 @@ def _ctx(text: str) -> CompletionContext:
     )
 
 
+@ipython_test
 def test_component_type_completion_for_positional_argument():
+    from mccode_antlr.integrations.ipython import McCodeIPythonMatcher
     assembler = Assembler('Test', registries=[COMPONENTS], flavor=Flavor.MCSTAS)
     matcher = McCodeIPythonMatcher(shell=_FakeShell(a=assembler))
 
@@ -87,7 +83,9 @@ def test_component_type_completion_for_positional_argument():
     assert 'Source_simple' not in labels
 
 
+@ipython_test
 def test_component_type_completion_for_keyword_argument():
+    from mccode_antlr.integrations.ipython import McCodeIPythonMatcher
     assembler = Assembler('Test', registries=[COMPONENTS], flavor=Flavor.MCSTAS)
     matcher = McCodeIPythonMatcher(shell=_FakeShell(a=assembler))
 
@@ -96,7 +94,9 @@ def test_component_type_completion_for_keyword_argument():
     assert 'Source_simple' in _labels(result)
 
 
+@ipython_test
 def test_component_parameter_completion_inside_parameters_dict():
+    from mccode_antlr.integrations.ipython import McCodeIPythonMatcher
     assembler = Assembler('Test', registries=[COMPONENTS], flavor=Flavor.MCSTAS)
     matcher = McCodeIPythonMatcher(shell=_FakeShell(a=assembler))
 
@@ -107,7 +107,10 @@ def test_component_parameter_completion_inside_parameters_dict():
     assert 'radius' not in labels
 
 
+@ipython_test
 def test_simulation_instrument_parameter_completion_inside_run_dict():
+    from mccode_antlr.integrations.ipython import McCodeIPythonMatcher
+
     instr = parse_mcstas_instr(dedent("""\
         DEFINE INSTRUMENT test_instr(double value = 1.0, int n = 2)
         TRACE
@@ -122,7 +125,9 @@ def test_simulation_instrument_parameter_completion_inside_run_dict():
     assert 'value' in _labels(result)
 
 
+@ipython_test
 def test_simulation_runtime_keyword_completion():
+    from mccode_antlr.integrations.ipython import McCodeIPythonMatcher
     instr = parse_mcstas_instr(dedent("""\
         DEFINE INSTRUMENT test_instr(double value = 1.0)
         TRACE
@@ -137,7 +142,9 @@ def test_simulation_runtime_keyword_completion():
     assert 'ncount=' in _labels(result)
 
 
+@ipython_test
 def test_register_ipython_matcher_appends_once():
+    from mccode_antlr.integrations.ipython import register_ipython_matcher
     shell = _FakeShell()
 
     first = register_ipython_matcher(shell=shell)
@@ -148,7 +155,9 @@ def test_register_ipython_matcher_appends_once():
     assert shell.Completer.custom_matchers[0].matcher_identifier == 'mccode_antlr.ipython'
 
 
+@ipython_test
 def test_load_and_unload_ipython_extension():
+    from mccode_antlr.integrations.ipython import load_ipython_extension, unload_ipython_extension
     shell = _FakeShell()
 
     matcher = load_ipython_extension(shell)
@@ -159,7 +168,10 @@ def test_load_and_unload_ipython_extension():
     assert shell.Completer.custom_matchers == []
 
 
+@ipython_test
 def test_real_ipython_completer_pipeline_for_component_strings():
+    from mccode_antlr.integrations.ipython import register_ipython_matcher
+    from IPython.core.completer import IPCompleter, provisionalcompleter
     assembler = Assembler('Test', registries=[COMPONENTS], flavor=Flavor.MCSTAS)
 
     class _PipelineShell:
@@ -180,8 +192,9 @@ def test_real_ipython_completer_pipeline_for_component_strings():
     assert 'Source_simple' in labels
 
 
-
+@ipython_test
 def test_component_reference_completion_inside_at_tuple():
+    from mccode_antlr.integrations.ipython import McCodeIPythonMatcher
     assembler = Assembler('Test', registries=[COMPONENTS], flavor=Flavor.MCSTAS)
     assembler.component('Origin', 'Source_simple', at=(0, 0, 0))
     assembler.component('Guide', 'Monitor_nD', at=((0, 0, 1), 'Origin'))
@@ -194,7 +207,9 @@ def test_component_reference_completion_inside_at_tuple():
     assert 'Guide' not in labels
 
 
+@ipython_test
 def test_component_reference_completion_inside_rotate_tuple():
+    from mccode_antlr.integrations.ipython import McCodeIPythonMatcher
     assembler = Assembler('Test', registries=[COMPONENTS], flavor=Flavor.MCSTAS)
     assembler.component('Origin', 'Source_simple', at=(0, 0, 0))
     assembler.component('Guide', 'Monitor_nD', at=((0, 0, 1), 'Origin'))
@@ -205,7 +220,10 @@ def test_component_reference_completion_inside_rotate_tuple():
     assert 'Origin' in _labels(result)
 
 
+@ipython_test
 def test_real_ipython_completer_pipeline_for_component_references():
+    from mccode_antlr.integrations.ipython import register_ipython_matcher
+    from IPython.core.completer import IPCompleter, provisionalcompleter
     assembler = Assembler('Test', registries=[COMPONENTS], flavor=Flavor.MCSTAS)
     assembler.component('Origin', 'Source_simple', at=(0, 0, 0))
 
