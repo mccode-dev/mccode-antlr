@@ -202,6 +202,8 @@ def mccode_run_scan(name: str, binary, target, parameters, directory, grid: bool
     if directory is None:
         from datetime import datetime
         directory = Path(f'{name}{datetime.now().strftime("%Y%m%d_%H%M%S")}')
+    elif not isinstance(directory, Path):
+        directory = Path(directory)
 
     # if there is only one point, we don't need to scan
     if n_pts > 1:
