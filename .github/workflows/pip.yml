@@ -37,7 +37,7 @@ jobs:
 
     - name: Setup MSVC compilers for testing
       if: runner.os == 'Windows'
-      uses: ilammy/msvc-dev-cmd@v1
+      uses: egor-tensin/vs-shell@v2
 
     - name: "Build and install strategy = ${{ matrix.strategy }}"
       run: |
