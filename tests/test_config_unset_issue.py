@@ -45,11 +45,11 @@ def test_config_unset_preserves_keys():
 
         # Check if other keys are preserved
         print("\nChecking preserved keys:")
-        print(f"  compiler.cc: {'✓' if 'cc' in saved_config.get('compiler', {}) else '✗ MISSING'}")
-        print(f"  compiler.flags: {'✓' if 'flags' in saved_config.get('compiler', {}) else '✗ MISSING'}")
-        print(f"  compiler.debug: {'✗ REMOVED' if 'debug' not in saved_config.get('compiler', {}) else '✓ (should be removed)'}")
-        print(f"  runtime.threads: {'✓' if 'threads' in saved_config.get('runtime', {}) else '✗ MISSING'}")
-        print(f"  runtime.verbose: {'✓' if 'verbose' in saved_config.get('runtime', {}) else '✗ MISSING'}")
+        print(f"  compiler.cc: {'OK' if 'cc' in saved_config.get('compiler', {}) else 'x MISSING'}")
+        print(f"  compiler.flags: {'OK' if 'flags' in saved_config.get('compiler', {}) else 'x MISSING'}")
+        print(f"  compiler.debug: {'x REMOVED' if 'debug' not in saved_config.get('compiler', {}) else 'OK (should be removed)'}")
+        print(f"  runtime.threads: {'OK' if 'threads' in saved_config.get('runtime', {}) else 'x MISSING'}")
+        print(f"  runtime.verbose: {'OK' if 'verbose' in saved_config.get('runtime', {}) else 'x MISSING'}")
 
         # Verify the expected behavior
         assert 'compiler' in saved_config, "compiler section missing!"
@@ -103,10 +103,10 @@ def test_config_unset_entire_section():
 
 if __name__ == '__main__':
     test_config_unset_preserves_keys()
-    print("\n✅ Test 1 passed!")
+    print("\n Test 1 passed!")
 
     test_config_unset_entire_section()
-    print("\n✅ Test 2 passed!")
+    print("\n Test 2 passed!")
 
     print("\n" + "="*60)
     print("All tests passed!")

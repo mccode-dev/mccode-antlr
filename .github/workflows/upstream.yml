@@ -1,16 +1,10 @@
-name: Pip
+name: Upstream
 
 on:
   workflow_dispatch:
-  pull_request:
-  push:
-    branches:
-      - main
+  schedule:
+    - cron: '30 3 * * 1'
 
-env:
-  # Pin the McCode version whose component and library files are used in tests.
-  # Bump this when a new McCode release should be adopted.
-  MCCODE_VERSION: v3.5.31
 
 jobs:
   build:
@@ -20,7 +14,8 @@ jobs:
       fail-fast: false
       matrix:
         platform: [windows-latest, macos-latest, ubuntu-latest]
-        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+        tag: ["v3.5.31", "v3.6.21", "latest"]
+        python-version: ["3.13"]
         strategy: [".", ".[test,hdf5,mcpl]"]
 
     steps:
@@ -69,13 +64,13 @@ jobs:
       uses: actions/cache@v5
       with:
         path: ${{ steps.pooch-cache-dir.outputs.path }}
-        key: pooch-${{ runner.os }}-${{ env.MCCODE_VERSION }}
+        key: pooch-${{ runner.os }}-${{ matrix.tag }}
 
     - name: Pre-populate pooch cache
-      if: steps.cache-pooch.outputs.cache-hit != 'true'
-      run: mccode-antlr cache populate --tag ${{ env.MCCODE_VERSION }}
+      if: (steps.cache-pooch.outputs.cache-hit != 'true') || (matrix.tag == 'latest')
+      run: mccode-antlr cache populate --tag ${{ matrix.tag }}
 
     - name: Test
       env:
-        MCCODEANTLR_MCCODE_POOCH__TAG: ${{ env.MCCODE_VERSION }}
+        MCCODEANTLR_MCCODE_POOCH__TAG: ${{ matrix.tag }}
       run: python -m pytest -v -s

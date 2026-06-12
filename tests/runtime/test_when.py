@@ -63,10 +63,12 @@ def do_when_op_(checker, op, message):
                 assert ex == ln
 
 
+@compiled_test
 def test_when_equal_parses():
     do_when_op_(lambda x, y: x == y, '==', 'equal')
 
 
+@compiled_test
 def test_when_not_equal_parses():
     do_when_op_(lambda x, y: x != y, '!=', 'unequal')
 

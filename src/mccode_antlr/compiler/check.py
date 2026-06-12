@@ -35,6 +35,10 @@ def compiles(compiler: str, instr):
                     linux_compile, windows_compile)
     from ..config import config as module_config
 
+    def _rs(label, res):
+        msg = res.decode(errors='replace') if isinstance(res, bytes) else str(res)
+        return f'{label}:\n{msg}'
+
     target = CBinaryTarget(mpi='mpi' in compiler, acc=compiler == 'acc', count=1, nexus=False)
 
     compile_config = dict(default_main=True, enable_trace=False, portable=False,
@@ -51,8 +55,7 @@ def compiles(compiler: str, instr):
         command, result = compile_func(target.compiler, compiler_flags, binary, linker_flags, source)
 
         if result.returncode:
-            stderr = result.stderr.decode(errors='replace').strip() if isinstance(result.stderr, bytes) else str(result.stderr).strip()
-            raise RuntimeError(f"C compiler exited with code {result.returncode}: {stderr}")
+            raise RuntimeError(f"C compiler exited with code {result.returncode}:\n{_rs('STDERR', result.stderr)}\n{_rs('STDOUT', result.stdout)}")
         if not binary.exists() or not binary.is_file() or not access(binary, R_OK):
             raise RuntimeError(f"Compilation produced no executable; check that {target.compiler} works")
 
