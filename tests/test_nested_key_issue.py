@@ -44,10 +44,10 @@ def test_nested_key_save_issue():
 
         # Check if all keys are preserved
         print("\nChecking preserved keys:")
-        print(f"  compiler.cc: {'✓' if 'cc' in saved_config.get('compiler', {}) else '✗ MISSING'}")
-        print(f"  compiler.flags: {'✓' if 'flags' in saved_config.get('compiler', {}) else '✗ MISSING'}")
-        print(f"  compiler.debug: {'✓' if 'debug' in saved_config.get('compiler', {}) else '✗ MISSING'}")
-        print(f"  runtime.threads: {'✓' if 'threads' in saved_config.get('runtime', {}) else '✗ MISSING'}")
+        print(f"  compiler.cc: {'OK' if 'cc' in saved_config.get('compiler', {}) else 'x MISSING'}")
+        print(f"  compiler.flags: {'OK' if 'flags' in saved_config.get('compiler', {}) else 'x MISSING'}")
+        print(f"  compiler.debug: {'OK' if 'debug' in saved_config.get('compiler', {}) else 'x MISSING'}")
+        print(f"  runtime.threads: {'OK' if 'threads' in saved_config.get('runtime', {}) else 'x MISSING'}")
 
         # Verify the issue
         assert 'compiler' in saved_config, "compiler section missing!"
@@ -59,5 +59,5 @@ def test_nested_key_save_issue():
 
 if __name__ == '__main__':
     test_nested_key_save_issue()
-    print("\n✅ Test passed!")
+    print("\nOK Test passed!")
 
