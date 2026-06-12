@@ -399,6 +399,48 @@ class TestCacheManagement:
 
         assert not version_path.exists()
 
+    def test_cache_populate_resolves_latest_to_versioned_tag(self, monkeypatch, tmp_path):
+        """cache populate --tag latest should resolve to the newest real v* tag."""
+        import os
+        from packaging.version import Version
+        import mccode_antlr.cli.cache as cache_module
+        import mccode_antlr.reader.registry as registry_module
+
+        class FakeSourceRegistryTag:
+            def __init__(self):
+                self.cleared = False
+
+            def cache_clear(self):
+                self.cleared = True
+
+            def __call__(self):
+                return 'https://example/source', 'https://example/registry', Version('9.9.1')
+
+        fake_source_registry_tag = FakeSourceRegistryTag()
+        monkeypatch.setattr(registry_module, '_source_registry_tag', fake_source_registry_tag)
+
+        captured = {}
+
+        def fake_populate_from_clone(clone, tag, flavor=None):
+            captured['clone'] = clone
+            captured['tag'] = tag
+            captured['flavor'] = flavor
+            return 0, 0
+
+        monkeypatch.setattr(cache_module, 'populate_from_clone', fake_populate_from_clone)
+
+        cache_module.cache_populate(
+            tag='latest',
+            from_path=str(tmp_path),
+            clone_url='https://example.invalid/McCode.git',
+            flavor='both',
+        )
+
+        assert fake_source_registry_tag.cleared is True
+        assert captured['clone'] == tmp_path.resolve()
+        assert captured['tag'] == 'v9.9.1'
+        assert os.environ['MCCODEANTLR_MCCODE_POOCH__TAG'] == 'v9.9.1'
+
 
 class TestParserFunctions:
     """Test the argument parser creation functions."""
@@ -618,4 +660,3 @@ class TestCacheIR:
 
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
-

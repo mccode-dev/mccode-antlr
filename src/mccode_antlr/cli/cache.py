@@ -167,15 +167,19 @@ def cache_populate(tag: str | None, from_path: str | None, clone_url: str, flavo
     if flavor and flavor.lower() != 'both':
         resolved_flavor = Flavor[flavor.upper()]
 
-    # Resolve the tag to use (default: currently-configured version)
-    if tag is None:
+    # Resolve the tag to use.
+    # - no --tag      -> currently configured/effective registry tag
+    # - --tag latest  -> resolve to newest real version tag
+    if tag is None or tag.lower() == 'latest':
         from mccode_antlr.reader.registry import _source_registry_tag
+        if tag is not None:
+            os.environ['MCCODEANTLR_MCCODE_POOCH__TAG'] = tag
+        _source_registry_tag.cache_clear()
         _, _, version = _source_registry_tag()
         tag = f'v{version}'
 
-    # Ensure the environment variable is set so _source_registry_tag() resolves
-    # to the requested tag for *this* process.
-    os.environ.setdefault('MCCODEANTLR_MCCODE_POOCH__TAG', tag)
+    # Ensure the environment variable matches the resolved concrete tag for this process.
+    os.environ['MCCODEANTLR_MCCODE_POOCH__TAG'] = tag
 
     print(f"Populating pooch caches for McCode {tag} …", flush=True)
 
@@ -464,7 +468,7 @@ def add_cache_management_parser(modes):
     )
     p.add_argument(
         '--tag', default=None,
-        help='McCode version tag (e.g. v3.5.31); defaults to the currently-configured version',
+        help='McCode version tag (e.g. v3.5.31, latest); defaults to the currently-configured version',
     )
     p.add_argument(
         '--from-path', dest='from_path', default=None, metavar='PATH',
