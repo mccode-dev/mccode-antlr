@@ -826,9 +826,43 @@ def default_registries(flavor: Flavor) -> list[Registry]:
     return r + v
 
 
+def _registry_signature(reg: Registry) -> dict[str, str | None]:
+    signature: dict[str, str | None] = {
+        'type': type(reg).__name__,
+        'name': reg.name,
+        'version': reg.version,
+    }
+    if isinstance(reg, LocalRegistry):
+        signature['root'] = reg.root.as_posix()
+    else:
+        signature['url'] = getattr(reg, 'url', None)
+        signature['filename'] = getattr(reg, 'filename', None)
+        if isinstance(reg, GitHubRegistry):
+            signature['registry'] = reg.registry
+    return signature
+
 
 def ensure_registries(flavor: Flavor, have: list[Registry] | None):
     needed = default_registries(flavor)
     if have is None or len(have) == 0:
         return needed
-    return list(set(needed) | set(have))
+
+    merged: dict[str, Registry] = {}
+    order: list[str] = []
+    for reg in needed + have:
+        existing = merged.get(reg.name)
+        if existing is None:
+            merged[reg.name] = reg
+            order.append(reg.name)
+            continue
+
+        existing_sig = _registry_signature(existing)
+        new_sig = _registry_signature(reg)
+        if existing_sig != new_sig:
+            logger.warning(
+                f"Registry {reg.name!r} was specified more than once; using the file entry "
+                f"{new_sig} instead of the configured entry {existing_sig}."
+            )
+        merged[reg.name] = reg
+
+    return [merged[name] for name in order]

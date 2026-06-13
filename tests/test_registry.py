@@ -303,3 +303,68 @@ class TestRegistriesFromInstrHeader:
         source = f'\n\n/* Instrument foo\nRegistry: mylib {tmp_path.as_posix()}\n*/\n'
         regs = registries_from_instr_header(source)
         assert len(regs) == 1
+
+
+# ---------------------------------------------------------------------------
+# ensure_registries — default/file merge behavior
+# ---------------------------------------------------------------------------
+
+class TestEnsureRegistries:
+    def test_file_registry_overrides_default_and_warns_on_version_change(self, monkeypatch):
+        import mccode_antlr.reader.registry as rm
+
+        default = rm.RemoteRegistry(
+            'libc',
+            'https://example.com/default',
+            'v9',
+            'libc-registry.txt',
+        )
+        file_reg = rm.RemoteRegistry(
+            'libc',
+            'https://example.com/file',
+            'v8',
+            'libc-registry.txt',
+        )
+
+        warnings = []
+
+        class DummyLogger:
+            def warning(self, msg):
+                warnings.append(msg)
+
+        monkeypatch.setattr(rm, 'default_registries', lambda flavor: [default])
+        monkeypatch.setattr(rm, 'logger', DummyLogger())
+
+        merged = rm.ensure_registries(rm.Flavor.BASE, [file_reg])
+
+        assert len(merged) == 1
+        assert merged[0] is file_reg
+        assert len(warnings) == 1
+        assert 'libc' in warnings[0]
+        assert 'v9' in warnings[0]
+        assert 'v8' in warnings[0]
+        assert 'https://example.com/default' in warnings[0]
+        assert 'https://example.com/file' in warnings[0]
+
+    def test_file_registry_overrides_default_and_warns_on_root_change(self, monkeypatch, tmp_path):
+        import mccode_antlr.reader.registry as rm
+
+        default = rm.LocalRegistry('components', str(tmp_path / 'default'))
+        file_reg = rm.LocalRegistry('components', str(tmp_path / 'file'))
+
+        warnings = []
+
+        class DummyLogger:
+            def warning(self, msg):
+                warnings.append(msg)
+
+        monkeypatch.setattr(rm, 'default_registries', lambda flavor: [default])
+        monkeypatch.setattr(rm, 'logger', DummyLogger())
+
+        merged = rm.ensure_registries(rm.Flavor.BASE, [file_reg])
+
+        assert len(merged) == 1
+        assert merged[0] is file_reg
+        assert len(warnings) == 1
+        assert str(tmp_path / 'default') in warnings[0]
+        assert str(tmp_path / 'file') in warnings[0]
