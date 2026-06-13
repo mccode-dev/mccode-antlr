@@ -366,5 +366,5 @@ class TestEnsureRegistries:
         assert len(merged) == 1
         assert merged[0] is file_reg
         assert len(warnings) == 1
-        assert str(tmp_path / 'default') in warnings[0]
-        assert str(tmp_path / 'file') in warnings[0]
+        assert (tmp_path / 'default').as_posix() in warnings[0]
+        assert (tmp_path / 'file').as_posix() in warnings[0]
