@@ -1,6 +1,28 @@
 from __future__ import annotations
+import functools
+import warnings
 
 from mccode_antlr import Flavor
+
+
+class McCodeAntlrDeprecationWarning(FutureWarning):
+    pass
+
+
+def deprecated(*, since: str, replacement: str | None = None, remove_in: str | None = None):
+    def deco(func):
+        msg = f"{func.__module__}.{func.__qualname__} is deprecated since {since}."
+        if replacement:
+            msg += f" Use {replacement} instead."
+        msg += f" It will be removed in {remove_in}." if remove_in else " It will be removed in a future release."
+
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            warnings.warn(msg, McCodeAntlrDeprecationWarning, stacklevel=2)
+            return func(*args, **kwargs)
+        return wrapper
+    return deco
+
 
 def run_prog_message_output(prog: list[str]):
     """Run a program and return its output

@@ -4,6 +4,8 @@ from pathlib import Path
 from typing import Union
 from loguru import logger
 
+from mccode_antlr.utils import deprecated
+
 VERSION_NAME_KEY = 'mccode-antlr_version_data-type-name'
 
 
@@ -429,12 +431,25 @@ class HDF5IO:
         return cls._handlers[name].load(group, **kwargs)
 
 
+@deprecated(since="0.20.2", replacement="serialization via mccode_antlr.io.json", remove_in=None)
 def save_hdf5(obj, filename: Union[str, Path]) -> None:
+    """
+    Serialize a `mccode_antlr` object to an HDF5 file.
+
+    Deprecated
+    ----------
+    This method has been deprecated since `v0.20.2` and will be removed
+    in a future release.
+    Use the much-faster JSON serialization available in `mccode_antlr.io.json`,
+    which hasa the same API via `save_json(obj, filename)`.
+
+    """
     import h5py
     with h5py.File(filename, 'w', driver='core', backing_store=True) as file:
         HDF5IO.save(file, obj)
 
 
+@deprecated(since="0.20.2", replacement="serialization via mccode_antlr.io.json", remove_in=None)
 def load_hdf5(filename: Union[str, Path], path: str | None = None):
     """Load all or part of a serialized Instr from a HDF5 file.
 
@@ -456,6 +471,17 @@ def load_hdf5(filename: Union[str, Path], path: str | None = None):
     -------
     >>> from mccode_antlr.io.hdf5 import load_hdf5
     >>> instrument_parameters = load_hdf5('instr.h5', 'parameters')
+
+    Deprecated
+    ----------
+    This method has been deprecated since `v0.20.2` and will be removed
+    in a future release.
+    Use the much-faster JSON serialization available in `mccode_antlr.io.json`,
+    which has a similar API via `load_json(filename)`.
+    The example given above now requires deserializing the full `Instr` object
+    to extract it's instrument parameters. This is significantly faster, however,
+    so the optimization for loading only part of the object is unneccessary.
+
     """
     import h5py
     with h5py.File(filename, 'r', driver='core', backing_store=False) as file:
