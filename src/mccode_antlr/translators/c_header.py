@@ -10,8 +10,10 @@ def header_pre_runtime(
         config: dict,
         uservars: list[CDeclarator]
 ):
-    from datetime import datetime
+    from packaging.version import Version
     from mccode_antlr import version
+    from mccode_antlr.reader.registry import mccode_registry_version
+    from datetime import datetime
     from .c_particle import (
         accessible_struct_members, restorable_struct_members,
         setstate_signature_members, getstate_signature_members, setstate_signature_call
@@ -23,18 +25,26 @@ def header_pre_runtime(
     jump_string = '\n'.join([jump_line(i, j) for i in source.components for j in i.jump if j.iterate])
 
     if Flavor.MCSTAS == flavor:
-        particle_struct = '\n'.join([
+        particle_struct_lines = [
             "  double vx,vy,vz; /* velocity [m/s] */",
             "  double sx,sy,sz; /* spin [0-1] */",
             "  int mcgravitation; /* gravity-state */",
             "  void *mcMagnet;    /* precession-state */",
-            "  int allow_backprop; /* allow backprop */"])
+            ]
     elif Flavor.MCXTRACE == flavor:
-        particle_struct = '\n'.join([
+        particle_struct_lines = [
             "  double kx,ky,kz; /* wave-vector */",
-            "  double phi, Ex,Ey,Ez; /* phase and electrical field */"])
+            "  double phi, Ex,Ey,Ez; /* phase and electrical field */",
+            ]
     else:
         raise ValueError(f'Unknown flavor {flavor.name}')
+    
+    if Flavor.MCSTAS == flavor or mccode_registry_version() >= Version('v3.6.9'):
+        # McStas always allows back propagation
+        # McXtrace added this particle struct parameter in v3.6.9
+        particle_struct_lines.append("int allow_backprop; /* allow backprop */")
+
+    particle_struct_string = '\n'.join(particle_struct_lines)
 
     # Append variables from instr USERVARS block to particle struct
     # Also store these strings in the appropriate instrument list for later def/undef as state variables
@@ -88,9 +98,9 @@ def header_pre_runtime(
     mcinitstate = ', '.join(setstate_signature_call(flavor))
 
     contents = dedent(f"""/* Automatically generated file. Do not edit.
-     * Format:     ANSI C source code
-     * Creator:    {flavor} <{flavor.url()}>
-     * Generator:  mccode-antlr {version()} <https://github.com/McStasMcXtrace/mccode-antlr.git>
+     * Format:     ANSI C 99 source code
+     * Creator:    {flavor} {mccode_registry_version()} <{flavor.url()}>
+     * Generator:  mccode-antlr {version()} <https://github.com/mccode-dev/mccode-antlr.git>
      * Instrument: {source.source} ({source.name})
      * Date: {datetime.now()}
      * File: {config.get('output')}
@@ -104,7 +114,7 @@ def header_pre_runtime(
     #  define _POSIX_C_SOURCE 200809L
     #endif
     /* In case of cl.exe on Windows, suppress warnings about #pragma acc
-       Transferred from https://github.com/McStasMcXtrace/McCode/commit/0e2785a2d3fd742d46597139234dbc47e56344bb 
+       Transferred from https://github.com/mccode-dev/McCode/commit/0e2785a2d3fd742d46597139234dbc47e56344bb 
     */
     #ifdef _MSC_EXTENSIONS
     #pragma warning(disable: 4068)
@@ -148,7 +158,7 @@ def header_pre_runtime(
     }};
     struct _struct_particle {{
       double x,y,z; /* position [m] */
-    {particle_struct}
+      {particle_struct_string}
       /* Generic Temporaries: */
       /* May be used internally by components e.g. for special */
       /* return-values from functions used in trace, thusreturned via */
