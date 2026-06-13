@@ -1,7 +1,7 @@
 from textwrap import dedent
 from .c_listener import CDeclarator
 from ..instr import Instr
-from mccode_antlr import Flavor
+from mccode_antlr import Flavor, version
 
 
 def header_pre_runtime(
@@ -10,8 +10,8 @@ def header_pre_runtime(
         config: dict,
         uservars: list[CDeclarator]
 ):
+    from packaging.version import Version
     from datetime import datetime
-    from mccode_antlr import version
     from .c_particle import (
         accessible_struct_members, restorable_struct_members,
         setstate_signature_members, getstate_signature_members, setstate_signature_call
@@ -28,13 +28,18 @@ def header_pre_runtime(
             "  double sx,sy,sz; /* spin [0-1] */",
             "  int mcgravitation; /* gravity-state */",
             "  void *mcMagnet;    /* precession-state */",
-            "  int allow_backprop; /* allow backprop */"])
+            ])
     elif Flavor.MCXTRACE == flavor:
         particle_struct = '\n'.join([
             "  double kx,ky,kz; /* wave-vector */",
             "  double phi, Ex,Ey,Ez; /* phase and electrical field */"])
     else:
         raise ValueError(f'Unknown flavor {flavor.name}')
+    
+    if Flavor.MCSTAS == flavor or Version(version()) >= Version('v3.6.9'):
+        # McStas always allows back propagation
+        # McXtrace added this particle struct parameter in v3.6.9
+        particle_struct.append("int allow_backprop; /* allow backprop */")
 
     # Append variables from instr USERVARS block to particle struct
     # Also store these strings in the appropriate instrument list for later def/undef as state variables
