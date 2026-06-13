@@ -25,14 +25,14 @@ def header_pre_runtime(
     jump_string = '\n'.join([jump_line(i, j) for i in source.components for j in i.jump if j.iterate])
 
     if Flavor.MCSTAS == flavor:
-        particle_struct = [
+        particle_struct_lines = [
             "  double vx,vy,vz; /* velocity [m/s] */",
             "  double sx,sy,sz; /* spin [0-1] */",
             "  int mcgravitation; /* gravity-state */",
             "  void *mcMagnet;    /* precession-state */",
             ]
     elif Flavor.MCXTRACE == flavor:
-        particle_struct = [
+        particle_struct_lines = [
             "  double kx,ky,kz; /* wave-vector */",
             "  double phi, Ex,Ey,Ez; /* phase and electrical field */",
             ]
@@ -42,7 +42,9 @@ def header_pre_runtime(
     if Flavor.MCSTAS == flavor or mccode_registry_version() >= Version('v3.6.9'):
         # McStas always allows back propagation
         # McXtrace added this particle struct parameter in v3.6.9
-        particle_struct.append("int allow_backprop; /* allow backprop */")
+        particle_struct_lines.append("int allow_backprop; /* allow backprop */")
+
+    particle_struct_string = '\n'.join(particle_struct_lines)
 
     # Append variables from instr USERVARS block to particle struct
     # Also store these strings in the appropriate instrument list for later def/undef as state variables
@@ -156,7 +158,7 @@ def header_pre_runtime(
     }};
     struct _struct_particle {{
       double x,y,z; /* position [m] */
-    {'\n'.join(particle_struct)}
+      {particle_struct_string}
       /* Generic Temporaries: */
       /* May be used internally by components e.g. for special */
       /* return-values from functions used in trace, thusreturned via */
