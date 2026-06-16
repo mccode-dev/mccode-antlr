@@ -40,7 +40,7 @@ class TargetVisitor:
         self.typedefs = None
         self.component_declared_parameters = dict()
         self.ok_to_skip = None
-        *
+        #
         self.file_replacements = dict()
         #
         self.source.verify_instance_parameters()
