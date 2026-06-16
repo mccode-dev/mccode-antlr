@@ -753,16 +753,13 @@ def mccode_registry_url_tag() -> tuple[str, str]:
     return src, f'v{version}'
 
 
-def _mccode_pooch_registries(flavor: Flavor):
+def _mccode_pooch_registries(names: list[str]):
     src, reg, tag = _source_registry_tag()
 
     def make_registry(name):
         return GitHubRegistry(name, src, f'v{tag}', registry=reg, priority=REGISTRY_PRIORITY_LOWEST)
 
-    registries = [make_registry('libc')]
-    if flavor in (Flavor.MCSTAS, Flavor.MCXTRACE):
-        registries.append(make_registry(str(flavor).lower()))
-    return registries
+    return [make_registry(n) for n in names]
 
 
 def _local_reg(path: Path, priority: int = REGISTRY_PRIORITY_HIGHEST):
@@ -813,7 +810,8 @@ def default_registries(flavor: Flavor) -> list[Registry]:
     indicate ${flavor}.paths in the config dictionary
     """
     from mccode_antlr.config import config
-    r = _mccode_pooch_registries(flavor)
+    names = ['libc'] + ([str(flavor).lower()] if flavor in (Flavor.MCSTAS, Flavor.MCXTRACE) else [])
+    r = _mccode_pooch_registries(names)
     key = str(flavor).lower()
     if key not in config or 'paths' not in config[key]:
         return r
@@ -824,6 +822,13 @@ def default_registries(flavor: Flavor) -> list[Registry]:
     ]
 
     return r + v
+
+
+def codegen_registries() -> list[Registry]:
+    """
+    Return the registry of files used to produce the McCode compiled code generator
+    """
+    return _mccode_pooch_registries(['codegen'])
 
 
 def _registry_signature(reg: Registry) -> dict[str, str | None]:

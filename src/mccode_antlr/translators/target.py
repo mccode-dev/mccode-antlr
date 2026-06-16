@@ -1,7 +1,20 @@
+import re
+from dataclasses import dataclass
 from loguru import logger
 from io import StringIO
 from ..instr import Instr, Instance
 from mccode_antlr import Flavor
+
+
+@dataclass
+class FileReplacement:
+    """A regex pattern and its replacement for manipulating file contents at read-time"""
+    pattern: re.Pattern
+    replacement: str
+
+    def filter(self, source: str):
+        return self.pattern.sub(self.replacement, source)
+
 
 
 # These _should_ be set in a call to, e.g., `mcstas4`,
@@ -27,6 +40,8 @@ class TargetVisitor:
         self.typedefs = None
         self.component_declared_parameters = dict()
         self.ok_to_skip = None
+        #
+        self.file_replacements = dict()
         #
         self.source.verify_instance_parameters()
         self.__post_init__()
@@ -111,7 +126,14 @@ class TargetVisitor:
         with as_file(self.library_path(filename)) as file_at:
             with open(file_at, 'r') as file:
                 self.out(f'/* embedding file "{file_at}" */')
-                self.output.write(file.read())
+
+                file_contents = file.read()
+
+                if file_replacement := self.file_replacements.get(filename):
+                    file_contents = file_replacement.filter(file_contents)
+
+                self.output.write(file_contents)
+
                 self.out(f'/* end of file "{file_at}" */')
 
     def include_path(self, filename=None):
