@@ -1,9 +1,44 @@
 """Translates a McComp instrument from its intermediate form to a C runtime source file."""
 from loguru import logger
 from dataclasses import dataclass
-from .target import TargetVisitor
+from .target import TargetVisitor, FileReplacement
 from .c_listener import extract_c_declared_variables
 from mccode_antlr import Flavor
+
+
+def codegen_header_file_replacement(filename: str) -> FileReplacement | None:
+    from re import compile
+    from mccode_antlr.reader import codegen_registries
+    reg = codegen_registries()[0]
+
+    if not reg.known(filename):
+        logger.info(f'Requested {filename=} is not known to the code generator registry')
+        return
+
+    replacement = reg.conetents(filename)
+
+    filename = filename.split('.')[0] + '(?:\.h)?' if filename.endswith('.h') else filename
+    pattern = compile(fr"^\s*#include\s*(?:\"|<|\'){filename}(?:\"|>|\')\s*$", flags=re.MULTILINE)
+
+    return FileReplacement(pattern, replacement)
+
+
+
+def mccode_r_c_replacement() -> FileReplacement | None:
+    """Some versions of the McCode libc file(s) on some systems need special content replacements"""
+    # Notably, for Windows 
+    # The included runtime implementation file 'mccode-r.c' under different McCode libc versions:
+    #  - v3.6.9 to v3.7.5 includes a non-standard header "dirent.h", sourced from Conda Forge
+    #  - v3.7.6 onward    includes a non-standard header "windirent.h", vendored for the code generator
+    from os import platform
+    from packaging.version import Version
+    from mccode_antlr.reader.registry import mccode_registry_version
+    if os.platform() != 'Windows' or (version:=mccode_registry_version()) < Version('3.6.9'):
+        return
+    if version < Version('3.7.6'):
+        logger.info('The McCode runtime expects your compiler to be able to find the "dirent.h" header file; you may need to install it from Conda Forge.')
+        return
+    return codegen_header_file_surgery('windirent.h')
 
 
 @dataclass
@@ -261,6 +296,9 @@ class CTargetVisitor(TargetVisitor, target_language='c'):
                 dp = list(dict.fromkeys(dp))
             self.component_declared_parameters[typ.name] = dp
         self._determine_uservars()
+
+        # On specific OSs for specific McCode versions file(s) need special pattern(s) to be replaced:
+        self.file_replacements = {'mccode-r.c': mccode_r_c_replacement()}
 
     def _instrument_and_component_uservars(self):
         uuv = [x for x in self.instrument_uservars]
