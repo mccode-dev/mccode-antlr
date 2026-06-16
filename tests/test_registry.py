@@ -6,6 +6,15 @@ def test_mccode_pooch_tags():
             assert reg.version != "main"
 
 
+def test_mccode_pooch_codegen_registry():
+    from mccode_antlr.reader import codegen_registries
+    registries = codegen_registries()
+    assert isinstance(registries, list)
+    assert len(registries) == 1
+    assert registries[0].name == 'codegen'
+    assert registries[0].known('windirent.h')
+
+
 # ---------------------------------------------------------------------------
 # _parse_gitref_spec — pure parsing, no network
 # ---------------------------------------------------------------------------
