@@ -52,7 +52,7 @@ def populate_from_clone(clone: Path, tag: str, flavor=None) -> tuple[int, int]:
     """
     import shutil
     from mccode_antlr import Flavor
-    from mccode_antlr.reader.registry import _mccode_pooch_registries
+    from mccode_antlr.reader.registry import _mccode_pooch_registries, default_registry_names
 
     flavors = (Flavor.MCSTAS, Flavor.MCXTRACE) if flavor is None else (flavor,)
 
@@ -60,7 +60,7 @@ def populate_from_clone(clone: Path, tag: str, flavor=None) -> tuple[int, int]:
     seen: set[Path] = set()
 
     for flv in flavors:
-        for reg in _mccode_pooch_registries(flv):
+        for reg in _mccode_pooch_registries(default_registry_names(flv)):
             p = getattr(reg, 'pooch', None)
             if p is None or p.path in seen:
                 continue
@@ -95,7 +95,7 @@ def warm_via_pooch(flavor=None) -> tuple[int, int]:
     (total_fetched, error_count)
     """
     from mccode_antlr import Flavor
-    from mccode_antlr.reader.registry import _mccode_pooch_registries
+    from mccode_antlr.reader.registry import _mccode_pooch_registries, default_registry_names
 
     flavors = (Flavor.MCSTAS, Flavor.MCXTRACE) if flavor is None else (flavor,)
 
@@ -103,7 +103,7 @@ def warm_via_pooch(flavor=None) -> tuple[int, int]:
     seen: set = set()
 
     for flv in flavors:
-        for reg in _mccode_pooch_registries(flv):
+        for reg in _mccode_pooch_registries(default_registry_names(flv)):
             p = getattr(reg, 'pooch', None)
             if p is None or id(p) in seen:
                 continue

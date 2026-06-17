@@ -794,6 +794,11 @@ def collect_local_registries(
     return registries
 
 
+def default_registry_names(flavor: Flavor) -> list[str]:
+    """For an enumerated flavor of McCode, return the named registries needed to build a working instrument"""
+    return ['libc'] + ([str(flavor).lower()] if flavor in (Flavor.MCSTAS, Flavor.MCXTRACE) else [])
+
+
 def default_registries(flavor: Flavor) -> list[Registry]:
     """Common collection of needed registries for components and libraries
 
@@ -810,8 +815,7 @@ def default_registries(flavor: Flavor) -> list[Registry]:
     indicate ${flavor}.paths in the config dictionary
     """
     from mccode_antlr.config import config
-    names = ['libc'] + ([str(flavor).lower()] if flavor in (Flavor.MCSTAS, Flavor.MCXTRACE) else [])
-    r = _mccode_pooch_registries(names)
+    r = _mccode_pooch_registries(default_registry_names(flavor))
     key = str(flavor).lower()
     if key not in config or 'paths' not in config[key]:
         return r
