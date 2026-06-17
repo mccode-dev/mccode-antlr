@@ -10,7 +10,7 @@ def test_codegen_header_replacement_rewrites_bad_include(monkeypatch):
             return name == "windirent.h"
 
         # Keep method name aligned with current translator implementation.
-        def conetents(self, name):
+        def contents(self, name):
             return "/* vendored windirent */\nint dirent_dummy;\n"
 
     monkeypatch.setattr(reader_mod, "codegen_registries", lambda: [DummyCodegenRegistry()])
