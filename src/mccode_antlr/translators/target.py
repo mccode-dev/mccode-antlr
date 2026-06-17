@@ -13,7 +13,9 @@ class FileReplacement:
     replacement: str
 
     def filter(self, source: str):
-        return self.pattern.sub(self.replacement, source)
+        # Use a lambda to avoid regex escape sequence interpretation in the replacement.
+        # This preserves literal backslashes and other special characters in the replacement text.
+        return self.pattern.sub(lambda m: self.replacement, source)
 
 
 

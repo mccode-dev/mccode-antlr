@@ -9,8 +9,7 @@ def test_codegen_header_replacement_rewrites_bad_include(monkeypatch):
         def known(self, name):
             return name == "windirent.h"
 
-        # Keep method name aligned with current translator implementation.
-        def conetents(self, name):
+        def contents(self, name):
             return "/* vendored windirent */\nint dirent_dummy;\n"
 
     monkeypatch.setattr(reader_mod, "codegen_registries", lambda: [DummyCodegenRegistry()])
@@ -127,3 +126,36 @@ def test_embed_file_applies_mccode_r_c_replacement_pattern(tmp_path):
     assert '#include <windirent.h>' not in output
     assert 'vendored windirent' in output
     assert 'int keep_me;' in output
+
+
+def test_file_replacement_preserves_literal_escape_sequences():
+    """FileReplacement.filter() should preserve backslashes in literal C code like '\0' and '\\\\'."""
+    import re
+    from mccode_antlr.translators.target import FileReplacement
+
+    # Simulate header content with actual escape sequences
+    header_with_escapes = (
+        '/* windirent.h */\n'
+        'char escape_null = \'\\0\';\n'
+        'char backslash_char = \'\\\\\';\n'
+        'const char *str = "line1\\nline2";\n'
+    )
+
+    # Pattern matches the include line
+    pattern = re.compile(
+        r'^\s*#\s*include\s*<\s*windirent(?:\.h)?\s*>\s*$',
+        flags=re.MULTILINE,
+    )
+
+    # Create replacement that includes literal escape sequences
+    replacement = FileReplacement(pattern, header_with_escapes)
+
+    source = '#include <windirent.h>\nint x;'
+    result = replacement.filter(source)
+
+    # All escape sequences must be preserved
+    assert '\\0' in result, f"Lost null escape: {result}"
+    assert '\\\\' in result, f"Lost backslash escape: {result}"
+    assert '\\n' in result, f"Lost newline escape: {result}"
+    # Original content should still be there
+    assert 'int x;' in result
