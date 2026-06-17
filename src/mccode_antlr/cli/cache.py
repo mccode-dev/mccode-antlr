@@ -60,7 +60,7 @@ def populate_from_clone(clone: Path, tag: str, flavor=None) -> tuple[int, int]:
     seen: set[Path] = set()
 
     for flv in flavors:
-        for reg in _mccode_pooch_registries(default_registry_names(flavor)):
+        for reg in _mccode_pooch_registries(default_registry_names(flv)):
             p = getattr(reg, 'pooch', None)
             if p is None or p.path in seen:
                 continue
@@ -103,7 +103,7 @@ def warm_via_pooch(flavor=None) -> tuple[int, int]:
     seen: set = set()
 
     for flv in flavors:
-        for reg in _mccode_pooch_registries(default_registry_names(flavor)):
+        for reg in _mccode_pooch_registries(default_registry_names(flv)):
             p = getattr(reg, 'pooch', None)
             if p is None or id(p) in seen:
                 continue
