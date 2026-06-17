@@ -15,7 +15,7 @@ def codegen_header_file_replacement(filename: str) -> FileReplacement | None:
         logger.info(f'Requested {filename=} is not known to the code generator registry')
         return
 
-    replacement = reg.conetents(filename)
+    replacement = reg.contents(filename)
 
     if filename.endswith('.h'):
         header_name = escape(filename[:-2]) + r'(?:\.h)?'
