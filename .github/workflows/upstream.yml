@@ -14,7 +14,7 @@ jobs:
       fail-fast: false
       matrix:
         platform: [windows-latest, macos-latest, ubuntu-latest]
-        tag: ["v3.5.31", "v3.6.21", "latest"]
+        tag: ["v3.5.31", "latest"]
         python-version: ["3.13"]
         strategy: [".", ".[test,hdf5,mcpl]"]
 
