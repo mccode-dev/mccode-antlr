@@ -62,16 +62,17 @@ def convert(
     source = Path(filename).resolve()
     target = _resolve_target(to, output)
 
-    if target == 'python':
-        raise NotImplementedError('Python export is planned but not part of PR1.')
     if optimize:
-        raise NotImplementedError('--optimize is only supported by the future Python exporter.')
+        raise NotImplementedError('--optimize is only supported by the future optimized Python exporter.')
 
     destination = Path(output).resolve() if output is not None else _default_output_path(source, target)
 
     instr = _load_instr(source, flavor, search_dir)
 
-    if target == 'json':
+    if target == 'python':
+        from mccode_antlr.export import save_instr_as_python
+        save_instr_as_python(instr, destination)
+    elif target == 'json':
         from mccode_antlr.io.json import save_json
         save_json(instr, destination)
     elif target == 'instr':

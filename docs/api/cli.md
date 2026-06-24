@@ -178,7 +178,7 @@ mccode-antlr SUBCOMMAND [OPTIONS]
 | `cache` | Manage the component file cache |
 | `config` | Manage the mccode-antlr configuration |
 | `datafile` | Work with McCode data files (Bragg tables, SQW files, …) |
-| `convert` | Convert instrument descriptions between `.instr` and `.json` |
+| `convert` | Convert instrument descriptions between `.instr`, `.json`, and Python assembler scripts |
 
 ---
 
@@ -240,7 +240,7 @@ Run `mccode-antlr SUBCOMMAND ACTION -h` for the full option list of any individu
 
 #### `mccode-antlr convert`
 
-Convert between serialized instrument formats.
+Convert between serialized instrument formats and generated Python assembler scripts.
 
 ```bash
 mccode-antlr convert INPUT [-o OUTPUT] [--to {python,json,instr}] [--flavor {mcstas,mcxtrace}] [-I DIR ...]
@@ -250,7 +250,7 @@ mccode-antlr convert INPUT [-o OUTPUT] [--to {python,json,instr}] [--flavor {mcs
 |---|---|
 | `INPUT` | Input file (`.instr` or `.json`) |
 | `-o`, `--output` | Output file path (if omitted, inferred from target/input) |
-| `--to` | Target format (`json` and `instr` implemented in PR1; `python` planned) |
+| `--to` | Target format (`python`, `json`, or `instr`) |
 | `--flavor` | Flavor used when reading `.instr` input (`mcstas` default) |
 | `-I`, `--search-dir` | Extra component search directory when reading `.instr` |
-| `--optimize` | Reserved for future Python code-generation optimization |
+| `--optimize` | Reserved for future optimized Python code-generation mode |
