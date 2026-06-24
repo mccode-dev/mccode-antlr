@@ -178,6 +178,7 @@ mccode-antlr SUBCOMMAND [OPTIONS]
 | `cache` | Manage the component file cache |
 | `config` | Manage the mccode-antlr configuration |
 | `datafile` | Work with McCode data files (Bragg tables, SQW files, …) |
+| `convert` | Convert instrument descriptions between `.instr` and `.json` |
 
 ---
 
@@ -234,3 +235,22 @@ mccode-antlr SUBCOMMAND [OPTIONS]
 | `get` | Download a data file and copy it to a directory |
 
 Run `mccode-antlr SUBCOMMAND ACTION -h` for the full option list of any individual action.
+
+---
+
+#### `mccode-antlr convert`
+
+Convert between serialized instrument formats.
+
+```bash
+mccode-antlr convert INPUT [-o OUTPUT] [--to {python,json,instr}] [--flavor {mcstas,mcxtrace}] [-I DIR ...]
+```
+
+| Flag | Description |
+|---|---|
+| `INPUT` | Input file (`.instr` or `.json`) |
+| `-o`, `--output` | Output file path (if omitted, inferred from target/input) |
+| `--to` | Target format (`json` and `instr` implemented in PR1; `python` planned) |
+| `--flavor` | Flavor used when reading `.instr` input (`mcstas` default) |
+| `-I`, `--search-dir` | Extra component search directory when reading `.instr` |
+| `--optimize` | Reserved for future Python code-generation optimization |
