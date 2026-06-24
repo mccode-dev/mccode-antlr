@@ -167,3 +167,62 @@ def test_optimize_rejected_for_non_python_target(tmp_path):
 
     with pytest.raises(ValueError, match='--optimize is only supported when --to python'):
         convert(filename=str(source), output=str(tmp_path / 'out.json'), to='json', optimize=True)
+
+
+def test_convert_instr_to_python_optimized_previous_chain_uses_last(tmp_path):
+    from mccode_antlr.loader import parse_mcstas_instr
+    from mccode_antlr.cli.convert import convert
+
+    instr = parse_mcstas_instr(
+        """
+        define instrument check()
+        trace
+        component origin = Arm() at (0,0,0) absolute
+        component guide1 = Arm() at (0,0,1) relative origin
+        component guide2 = Arm() at (0,0,1) relative guide1
+        component guide3 = Arm() at (0,0,1) relative guide2
+        end
+        """
+    )
+    source = tmp_path / 'source.instr'
+    with source.open('w') as f:
+        instr.to_file(output=f)
+
+    destination = tmp_path / 'optimized_prev.py'
+    convert(filename=str(source), output=str(destination), to='python', optimize=True)
+
+    text = destination.read_text()
+    assert 'last = a.component(' in text
+    assert 'for i in range(2):' in text
+    assert 'at=([0, 0, 1], last)' in text
+    ast.parse(text)
+
+
+def test_convert_instr_to_python_optimized_previous_chain_with_rotation(tmp_path):
+    from mccode_antlr.loader import parse_mcstas_instr
+    from mccode_antlr.cli.convert import convert
+
+    instr = parse_mcstas_instr(
+        """
+        define instrument check()
+        trace
+        component origin = Arm() at (0,0,0) absolute
+        component guide1 = Arm() at (0,0,1) relative origin rotated (0,1.5,0) relative origin
+        component guide2 = Arm() at (0,0,1) relative guide1 rotated (0,1.5,0) relative guide1
+        component guide3 = Arm() at (0,0,1) relative guide2 rotated (0,1.5,0) relative guide2
+        end
+        """
+    )
+    source = tmp_path / 'source.instr'
+    with source.open('w') as f:
+        instr.to_file(output=f)
+
+    destination = tmp_path / 'optimized_prev_rot.py'
+    convert(filename=str(source), output=str(destination), to='python', optimize=True)
+
+    text = destination.read_text()
+    assert 'rotate=([0, 1.5, 0], last)' in text
+    namespace = {}
+    exec(text, namespace)
+    rebuilt = namespace['build_instrument']()
+    assert [c.name for c in rebuilt.components] == [c.name for c in instr.components]

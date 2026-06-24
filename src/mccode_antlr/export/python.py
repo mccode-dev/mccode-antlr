@@ -115,16 +115,72 @@ def _vector_axis_progression(vectors) -> tuple[int, int | float, int | float] | 
 
 @dataclass
 class _LoopGroup:
+    mode: str
     start: int
     end: int
     prefix: str
     start_index: int
-    at_axis: int
-    at_base: int | float
-    at_delta: int | float
+    at_axis: int | None = None
+    at_base: int | float | None = None
+    at_delta: int | float | None = None
 
 
 def _find_loop_groups(components: tuple) -> list[_LoopGroup]:
+    def static_signature(inst):
+        return (
+            inst.type.name,
+            tuple((p.name, _expr_text(p.value)) for p in inst.parameters),
+            None if inst.when is None else _expr_text(inst.when),
+            inst.group,
+            inst.removable,
+            inst.cpu,
+            None if inst.split is None else _expr_text(inst.split),
+            tuple(ext.source for ext in inst.extend),
+            tuple((j.target, j.relative_target, j.iterate, _expr_text(j.condition), j.absolute_target) for j in inst.jump),
+            tuple((md.source.type_name, md.source.name, md.name, md.mimetype, md.value) for md in inst.metadata),
+        )
+
+    def vector_text(v):
+        return tuple(_expr_text(x) for x in v)
+
+    def previous_chain_candidate(chunk, start, end, series):
+        if len(chunk) < 3:
+            return None
+        signatures = [static_signature(inst) for inst in chunk]
+        if not all(sig == signatures[0] for sig in signatures):
+            return None
+        at_delta = vector_text(chunk[1].at_relative[0])
+        rotate_delta = vector_text(chunk[1].rotate_relative[0])
+        for k in range(1, len(chunk)):
+            prev = chunk[k - 1]
+            curr = chunk[k]
+            if _ref_name(curr.at_relative[1]) != prev.name:
+                return None
+            if _ref_name(curr.rotate_relative[1]) != prev.name:
+                return None
+            if vector_text(curr.at_relative[0]) != at_delta:
+                return None
+            if vector_text(curr.rotate_relative[0]) != rotate_delta:
+                return None
+        return _LoopGroup(mode='previous_chain', start=start, end=end,
+                          prefix=series[0], start_index=series[1])
+
+    def absolute_candidate(chunk, start, end, series):
+        signatures = [_instance_signature(inst) for inst in chunk]
+        if not all(sig == signatures[0] for sig in signatures):
+            return None
+        names = [inst.name for inst in chunk]
+        at_ref = _ref_name(chunk[0].at_relative[1])
+        if at_ref is not None and at_ref in names:
+            return None
+        vectors = [inst.at_relative[0] for inst in chunk]
+        axis_prog = _vector_axis_progression(vectors)
+        if axis_prog is None:
+            return None
+        axis, base, delta = axis_prog
+        return _LoopGroup(mode='absolute_axis', start=start, end=end, prefix=series[0], start_index=series[1],
+                          at_axis=axis, at_base=base, at_delta=delta)
+
     groups: list[_LoopGroup] = []
     i = 0
     while i < len(components):
@@ -135,21 +191,11 @@ def _find_loop_groups(components: tuple) -> list[_LoopGroup]:
             series = _name_series(names)
             if series is None:
                 break
-            signatures = [_instance_signature(inst) for inst in chunk]
-            if not all(sig == signatures[0] for sig in signatures):
-                continue
-
-            at_ref = _ref_name(chunk[0].at_relative[1])
-            if at_ref is not None and at_ref in names:
-                continue
-
-            vectors = [inst.at_relative[0] for inst in chunk]
-            axis_prog = _vector_axis_progression(vectors)
-            if axis_prog is None:
-                continue
-            axis, base, delta = axis_prog
-            best = _LoopGroup(start=i, end=j, prefix=series[0], start_index=series[1],
-                              at_axis=axis, at_base=base, at_delta=delta)
+            candidate = previous_chain_candidate(chunk, i, j, series)
+            if candidate is None:
+                candidate = absolute_candidate(chunk, i, j, series)
+            if candidate is not None:
+                best = candidate
         if best is not None:
             groups.append(best)
             i = best.end
@@ -158,13 +204,13 @@ def _find_loop_groups(components: tuple) -> list[_LoopGroup]:
     return groups
 
 
-def _emit_component(inst, var_name: str, instance_names: dict[str, str]) -> list[str]:
-    lines = []
+def _component_kwargs(inst, instance_names: dict[str, str], *, name_expr: str | None = None,
+                      at_expr: str | None = None, rotate_expr: str | None = None) -> list[str]:
     kwargs = [
-        f'name={inst.name!r}',
+        f'name={name_expr if name_expr is not None else repr(inst.name)}',
         f'type_name={inst.type.name!r}',
-        f'at={_emit_vector_reference(inst.at_relative, instance_names)}',
-        f'rotate={_emit_vector_reference(inst.rotate_relative, instance_names)}',
+        f'at={at_expr if at_expr is not None else _emit_vector_reference(inst.at_relative, instance_names)}',
+        f'rotate={rotate_expr if rotate_expr is not None else _emit_vector_reference(inst.rotate_relative, instance_names)}',
     ]
     if inst.parameters:
         param_pairs = [f'{p.name!r}: {_expr_as_python_literal(p.value)}' for p in inst.parameters]
@@ -179,12 +225,13 @@ def _emit_component(inst, var_name: str, instance_names: dict[str, str]) -> list
         kwargs.append('cpu=True')
     if inst.split is not None:
         kwargs.append(f'split=Expr.parse({str(inst.split)!r})')
+    return kwargs
 
-    lines.append(f'    {var_name} = a.component({", ".join(kwargs)})')
 
+def _emit_component_post(lines: list[str], inst, var_name: str, indent: str = '    '):
     if inst.extend:
         blocks = ', '.join(repr(ext.source) for ext in inst.extend)
-        lines.append(f'    {var_name}.EXTEND({blocks})')
+        lines.append(f'{indent}{var_name}.EXTEND({blocks})')
     if inst.jump:
         jumps = []
         for jump in inst.jump:
@@ -193,19 +240,46 @@ def _emit_component(inst, var_name: str, instance_names: dict[str, str]) -> list
                 f'iterate={jump.iterate!r}, condition=Expr.parse({str(jump.condition)!r}), '
                 f'absolute_target={jump.absolute_target!r})'
             )
-        lines.append(f'    {var_name}.JUMP({", ".join(jumps)})')
+        lines.append(f'{indent}{var_name}.JUMP({", ".join(jumps)})')
     for md in inst.metadata:
         lines.append(
-            f'    {var_name}.add_metadata(MetaData('
+            f'{indent}{var_name}.add_metadata(MetaData('
             f'DataSource.from_type_name_and_name({md.source.type_name!r}, {md.source.name!r}), '
             f'{md.name!r}, {md.mimetype!r}, {md.value!r}))'
         )
+
+
+def _emit_component(inst, var_name: str, instance_names: dict[str, str]) -> list[str]:
+    lines = []
+    kwargs = _component_kwargs(inst, instance_names)
+    lines.append(f'    {var_name} = a.component({", ".join(kwargs)})')
+    _emit_component_post(lines, inst, var_name, indent='    ')
     return lines
 
 
-def _emit_loop_group(group: _LoopGroup, inst, instance_names: dict[str, str]) -> list[str]:
+def _emit_loop_group(group: _LoopGroup, chunk, instance_names: dict[str, str]) -> list[str]:
     lines = []
+    inst = chunk[0]
     n = group.end - group.start
+    if group.mode == 'previous_chain':
+        seed_kwargs = _component_kwargs(inst, instance_names)
+        lines.append(f'    last = a.component({", ".join(seed_kwargs)})')
+        _emit_component_post(lines, inst, 'last', indent='    ')
+
+        delta_inst = chunk[1]
+        at_delta = ', '.join(_expr_as_python_literal(x) for x in delta_inst.at_relative[0])
+        rot_delta = ', '.join(_expr_as_python_literal(x) for x in delta_inst.rotate_relative[0])
+        lines.append(f'    for i in range({n - 1}):')
+        kwargs = _component_kwargs(
+            delta_inst, instance_names,
+            name_expr=f'f"{group.prefix}{{i + {group.start_index + 1}}}"',
+            at_expr=f'([{at_delta}], last)',
+            rotate_expr=f'([{rot_delta}], last)',
+        )
+        lines.append(f'        last = a.component({", ".join(kwargs)})')
+        _emit_component_post(lines, delta_inst, 'last', indent='        ')
+        return lines
+
     lines.append(f'    for i in range({n}):')
     at_values = [_expr_as_python_literal(x) for x in inst.at_relative[0]]
     at_values[group.at_axis] = f'({group.at_base!r} + i * {group.at_delta!r})'
@@ -216,28 +290,14 @@ def _emit_loop_group(group: _LoopGroup, inst, instance_names: dict[str, str]) ->
         at_ref_repr = instance_names.get(at_ref.name, repr(at_ref.name))
     at_repr = f'([{", ".join(at_values)}], {at_ref_repr})'
     rotate_repr = _emit_vector_reference(inst.rotate_relative, instance_names)
-
-    kwargs = [
-        f'name=f"{group.prefix}{{i + {group.start_index}}}"',
-        f'type_name={inst.type.name!r}',
-        f'at={at_repr}',
-        f'rotate={rotate_repr}',
-    ]
-    if inst.parameters:
-        param_pairs = [f'{p.name!r}: {_expr_as_python_literal(p.value)}' for p in inst.parameters]
-        kwargs.append(f'parameters={{{", ".join(param_pairs)}}}')
-    if inst.when is not None:
-        kwargs.append(f'when=Expr.parse({str(inst.when)!r})')
-    if inst.group is not None:
-        kwargs.append(f'group={inst.group!r}')
-    if inst.removable:
-        kwargs.append('removable=True')
-    if inst.cpu:
-        kwargs.append('cpu=True')
-    if inst.split is not None:
-        kwargs.append(f'split=Expr.parse({str(inst.split)!r})')
-
-    lines.append(f'        a.component({", ".join(kwargs)})')
+    kwargs = _component_kwargs(
+        inst, instance_names,
+        name_expr=f'f"{group.prefix}{{i + {group.start_index}}}"',
+        at_expr=at_repr,
+        rotate_expr=rotate_repr,
+    )
+    lines.append(f'        _loop_inst = a.component({", ".join(kwargs)})')
+    _emit_component_post(lines, inst, '_loop_inst', indent='        ')
     return lines
 
 
@@ -328,7 +388,7 @@ def instr_to_python(instr: Instr, optimize: bool = False) -> str:
     while i < len(instr.components):
         if i in groups_by_start:
             group = groups_by_start[i]
-            lines.extend(_emit_loop_group(group, instr.components[group.start], instance_names))
+            lines.extend(_emit_loop_group(group, instr.components[group.start:group.end], instance_names))
             i = group.end
             continue
 
