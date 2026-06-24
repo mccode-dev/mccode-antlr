@@ -253,4 +253,4 @@ mccode-antlr convert INPUT [-o OUTPUT] [--to {python,json,instr}] [--flavor {mcs
 | `--to` | Target format (`python`, `json`, or `instr`) |
 | `--flavor` | Flavor used when reading `.instr` input (`mcstas` default) |
 | `-I`, `--search-dir` | Extra component search directory when reading `.instr` |
-| `--optimize` | Reserved for future optimized Python code-generation mode |
+| `--optimize` | Enable conservative loop-compaction for repeated component sequences (only with `--to python`) |

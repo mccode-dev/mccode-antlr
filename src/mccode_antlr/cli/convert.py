@@ -62,20 +62,21 @@ def convert(
     source = Path(filename).resolve()
     target = _resolve_target(to, output)
 
-    if optimize:
-        raise NotImplementedError('--optimize is only supported by the future optimized Python exporter.')
-
     destination = Path(output).resolve() if output is not None else _default_output_path(source, target)
 
     instr = _load_instr(source, flavor, search_dir)
 
     if target == 'python':
         from mccode_antlr.export import save_instr_as_python
-        save_instr_as_python(instr, destination)
+        save_instr_as_python(instr, destination, optimize=optimize)
     elif target == 'json':
+        if optimize:
+            raise ValueError('--optimize is only supported when --to python')
         from mccode_antlr.io.json import save_json
         save_json(instr, destination)
     elif target == 'instr':
+        if optimize:
+            raise ValueError('--optimize is only supported when --to python')
         with destination.open('w') as f:
             instr.to_file(output=f)
     else:
@@ -108,7 +109,7 @@ def add_convert_management_parser(modes):
     parser.add_argument(
         '--optimize',
         action='store_true',
-        help='Enable optimization of generated Python output (future)',
+        help='Enable conservative optimization of generated Python output',
     )
     parser.add_argument(
         '--flavor',
