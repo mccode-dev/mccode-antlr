@@ -44,9 +44,10 @@ class TestInstrPositioning(TestCase):
         """Equivalent test to `test_read_positioning` but using an assembled instrument"""
         assembler = make_assembler('orientation_test')
         origin = assembler.component("origin", "Progress_bar", at=[0, 0, 0])
-        left = assembler.component('left', 'Arm', at=([0, 0, 1], origin), rotate=[0, 90, 0])
-        up = assembler.component("up", 'Arm', at=([0, 0, 1], left), rotate=[-90, 0, 0])
-        assembler.component("last", 'Arm', at=([0, 0, 1], up), rotate=[0, 0, 0])
+        # Use explicit (angles, reference) pairs so rotation is RELATIVE, matching the parsed version.
+        left = assembler.component('left', 'Arm', at=([0, 0, 1], origin), rotate=([0, 90, 0], origin))
+        up = assembler.component("up", 'Arm', at=([0, 0, 1], left), rotate=([-90, 0, 0], left))
+        assembler.component("last", 'Arm', at=([0, 0, 1], up), rotate=([0, 0, 0], up))
         self._positioning_evaluator(assembler.instrument)
 
     def test_read_positioning(self):
@@ -60,6 +61,65 @@ class TestInstrPositioning(TestCase):
         COMPONENT last = Arm() AT (0, 0, 1) RELATIVE up
         END """
         self._positioning_evaluator(parse_instr_string(instr_source))
+
+    def test_absolute_rotation(self):
+        """AT RELATIVE A ROTATED (a,b,c) ABSOLUTE must use the global frame, not A's frame.
+
+        Also covers the bare-angles form rotate=(a,b,c) in the Assembler API, which
+        is treated as ABSOLUTE (no reference) rather than inheriting the AT reference.
+        """
+        from mccode_antlr.utils import make_assembler, parse_instr_string
+        from mccode_antlr.common import Expr
+        from mccode_antlr.instr.orientation import Vector
+
+        z, o = Expr.float(0), Expr.float(1)
+
+        # ── Parser path ────────────────────────────────────────────────────────
+        # ref is AT (0,0,1) RELATIVE origin ROTATED (0,90,0) RELATIVE origin
+        #     → position (0,0,1), rotation R_Y(90°)
+        # comp_abs is AT (0,0,1) RELATIVE ref ROTATED (0,0,0) ABSOLUTE
+        #     → position (1,0,1), rotation = identity  (global frame)
+        # comp_rel is AT (0,0,1) RELATIVE ref ROTATED (0,0,0) RELATIVE ref
+        #     → position (1,0,1), rotation = R_Y(90°)  (ref's frame)
+        instr = parse_instr_string("""DEFINE INSTRUMENT abs_rot_test() TRACE
+        COMPONENT origin   = Arm() AT (0,0,0) ABSOLUTE
+        COMPONENT ref      = Arm() AT (0,0,1) RELATIVE origin ROTATED (0,90,0) RELATIVE origin
+        COMPONENT comp_abs = Arm() AT (0,0,1) RELATIVE ref    ROTATED (0,0,0) ABSOLUTE
+        COMPONENT comp_rel = Arm() AT (0,0,1) RELATIVE ref    ROTATED (0,0,0) RELATIVE ref
+        END""")
+        orientations = instr.resolve_orientations()
+
+        expected_pos = Vector(o, z, o)  # (1, 0, 1)
+        self.assertEqual(expected_pos, orientations['comp_abs'].position())
+        self.assertEqual(expected_pos, orientations['comp_rel'].position())
+        # comp_abs uses global frame → same rotation as origin (identity)
+        self.assertRotationsEqual(orientations['origin'].rotation(), orientations['comp_abs'].rotation())
+        # comp_rel uses ref's frame → same rotation as ref (R_Y(90°))
+        self.assertRotationsEqual(orientations['ref'].rotation(), orientations['comp_rel'].rotation())
+
+        # ── Assembler path — exercises _handle_rotate ─────────────────────────
+        assembler = make_assembler('abs_rot_test')
+        a_origin = assembler.component('origin', 'Arm', at=[0, 0, 0])
+        a_ref = assembler.component('ref', 'Arm', at=([0, 0, 1], a_origin),
+                                    rotate=([0, 90, 0], a_origin))
+        # Explicit 'ABSOLUTE' reference: the bug
+        a_abs = assembler.component('comp_abs', 'Arm', at=([0, 0, 1], a_ref),
+                                    rotate=([0, 0, 0], 'ABSOLUTE'))
+        # Bare 3-tuple — also treated as ABSOLUTE (same bug)
+        a_bare = assembler.component('comp_bare', 'Arm', at=([0, 0, 1], a_ref),
+                                     rotate=[0, 0, 0])
+        a_rel = assembler.component('comp_rel', 'Arm', at=([0, 0, 1], a_ref),
+                                    rotate=([0, 0, 0], a_ref))
+
+        oa = assembler.instrument.resolve_orientations()
+        self.assertEqual(expected_pos, oa['comp_abs'].position())
+        self.assertEqual(expected_pos, oa['comp_bare'].position())
+        self.assertEqual(expected_pos, oa['comp_rel'].position())
+        # Both explicit ABSOLUTE and bare-tuple forms must give global-frame rotation
+        self.assertRotationsEqual(oa['origin'].rotation(), oa['comp_abs'].rotation())
+        self.assertRotationsEqual(oa['origin'].rotation(), oa['comp_bare'].rotation())
+        # RELATIVE ref gives ref's rotation
+        self.assertRotationsEqual(oa['ref'].rotation(), oa['comp_rel'].rotation())
 
     def _simple_position_tests(self, instr, positions: dict):
         from mccode_antlr.common import Expr
