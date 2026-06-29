@@ -36,12 +36,13 @@ MODEL_ENC = {
     RotationY: 'RotationY',
     RotationZ: 'RotationZ',
     TranslationPart: 'TranslationPart',
-    Orient: 'Orient',
     Parts: 'Parts',
     Part: 'Part',
     DataSource: 'DataSource',
 }
 MODEL_DEC = {v: k for k, v in MODEL_ENC.items()}
+# Orient is no longer written but keep decoding support for files produced by older versions.
+MODEL_DEC['Orient'] = Orient
 # Legacy type names from old ExprNode-based serialization — map to Expr
 LEGACY_EXPR_TYPES = {'Value', 'UnaryOp', 'BinaryOp', 'TrinaryOp'}
 
