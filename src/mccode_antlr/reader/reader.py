@@ -5,7 +5,6 @@ from msgspec import Struct, field
 
 from .registry import Registry, registries_match, registry_from_specification
 from ..comp import Comp
-from ..common import Mode
 
 from mccode_antlr import Flavor
 
@@ -291,7 +290,7 @@ class Reader(Struct):
         self.components.pop(name, None)
         component_cache.clear_override(name)
 
-    def get_instrument(self, name: str | None | Path, destination=None, mode: Mode | None = None):
+    def get_instrument(self, name: str | None | Path, destination=None):
         """Load and parse an instr Instrument definition file
 
         In McCode3 fashion, the instrument file *should* be in the current working directory.
@@ -320,7 +319,7 @@ class Reader(Struct):
         )
         tree = McInstr_parse(stream, 'prog', error_listener)
 
-        visitor = InstrVisitor(self, filename, destination=destination, mode=mode)
+        visitor = InstrVisitor(self, filename, destination=destination)
         res = visitor.visitProg(tree)
         if not isinstance(res, Instr):
             raise RuntimeError(f'Parsing instrument file {filename} did not produce an Instr object')

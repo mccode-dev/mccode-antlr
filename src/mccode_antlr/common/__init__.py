@@ -3,7 +3,6 @@ from .expression import Expr, unary_expr, binary_expr, DataType, ShapeType, Obje
 from .metadata import MetaData
 from .block import RawC, blocks_to_raw_c
 from .textwrap import TextWrapper, HTMLWrapper
-from .mode import Mode
 from . import utilities
 
 __all__ = [
@@ -17,7 +16,6 @@ __all__ = [
     'ShapeType',
     'ObjectType',
     'MetaData',
-    'Mode',
     'RawC',
     'blocks_to_raw_c',
     'utilities',

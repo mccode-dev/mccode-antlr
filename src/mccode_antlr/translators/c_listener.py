@@ -471,6 +471,21 @@ def extract_c_declared_expressions(
 def evaluate_c_defined_expressions(
         variables: dict[str, Expr], initialized_in: str, verbose=False
 ) -> dict[str, Expr]:
-    """For defined identifiers, evaluate a (simple) block of C code to determine the end values of the identifiers"""
-    names_types = {name: expr.data_type.name for name, expr in variables.items()}
-    return evaluate_c_defined_variables(names_types, initialized_in, known=variables, verbose=verbose)
+    """Evaluate a C block to determine the end values of the named identifiers.
+
+    Uses the ANTLR C grammar evaluator so if/else, function calls, and other
+    C constructs are handled correctly (unlike the old McInstr-assignment-rule
+    approach, which only handled simple ``name = expr;`` statements).
+    """
+    from .c_evaluator import evaluate_c_block
+    state = evaluate_c_block(initialized_in, known=dict(variables), verbose=verbose)
+    # Return only the variables that were originally requested, with fallback to
+    # their declared value if the block didn't assign them.
+    from ..common import DataType
+    result = {}
+    for name, declared in variables.items():
+        expr = state.get(name, declared).simplify()
+        if expr.is_singular and declared.data_type != DataType.undefined:
+            expr.data_type = declared.data_type
+        result[name] = expr
+    return result
