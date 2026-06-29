@@ -301,26 +301,18 @@ def _emit_loop_group(group: _LoopGroup, chunk, instance_names: dict[str, str]) -
     return lines
 
 
-def _emit_registry(reg, index: int) -> list[str]:
-    name = f'reg_{index}'
-    if isinstance(reg, LocalRegistry):
-        return [f'    {name} = LocalRegistry({reg.name!r}, {reg.root.as_posix()!r}, priority={reg.priority!r})']
-    if isinstance(reg, GitHubRegistry):
-        return [f'    {name} = GitHubRegistry({reg.name!r}, {reg.url!r}, {reg.version!r}, '
-                f'filename={reg.filename!r}, registry={reg.registry!r}, priority={reg.priority!r})']
-    if isinstance(reg, ModuleRemoteRegistry):
-        return [f'    {name} = ModuleRemoteRegistry({reg.name!r}, {reg.url!r}, '
-                f'filename={reg.filename!r}, version={reg.version!r}, priority={reg.priority!r})']
-    if isinstance(reg, RemoteRegistry):
-        return [f'    {name} = RemoteRegistry({reg.name!r}, {reg.url!r}, {reg.version!r}, '
-                f'{reg.filename!r}, priority={reg.priority!r})']
-    if isinstance(reg, InMemoryRegistry):
-        lines = [f'    {name} = InMemoryRegistry({reg.name!r}, priority={reg.priority!r})']
+def _handle_registry(reg) -> tuple[str|None, list[str]]:
+    rep, lines = None, []
+    if isinstance(reg, (LocalRegistry, GitHubRegistry, ModuleRemoteRegistry, RemoteRegistry)):
+        rep = f'registry_from_specification("{reg.specification_string()}")'
+    elif isinstance(reg, InMemoryRegistry):
+        rep = f'InMemoryRegistry({reg.name!r}, priority={reg.priority!r})'
+        lines.append('    # This may not work -- good luck!')
         for comp_name, source in reg.components.items():
             lines.append(f'    {name}.add({comp_name!r}, {source!r})')
-        return lines
-    return [f'    # Unsupported registry type preserved as comment: {type(reg).__name__}({reg!r})',
-            f'    {name} = None']
+    else:
+        lines = [f'    # Unsupported registry type preserved as comment: {type(reg).__name__}({reg!r})',]
+    return rep, lines
 
 
 def instr_to_python(instr: Instr, optimize: bool = False) -> str:
@@ -354,14 +346,20 @@ def instr_to_python(instr: Instr, optimize: bool = False) -> str:
     if has_metadata:
         lines.append('from mccode_antlr.common import MetaData')
         lines.append('from mccode_antlr.common.metadata import DataSource')
+
+    lines.append('from mccode_antlr.reader.registry import registry_from_specification')
+
     lines.extend(['', '', 'def build_instrument():'])
 
     if instr.registries:
         lines.append('    registries = []')
         for i, reg in enumerate(instr.registries, start=1):
-            lines.extend(_emit_registry(reg, i))
-            lines.append(f'    if reg_{i} is not None:')
-            lines.append(f'        registries.append(reg_{i})')
+            obj, extras = _handle_registry(reg)
+            if obj:
+                lines.append(f'    if (reg := {obj}) is not None:')
+                lines.append('        registries.append(reg)')
+            if len(extras):
+                lines.extend(extras)
         lines.append(f'    a = Assembler({instr.name!r}, registries=registries)')
     else:
         lines.append(f'    a = Assembler({instr.name!r}, flavor=Flavor.{_infer_flavor(instr)})')
