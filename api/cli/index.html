@@ -1080,6 +1080,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#mccode-antlr-convert" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        mccode-antlr convert
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1350,6 +1361,17 @@
     <span class="md-ellipsis">
       
         mccode-antlr datafile
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mccode-antlr-convert" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        mccode-antlr convert
       
     </span>
   </a>
@@ -1774,6 +1796,10 @@ The value determines whether this parameter is held constant or scanned:</p>
 <td><code>datafile</code></td>
 <td>Work with McCode data files (Bragg tables, SQW files, …)</td>
 </tr>
+<tr>
+<td><code>convert</code></td>
+<td>Convert instrument descriptions between <code>.instr</code>, <code>.json</code>, and Python assembler scripts</td>
+</tr>
 </tbody>
 </table>
 <hr />
@@ -1927,6 +1953,45 @@ The value determines whether this parameter is held constant or scanned:</p>
 </tbody>
 </table>
 <p>Run <code>mccode-antlr SUBCOMMAND ACTION -h</code> for the full option list of any individual action.</p>
+<hr />
+<h4 id="mccode-antlr-convert"><code>mccode-antlr convert</code><a class="headerlink" href="#mccode-antlr-convert" title="Permanent link">&para;</a></h4>
+<p>Convert between serialized instrument formats and generated Python assembler scripts.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>mccode-antlr<span class="w"> </span>convert<span class="w"> </span>INPUT<span class="w"> </span><span class="o">[</span>-o<span class="w"> </span>OUTPUT<span class="o">]</span><span class="w"> </span><span class="o">[</span>--to<span class="w"> </span><span class="o">{</span>python,json,instr<span class="o">}]</span><span class="w"> </span><span class="o">[</span>--flavor<span class="w"> </span><span class="o">{</span>mcstas,mcxtrace<span class="o">}]</span><span class="w"> </span><span class="o">[</span>-I<span class="w"> </span>DIR<span class="w"> </span>...<span class="o">]</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>INPUT</code></td>
+<td>Input file (<code>.instr</code> or <code>.json</code>)</td>
+</tr>
+<tr>
+<td><code>-o</code>, <code>--output</code></td>
+<td>Output file path (if omitted, inferred from target/input)</td>
+</tr>
+<tr>
+<td><code>--to</code></td>
+<td>Target format (<code>python</code>, <code>json</code>, or <code>instr</code>)</td>
+</tr>
+<tr>
+<td><code>--flavor</code></td>
+<td>Flavor used when reading <code>.instr</code> input (<code>mcstas</code> default)</td>
+</tr>
+<tr>
+<td><code>-I</code>, <code>--search-dir</code></td>
+<td>Extra component search directory when reading <code>.instr</code></td>
+</tr>
+<tr>
+<td><code>--optimize</code></td>
+<td>Enable conservative loop-compaction for repeated component sequences (only with <code>--to python</code>)</td>
+</tr>
+</tbody>
+</table>
 
 
 
