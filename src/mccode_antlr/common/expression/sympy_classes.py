@@ -43,7 +43,11 @@ class CPointerAccess(Function):
 class CTernary(Function):
     """C ternary expression: ``cond ? true_val : false_val``."""
     @classmethod
-    def eval(cls, *args):
+    def eval(cls, cond, true_val, false_val):
+        if cond is sympy.true:
+            return true_val
+        if cond is sympy.false:
+            return false_val
         return None
 
 
