@@ -5,7 +5,7 @@ from typing import Optional
 from msgspec import Struct, field
 from typing import TypeVar, Union, Optional
 from ..comp import Comp
-from ..common import Expr, Mode
+from ..common import Expr
 from ..common import InstrumentParameter, ComponentParameter, MetaData, parameter_name_present, RawC, blocks_to_raw_c
 from .orientation import Vector, Angles
 from .jump import Jump
@@ -33,7 +33,6 @@ class Instance(Struct):
     extend: tuple[RawC, ...] = field(default_factory=tuple)
     jump: tuple[Jump, ...] = field(default_factory=tuple)
     metadata: tuple[MetaData, ...] = field(default_factory=tuple)
-    mode: Mode = Mode.normal
 
     def __eq__(self, other: Instance) -> bool:
         if not isinstance(other, Instance):
@@ -52,7 +51,7 @@ class Instance(Struct):
             (self.at_relative[0], _ref_id(self.at_relative[1])),
             (self.rotate_relative[0], _ref_id(self.rotate_relative[1])),
             self.parameters, self.removable, self.cpu, self.split,
-            self.when, self.group, self.extend, self.jump, self.metadata, self.mode
+            self.when, self.group, self.extend, self.jump, self.metadata
         ))
 
     def __repr__(self):
@@ -114,8 +113,7 @@ class Instance(Struct):
                    when=ref.when, group=ref.group,
                    extend=tuple([ext for ext in ref.extend]),
                    jump=tuple([jmp for jmp in ref.jump]),
-                   metadata=tuple([md for md in ref.metadata]),
-                   mode=ref.mode)
+                   metadata=tuple([md for md in ref.metadata]))
 
     def __post_init__(self):
         if not self.type.acc:
@@ -310,13 +308,11 @@ class DepInstance(Instance):
     def from_dict(cls, args: dict):
         preq = 'name', 'type', 'removable', 'cpu',
         popt = 'group',
-        mreq = {'mode': Mode}
         tmreq = {'parameters': ComponentParameter, 'extend': RawC, 'jump': Jump,
                  'metadata': MetaData}
         mopt = {'split': Expr, 'when': Expr}
         data = {k: args[k] for k in preq}
         data.update({k: args[k] for k in popt})
-        data.update({k: t(args[k]) for k, t in mreq.items()})
         data.update({k: t.from_dict(args[k]) for k, t in mopt.items() if k in args and args[k]})
         data.update({k: tuple(t.from_dict(a) for a in args[k]) for k, t in tmreq.items()})
 

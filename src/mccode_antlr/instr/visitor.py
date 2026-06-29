@@ -1,6 +1,6 @@
 from __future__ import annotations
 from ..grammar import McInstrParser, McInstrVisitor
-from ..common import InstrumentParameter, MetaData, Expr, Mode
+from ..common import InstrumentParameter, MetaData, Expr
 from ..common.visitor import add_common_visitors
 from .instr import Instr
 from .instance import Instance
@@ -15,14 +15,13 @@ def literal_string(ctx):
 
 
 class InstrVisitor(McInstrVisitor):
-    def __init__(self, parent, filename, destination=None, allow_assignment=False, mode: Mode | None = None):
+    def __init__(self, parent, filename, destination=None, allow_assignment=False):
         self.parent = parent
         self.filename = filename
         self.state = Instr()
         self.current_comp = None
         self.current_instance_name = None
         self.destination = destination
-        self.mode = mode or Mode.normal
 
     def visitProg(self, ctx: McInstrParser.ProgContext):
         self.state = Instr()
@@ -124,7 +123,7 @@ class InstrVisitor(McInstrVisitor):
             # We must use *the same* relative information for the rotation -- at[1] is None or a valid instance:
             rotate = (Angles(Expr.integer(0), Expr.integer(0), Expr.integer(0)), at[1])
         # Construct a new instance, possibly copying values from an existing instance:
-        instance = Instance.from_instance(name, comp, at, rotate) if is_ref else Instance(name, comp, at, rotate, mode=self.mode)
+        instance = Instance.from_instance(name, comp, at, rotate) if is_ref else Instance(name, comp, at, rotate)
         if ctx.instance_parameters() is not None:
             for param_name, param_value in self.visit(ctx.instance_parameters()):
                 instance.set_parameter(param_name, param_value, overwrite=is_ref)

@@ -46,8 +46,6 @@ def mccode(flavor: Flavor):
     args = mccode_script_parse(str(flavor).lower() + '-antlr')
     from mccode_antlr.reader import Reader, collect_local_registries
     from mccode_antlr.translators.c import CTargetVisitor
-    from mccode_antlr.common import Mode
-
     config = dict(default_main=args.main,
                   enable_trace=args.trace,
                   portable=args.portable,
@@ -66,8 +64,7 @@ def mccode(flavor: Flavor):
         # Construct the object which will read the instrument and component files, producing Python objects
         reader = Reader(registries=collect_local_registries(flavor, args.search_dir))
         # Read the provided .instr file, including all specified .instr and .comp files along the way
-        # In minimal mode, the component orientations are not resolved -- to speed up the process
-        instrument = reader.get_instrument(args.filename, mode=Mode.minimal)
+        instrument = reader.get_instrument(args.filename)
 
     # Construct the object which will translate the Python instrument to C
     visitor = CTargetVisitor(instrument, flavor=flavor, config=config, verbose=config['verbose'],
