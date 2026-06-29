@@ -17,24 +17,26 @@ class TestInstrPositioning(TestCase):
         from mccode_antlr.instr.orientation import Vector, Rotation
         z, o = Expr.float(0), Expr.float(1)
 
-        left = instr.get_component('left')
+        orientations = instr.resolve_orientations()
+
+        left_or = orientations['left']
         v3 = Vector(z, z, o)
-        self.assertEqual(v3, left.orientation.position())
-        self.assertEqual(Rotation(z, z, -o, z, o, z, o, z, z), left.orientation.rotation())
-        self.assertEqual(left.orientation.rotation(), left.orientation.rotation('coordinates').inverse())
+        self.assertEqual(v3, left_or.position())
+        self.assertEqual(Rotation(z, z, -o, z, o, z, o, z, z), left_or.rotation())
+        self.assertEqual(left_or.rotation(), left_or.rotation('coordinates').inverse())
 
-        up = instr.get_component('up')
+        up_or = orientations['up']
         v4 = Vector(o, z, z)
-        self.assertEqual(v4, up.orientation.position() - left.orientation.position())
+        self.assertEqual(v4, up_or.position() - left_or.position())
         up_orientation = Rotation(z, z, -o, -o, z, z, z, o, z)
-        self.assertRotationsEqual(up_orientation, up.orientation.rotation())
-        self.assertEqual(Vector(o, z, o), up.orientation.position())
-        self.assertRotationsEqual(up_orientation, up.orientation.rotation('coordinates').inverse())
+        self.assertRotationsEqual(up_orientation, up_or.rotation())
+        self.assertEqual(Vector(o, z, o), up_or.position())
+        self.assertRotationsEqual(up_orientation, up_or.rotation('coordinates').inverse())
 
-        last = instr.get_component('last')
+        last_or = orientations['last']
         v5 = Vector(z, o, z)
-        self.assertRotationsEqual(up_orientation, last.orientation.rotation())
-        self.assertEqual(v5, last.orientation.position() - up.orientation.position())
+        self.assertRotationsEqual(up_orientation, last_or.rotation())
+        self.assertEqual(v5, last_or.position() - up_or.position())
 
     def test_assemble_positioning(self):
         from mccode_antlr.utils import make_assembler
@@ -63,10 +65,12 @@ class TestInstrPositioning(TestCase):
         from mccode_antlr.common import Expr
         from mccode_antlr.instr.orientation import Vector
         positions = {k: Vector(*[Expr.float(x) for x in v]) for k, v in positions.items()}
+        orientations = instr.resolve_orientations()
         for instance in instr.components:
-            self.assertEqual(positions[instance.name], instance.orientation.position())
-            self.assertEqual(positions[instance.name], instance.orientation.position('axes'))
-            self.assertEqual(positions[instance.name], instance.orientation.position('coordinates'))
+            orient = orientations[instance.name]
+            self.assertEqual(positions[instance.name], orient.position())
+            self.assertEqual(positions[instance.name], orient.position('axes'))
+            self.assertEqual(positions[instance.name], orient.position('coordinates'))
 
     def test_simple_positioning(self):
         from mccode_antlr.utils import parse_instr_string
@@ -92,15 +96,17 @@ class TestInstrPositioning(TestCase):
         positions = {'origin': (0, 0, 0), 'guide_start': (0.01277, 0, 1.930338), 'guide': (0.01277, 0, 1.930338),
                      'guide_end': (0.01277 - 4.33*sin(pi/180*0.56), 0, 1.930338 + 4.33*cos(pi/180*0.56))}
         self._simple_position_tests(instr, positions)
-        pos_hat = (0.006615, 0, 0.999978)
-        pos = instr.components[2].orientation.position()
+
+        orientations = instr.resolve_orientations()
+        pos = orientations['guide'].position()
         distance = pos.length()
         vector = pos / distance
+        pos_hat = (0.006615, 0, 0.999978)
         self.assertAlmostEqual(vector.x, pos_hat[0], 6)
         self.assertAlmostEqual(vector.y, pos_hat[1], 6)
         self.assertAlmostEqual(vector.z, pos_hat[2], 6)
         self.assertAlmostEqual(distance, 1.930380239005777, 6)
 
         # Combining the position and rotation (reduced) operations should yield the same position
-        comb = instr.components[2].orientation.combine().reduce()
+        comb = orientations['guide'].combine().reduce()
         self.assertEqual(pos, comb.position())

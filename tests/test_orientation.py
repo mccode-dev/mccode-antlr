@@ -501,43 +501,6 @@ class TestOrientation(TestCase):
         self.assertEqual(d2.position(), t444.position())
         self.assertEqual(d2.angles(), a000)
 
-    # def test_DependentOrientation_with_rotations(self):
-    #     from mccode_antlr.common import Expr
-    #     from mccode_antlr.instr.orientation import TranslationPart, Vector, Angles
-    #     from mccode_antlr.instr.orientation import RotationX, RotationY, RotationZ
-    #     from mccode_antlr.instr.orientation import OrientParts, Orient
-    #
-    #     tx, ty, tz = _random_angles_degrees()
-    #     f = Expr.float
-    #
-    #     for a in (Angles(tx, f(0), f(0)), Angles(f(0), ty, f(0)), Angles(f(0), f(0), tz)):
-    #         v = _random_vector(0.1, 1.0)
-    #         dop = Orient.from_dependent_orientation(None, v, a)
-    #         self.assertEqual(dop.position(), v)
-    #         self.assertEqual(dop.angles(), a)
-    #         print(dop)
-    #
-    #     # Rotate 90 degrees around z axis
-    #     z90 = Angles(f(0), f(0), f(90))
-    #     # Then rotate 90 degrees around x axis
-    #     x90 = Angles(f(90), f(0), f(0))
-    #     # This permutes the axes x'=y, y'=z, z'=x
-    #     xyz = Orient()
-    #     inter = Orient.from_dependent_orientation(xyz, Vector(f(0), f(0), f(0)), z90)
-    #     yzx = Orient.from_dependent_orientation(inter, Vector(f(0), f(0), f(0)), x90)
-    #
-    #     self.assertEqual(yzx._position.resolve().seitz(), yzx._rotation.resolve().seitz())
-    #
-    #     self.assertNotEqual(yzx.angles(), Angles(f(90), f(0), f(90)))
-    #     self.assertEqual(yzx.angles(), Angles(f(180), f(90), f(-90)))
-    #
-    #
-    #     #
-    #     # d2 = DependentOrientation.from_dependent_orientation(dop, v321, a000)
-    #     # t444 = OrientationParts((t123, t321)).reduce().stack()[0]
-    #     # self.assertEqual(d2.position(), t444.position())
-    #     # self.assertEqual(d2.angles(), a000)
-
     def test_DependentOrientation_simple(self):
         from mccode_antlr.common import Expr
         from mccode_antlr.instr.orientation import Vector, Angles, Orient

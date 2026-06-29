@@ -88,7 +88,7 @@ class InstanceIO:
     from mccode_antlr.comp import Comp
     from mccode_antlr.instr import Instance
     attrs = ('name', 'removable', 'cpu', 'group')
-    names = ('orientation', 'parameters', 'split', 'when', 'extend', 'jump', 'metadata')
+    names = ('parameters', 'split', 'when', 'extend', 'jump', 'metadata')
 
     @staticmethod
     def load(group, instances: dict[str, Instance], components: dict[str, Comp], **kwargs) -> Instance:

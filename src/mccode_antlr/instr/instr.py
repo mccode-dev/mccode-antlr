@@ -336,10 +336,11 @@ class Instr(Struct):
             component = reader.get_component(component)
 
         # ── 3. Auto-compute position / rotation if not provided ────────────────
+        orientations = self.resolve_orientations()
         if at_relative is None:
-            at_relative = _midpoint_at_relative(pred_inst, succ_inst)
+            at_relative = _midpoint_at_relative(pred_inst, succ_inst, orientations)
         if rotate_relative is None:
-            rotate_relative = _downstream_rotate_relative(pred_inst, succ_inst)
+            rotate_relative = _downstream_rotate_relative(pred_inst, succ_inst, orientations)
 
         # ── 4. Normalise vector/angles in at_relative / rotate_relative ────────
         from .orientation import Vector, Angles
@@ -347,8 +348,8 @@ class Instr(Struct):
         rotate_relative = _normalise_vr(rotate_relative, self.components, Angles)
 
         # ── 5. Fix forward references (ref must come before the new instance) ──
-        at_relative = _fix_forward_ref(at_relative, insert_idx, pred_inst)
-        rotate_relative = _fix_forward_ref_rotation(rotate_relative, insert_idx, pred_inst)
+        at_relative = _fix_forward_ref(at_relative, insert_idx, pred_inst, orientations)
+        rotate_relative = _fix_forward_ref_rotation(rotate_relative, insert_idx, pred_inst, orientations)
 
         # ── 6. Reject insertion that would break a contiguous group ───────────
         if (pred_inst is not None and succ_inst is not None
@@ -363,7 +364,7 @@ class Instr(Struct):
                 f"or pass group={pred_inst.group!r} to join the group."
             )
 
-        # ── 7. Create the instance (orientation computed in __post_init__) ──────
+        # ── 7. Create the instance ────────────────────────────────────────────────
         new_inst = Instance(name, component, at_relative, rotate_relative,
                             parameters=parameters, group=group, removable=removable)
 
@@ -649,6 +650,7 @@ class Instr(Struct):
         if first.check_instrument_parameters(remove=remove_unused_parameters) and not remove_unused_parameters:
             logger.warning(f'Instrument {first.name} has unused instrument parameters')
 
+        orig_orientations = self.resolve_orientations()
         second = self.copy(first=index)
         second.name = self.name + '_second'
         # remove any dangling component references and re-reference into the new instrument's components:
@@ -659,18 +661,18 @@ class Instr(Struct):
                 if second.has_component_named(at_rel.name):
                     instance.at_relative = instance.at_relative[0], second.get_component(at_rel.name)
                 else:
-                    instance.at_relative = instance.orientation.position(), None
+                    instance.at_relative = orig_orientations[instance.name].position(), None
             if isinstance(rot_rel, Instance):
                 if second.has_component_named(rot_rel.name):
                     instance.rotate_relative = instance.rotate_relative[0], second.get_component(rot_rel.name)
                 else:
-                    instance.rotate_relative = instance.orientation.angles(), None
+                    instance.rotate_relative = orig_orientations[instance.name].angles(), None
         if second.check_instrument_parameters(remove=remove_unused_parameters) and not remove_unused_parameters:
             logger.info(f'Instrument {second.name} has unused instrument parameters')
 
         return first, second
 
-    def make_instance(self, name, component, at_relative=None, rotate_relative=None, orientation=None,
+    def make_instance(self, name, component, at_relative=None, rotate_relative=None,
                       parameters=None, group=None, removable=False):
         if parameters is None:
             parameters = tuple()
@@ -680,8 +682,30 @@ class Instr(Struct):
             from ..reader import Reader
             reader = Reader(registries=list(self.registries))
             component = reader.get_component(component)
-        self.components += (Instance(name, component, at_relative, rotate_relative, orientation,
+        self.components += (Instance(name, component, at_relative, rotate_relative,
                                      parameters, group, removable),)
+
+    def resolve_orientations(self) -> dict:
+        """Resolve absolute orientations for every component in declaration order.
+
+        Returns a ``dict[str, Orient]`` mapping each component name to its
+        fully-resolved absolute :class:`~mccode_antlr.instr.orientation.Orient`.
+        Components must reference only earlier-defined components, which is
+        enforced by the McCode language, so the list is already topologically
+        sorted.
+        """
+        from .orientation import Orient
+        resolved: dict = {}
+        for inst in self.components:
+            at, at_ref = inst.at_relative
+            rt, rt_ref = inst.rotate_relative
+            ar = resolved.get(at_ref.name) if at_ref is not None else None
+            rr = resolved.get(rt_ref.name) if rt_ref is not None else None
+            if at_ref is rt_ref:
+                resolved[inst.name] = Orient.from_dependent_orientation(ar, at, rt)
+            else:
+                resolved[inst.name] = Orient.from_dependent_orientations(ar, at, rr, rt)
+        return resolved
 
     def mcpl_split(self,
                    after,
@@ -719,7 +743,7 @@ class Instr(Struct):
         # remove the last component, since we're going to re-use its name:
         first.components = first.components[:-1]
         # automatically adds the component at the end of the list:
-        first.make_instance(fc.name, output_component, fc.at_relative, fc.rotate_relative, fc.orientation,
+        first.make_instance(fc.name, output_component, fc.at_relative, fc.rotate_relative,
                             output_parameters)
 
         if input_component is None:
@@ -730,11 +754,6 @@ class Instr(Struct):
             input_parameters = (filename_parameter,) + input_parameters
         if not any(p.name == 'verbose' for p in input_parameters):
             input_parameters = (ComponentParameter('verbose', Expr.float(0)),) + input_parameters
-        # # the MCPL input component _is_ the origin of its simulation, but must be placed relative to other components.
-        # # so we need the *absolute* position and orientation of the removed component:
-        # abs_at_rel = fc.orientation.position(), None
-        # abs_rot_rel = fc.orientation.angles(), None
-
         # the split at component in the second instrument should have already been converted to absolute-positioning:
         sc = second.components[0]
         if sc.at_relative[1] is not None or sc.rotate_relative[1] is not None:
@@ -823,7 +842,7 @@ def _orient_is_constant(orient) -> bool:
         return False
 
 
-def _midpoint_at_relative(pred_inst, succ_inst):
+def _midpoint_at_relative(pred_inst, succ_inst, orientations: dict):
     """Return ``(Vector, reference_instance)`` for the midpoint between *pred_inst* and *succ_inst*.
 
     If *pred_inst* is ``None``, returns the origin ABSOLUTE.
@@ -841,8 +860,8 @@ def _midpoint_at_relative(pred_inst, succ_inst):
     if succ_inst is None:
         return zero, pred_inst
 
-    p_or = pred_inst.orientation
-    s_or = succ_inst.orientation
+    p_or = orientations.get(pred_inst.name)
+    s_or = orientations.get(succ_inst.name)
     if _orient_is_constant(p_or) and _orient_is_constant(s_or):
         p_pos = p_or.position()
         s_pos = s_or.position()
@@ -856,7 +875,7 @@ def _midpoint_at_relative(pred_inst, succ_inst):
     return zero, pred_inst
 
 
-def _downstream_rotate_relative(pred_inst, succ_inst):
+def _downstream_rotate_relative(pred_inst, succ_inst, orientations: dict):
     """Return ``(Angles, reference_instance)`` matching the orientation of the downstream component.
 
     Expresses the rotation RELATIVE to *pred_inst* when possible (matching the
@@ -876,20 +895,23 @@ def _downstream_rotate_relative(pred_inst, succ_inst):
 
     if pred_inst is None:
         # No predecessor: use absolute orientation of downstream if available
-        if _orient_is_constant(downstream.orientation):
-            return downstream.orientation.angles(), None  # ABSOLUTE
+        d_or = orientations.get(downstream.name)
+        if _orient_is_constant(d_or):
+            return d_or.angles(), None  # ABSOLUTE
         return zero, None
 
     # Both pred and succ (or just pred) exist: prefer RELATIVE to pred_inst
-    if not _orient_is_constant(pred_inst.orientation):
+    p_or = orientations.get(pred_inst.name)
+    if not _orient_is_constant(p_or):
         return zero, pred_inst  # pred orientation unknown — use zero RELATIVE pred
 
-    if downstream is pred_inst or not _orient_is_constant(downstream.orientation):
+    d_or = orientations.get(downstream.name)
+    if downstream is pred_inst or not _orient_is_constant(d_or):
         return zero, pred_inst  # no downstream info — zero RELATIVE pred
 
     # R_rel = R_succ * R_pred^T  (rotation of succ expressed in pred's frame)
-    r_pred = pred_inst.orientation.rotation('axes')
-    r_succ = downstream.orientation.rotation('axes')
+    r_pred = p_or.rotation('axes')
+    r_succ = d_or.rotation('axes')
     r_rel = r_succ * r_pred.inverse()
     angles = axes_euler_angles(r_rel, degrees=True)
     return angles, pred_inst
@@ -912,7 +934,7 @@ def _normalise_vr(vr, components, vec_cls):
     return vec, ref
 
 
-def _fix_forward_ref(at_relative, insert_idx, pred_inst):
+def _fix_forward_ref(at_relative, insert_idx, pred_inst, orientations: dict):
     """Re-express *at_relative* relative to *pred_inst* if its reference comes after *insert_idx*.
 
     If the reference component's index >= *insert_idx* (i.e., it will come
@@ -926,24 +948,11 @@ def _fix_forward_ref(at_relative, insert_idx, pred_inst):
     if ref_inst is None or pred_inst is None:
         return at_relative  # ABSOLUTE or no predecessor — nothing to fix
 
-    # We need to know the index of ref_inst in the *current* (pre-insertion) tuple.
-    # This helper is called before the new component is spliced in, so the tuple
-    # is still the original.  We can't index into self.components here, but the
-    # caller holds insert_idx which is the insertion point in the original order.
-    # We compare by object identity: if ref_inst IS one of the post-insertion
-    # components, it was added later.  For simplicity, compare by name to
-    # determine whether it precedes insert_idx; the caller must supply the
-    # original component list indirectly through pred_inst position.
-    #
-    # We detect a forward reference by checking if ref_inst is the succ_inst
-    # or comes after it.  Since we can't access the full list here, the check
-    # is deferred: if ref_inst.orientation is set AND pred_inst.orientation is
-    # set, we can convert; otherwise we trust the caller supplied a valid ref.
     if ref_inst is pred_inst:
         return at_relative  # already relative to pred — nothing to do
 
-    ref_or = ref_inst.orientation if hasattr(ref_inst, 'orientation') else None
-    pred_or = pred_inst.orientation if hasattr(pred_inst, 'orientation') else None
+    ref_or = orientations.get(ref_inst.name)
+    pred_or = orientations.get(pred_inst.name)
     if not _orient_is_constant(ref_or) or not _orient_is_constant(pred_or):
         raise RuntimeError(
             f"Cannot re-express position relative to {pred_inst.name!r}: "
@@ -957,7 +966,7 @@ def _fix_forward_ref(at_relative, insert_idx, pred_inst):
     return at_in_pred, pred_inst
 
 
-def _fix_forward_ref_rotation(rotate_relative, insert_idx, pred_inst):
+def _fix_forward_ref_rotation(rotate_relative, insert_idx, pred_inst, orientations: dict):
     """Re-express *rotate_relative* RELATIVE to *pred_inst* if its reference is forward.
 
     Computes the absolute rotation of the reference and then expresses it
@@ -973,18 +982,16 @@ def _fix_forward_ref_rotation(rotate_relative, insert_idx, pred_inst):
     if ref_inst is pred_inst:
         return rotate_relative
 
-    ref_or = ref_inst.orientation if hasattr(ref_inst, 'orientation') else None
-    pred_or = pred_inst.orientation if hasattr(pred_inst, 'orientation') else None
+    ref_or = orientations.get(ref_inst.name)
+    pred_or = orientations.get(pred_inst.name)
     if not _orient_is_constant(ref_or) or not _orient_is_constant(pred_or):
         raise RuntimeError(
             f"Cannot re-express rotation relative to predecessor: "
             f"orientation of {ref_inst.name!r} or {pred_inst.name!r} is unavailable or non-constant."
         )
 
-    from .orientation import axes_euler_angles
-    from ..common import Expr
+    from .orientation import axes_euler_angles, Rotation
     # Absolute rotation of the original (ref + angles)
-    from .orientation import Rotation
     r_angles = Rotation.from_angles(angles)
     r_abs = r_angles * ref_or.rotation('axes')
     # Express relative to pred_inst
