@@ -87,15 +87,12 @@ def show_geometry(
     _orient_map: dict = {}
     if use_mesh and instrument_display is not None:
         from ..instrument_display import _transform_polyline
-        for instance in instrument_display._instr.components:
-            if instance.orientation is not None:
-                try:
-                    _orient_map[instance.name] = (
-                        instance.orientation.rotation(),
-                        instance.orientation.position(),
-                    )
-                except Exception:
-                    pass
+        orientations = instrument_display._instr.resolve_orientations()
+        for name, orient in orientations.items():
+            try:
+                _orient_map[name] = (orient.rotation(), orient.position())
+            except Exception:
+                pass
 
     for i, (name, polylines) in enumerate(geometry.items()):
         color = auto_colors[i % len(auto_colors)]

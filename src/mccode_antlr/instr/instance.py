@@ -5,9 +5,9 @@ from typing import Optional
 from msgspec import Struct, field
 from typing import TypeVar, Union, Optional
 from ..comp import Comp
-from ..common import Expr, Mode
+from ..common import Expr
 from ..common import InstrumentParameter, ComponentParameter, MetaData, parameter_name_present, RawC, blocks_to_raw_c
-from .orientation import Orient, Vector, Angles
+from .orientation import Vector, Angles
 from .jump import Jump
 
 InstanceReference = TypeVar('InstanceReference', bound='Instance')
@@ -24,7 +24,6 @@ class Instance(Struct):
     type: Comp
     at_relative: VectorReference
     rotate_relative: AnglesReference
-    orientation: Optional[Orient] = None
     parameters: tuple[ComponentParameter, ...] = field(default_factory=tuple)
     removable: bool = False
     cpu: bool = False
@@ -34,7 +33,6 @@ class Instance(Struct):
     extend: tuple[RawC, ...] = field(default_factory=tuple)
     jump: tuple[Jump, ...] = field(default_factory=tuple)
     metadata: tuple[MetaData, ...] = field(default_factory=tuple)
-    mode: Mode = Mode.normal
 
     def __eq__(self, other: Instance) -> bool:
         if not isinstance(other, Instance):
@@ -53,7 +51,7 @@ class Instance(Struct):
             (self.at_relative[0], _ref_id(self.at_relative[1])),
             (self.rotate_relative[0], _ref_id(self.rotate_relative[1])),
             self.parameters, self.removable, self.cpu, self.split,
-            self.when, self.group, self.extend, self.jump, self.metadata, self.mode
+            self.when, self.group, self.extend, self.jump, self.metadata
         ))
 
     def __repr__(self):
@@ -115,28 +113,9 @@ class Instance(Struct):
                    when=ref.when, group=ref.group,
                    extend=tuple([ext for ext in ref.extend]),
                    jump=tuple([jmp for jmp in ref.jump]),
-                   metadata=tuple([md for md in ref.metadata]),
-                   mode=ref.mode)
+                   metadata=tuple([md for md in ref.metadata]))
 
     def __post_init__(self):
-        # TODO: Enhancement idea. Instead of building independent orientation chains
-        #       for each instance, as is done in the non-minimal Mode. The Instr
-        #       could hold a directed graph defining the chains, with nodes as instances
-        #       or instance names, and edges as the the chained operations linking
-        #       the dependency. This should make it easier to re-use relative
-        #       orientation information in other tools, e.g., moreniius.
-        if self.mode != Mode.minimal and self.orientation is None:
-            ar, rr = self.at_relative, self.rotate_relative
-            if not isinstance(ar[0], Vector) or not isinstance(rr[0], Angles):
-                logger.warning(f'Expected {ar=} and {rr=} to be Vector and Angles respectively')
-            if rr[1] is None and ar[1] is not None:
-                logger.warning(f'Expected rotation reference to be specified when at reference is specified')
-            at = ar[0] if isinstance(ar[0], Vector) else Vector(*ar[0])
-            an, ar = (ar[1].name, ar[1].orientation) if ar[1] else ("ABSOLUTE", None)
-            rt = rr[0] if isinstance(rr[0], Angles) else Angles(*rr[0])
-            rn, rr = (rr[1].name, rr[1].orientation) if rr[1] else (an, ar)
-            self.orientation = Orient.from_dependent_orientations(ar, at, rr, rt)
-        # check if the defining component is marked noacc, in which case this _is_ cpu only
         if not self.type.acc:
             self.cpu = True
 
@@ -268,14 +247,14 @@ class Instance(Struct):
 
     def copy(self):
         return Instance(self.name, self.type, self.at_relative, self.rotate_relative,
-                        orientation=self.orientation, parameters=self.parameters,
+                        parameters=self.parameters,
                         removable=self.removable, cpu=self.cpu, split=self.split, when=self.when,
                         group=self.group, extend=self.extend, jump=self.jump, metadata=self.metadata)
 
     def parameter_used(self, name: str):
         if any([name in par.value for par in self.parameters]):
             return True
-        if name in self.at_relative[0] or name in self.rotate_relative[0] or name in self.orientation:
+        if name in self.at_relative[0] or name in self.rotate_relative[0]:
             return True
         if name in (self.split or []) or name in (self.when or []):
             return True
@@ -329,13 +308,11 @@ class DepInstance(Instance):
     def from_dict(cls, args: dict):
         preq = 'name', 'type', 'removable', 'cpu',
         popt = 'group',
-        mreq = {'mode': Mode}
         tmreq = {'parameters': ComponentParameter, 'extend': RawC, 'jump': Jump,
                  'metadata': MetaData}
-        mopt = {'split': Expr, 'when': Expr, 'orientation': Orient, }
+        mopt = {'split': Expr, 'when': Expr}
         data = {k: args[k] for k in preq}
         data.update({k: args[k] for k in popt})
-        data.update({k: t(args[k]) for k, t in mreq.items()})
         data.update({k: t.from_dict(args[k]) for k, t in mopt.items() if k in args and args[k]})
         data.update({k: tuple(t.from_dict(a) for a in args[k]) for k, t in tmreq.items()})
 
@@ -345,6 +322,10 @@ class DepInstance(Instance):
         angles = Angles.from_dict(angles)
         data['at_relative'] = (vectors, ar_name)
         data['rotate_relative'] = angles, rr_name
+        # Strip keys that belonged to old serialized formats (e.g. 'orientation')
+        from msgspec.structs import fields as struct_fields
+        known = {f.name for f in struct_fields(cls)}
+        data = {k: v for k, v in data.items() if k in known}
         return cls(**data)
 
     def make_independent(self, components: dict[str, Comp]):
@@ -355,7 +336,6 @@ class DepInstance(Instance):
 
 def make_independent(dependents: tuple[DepInstance, ...], components: dict[str, Comp]):
     independents = [d.make_independent(components) for d in dependents]
-    # hopefully 'orientation' was set so no check was made against the relative instances
     names = tuple(i.name for i in independents)
     for d, t in zip(dependents, independents):
         if d.at_relative[1] in names:

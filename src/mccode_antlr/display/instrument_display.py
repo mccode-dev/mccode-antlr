@@ -2,10 +2,9 @@
 
 Collects :class:`ComponentDisplay` objects for every component instance that
 has a ``MCDISPLAY`` section, transforms each component's local geometry into
-the global instrument coordinate frame using the symbolic
-:class:`~mccode_antlr.instr.orientation.Orient` chain already attached to
-each :class:`~mccode_antlr.instr.instance.Instance`, and then evaluates
-everything with a supplied instrument parameter dict.
+the global instrument coordinate frame using
+:meth:`~mccode_antlr.instr.instr.Instr.resolve_orientations`, and then
+evaluates everything with a supplied instrument parameter dict.
 
 Example::
 
@@ -128,6 +127,7 @@ class InstrumentDisplay:
         """
         p = dict(params or {})
         result: dict[str, list[np.ndarray]] = {}
+        orientations = self._instr.resolve_orientations() if global_frame else {}
 
         for instance in self._instr.components:
             name = instance.name
@@ -146,13 +146,13 @@ class InstrumentDisplay:
             cd = self._components[name]
             local_polylines = cd.to_polylines(comp_params)
 
-            if not global_frame or instance.orientation is None:
+            orient = orientations.get(name)
+            if not global_frame or orient is None:
                 result[name] = local_polylines
                 continue
 
             # Transform to global frame
             try:
-                orient = instance.orientation
                 rotation = orient.rotation()
                 translation = orient.position()
             except Exception:

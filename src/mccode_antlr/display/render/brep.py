@@ -423,6 +423,7 @@ def instrument_to_assembly(
 
     p = params or {}
     placed: list = []
+    _orient_map = instr_display._instr.resolve_orientations()
 
     for instance in instr_display._instr.components:
         name = instance.name
@@ -456,9 +457,9 @@ def instrument_to_assembly(
             continue
 
         # Apply global-frame placement
-        if instance.orientation is not None:
+        orient = _orient_map.get(instance.name)
+        if orient is not None:
             try:
-                orient = instance.orientation
                 rotation = orient.rotation()
                 translation = orient.position()
                 tx = _eval_expr(translation.x, p)

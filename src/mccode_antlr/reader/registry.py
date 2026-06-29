@@ -5,13 +5,16 @@ from functools import cache
 from pathlib import Path
 from re import Pattern
 from loguru import logger
-from mccode_antlr.version import version as mccode_antlr_version
-from mccode_antlr import Flavor
 from typing import Type, Any
 from msgspec import Struct
 import requests
 from time import sleep
 from packaging.version import Version, InvalidVersion
+
+from mccode_antlr.version import version as mccode_antlr_version
+from mccode_antlr import Flavor
+from mccode_antlr.common import TextWrapper
+
 
 def _fetch_registry_with_retry(url, max_retries=3, timeout=10):
     """Fetch a registry file with retry logic for gateway timeouts"""
@@ -83,7 +86,6 @@ class Registry:
     priority: int = 0
 
     def __str__(self):
-        from mccode_antlr.common import TextWrapper
         return self.to_string(TextWrapper())
 
     def __hash__(self):
@@ -95,8 +97,20 @@ class Registry:
         self.to_file(output, wrapper)
         return output.getvalue()
 
+#    def to_file(self, output, wrapper):
+#        print(f'Registry<{self.name=},{self.root=},{self.pooch=},{self.version=},{self.priority=}>', file=output)
+
+    def _inner_specification_parts(self, wrapper) -> list[str]:
+        return [self.name, self.root, self.pooch, self.version]
+
+    def specification_parts(self, wrapper=None) -> list[str]:
+        return self._inner_specification_parts(wrapper if wrapper else TextWrapper())
+
+    def specification_string(self) -> str:
+        return ' '.join(self.specification_parts())
+        
     def to_file(self, output, wrapper):
-        print(f'Registry<{self.name=},{self.root=},{self.pooch=},{self.version=},{self.priority=}>', file=output)
+        print(wrapper.line('Registry:', self.specification_parts(wrapper)), file=output)
 
     def known(self, name: str, ext: str = None, strict: bool = False):
         pass
@@ -173,10 +187,12 @@ class RemoteRegistry(Registry):
     def file_contents(self) -> dict[str, str]:
         return {key: getattr(self, key) or '' for key in self.file_keys()}
 
-    def to_file(self, output, wrapper):
+    def _inner_specification_parts(self, wrapper) -> list[str]:
         filename = self.filename or f'{self.name}-registry.txt'
-        print(wrapper.line('Registry:', [self.name, wrapper.url(self.url or ''), self.version or '', filename]),
-              file=output)
+        return [self.name, wrapper.url(self.url or ''), self.version or '', filename]
+        
+#    def to_file(self, output, wrapper):
+#        print(wrapper.line('Registry:', self.specification_parts(wrapper)), file=output)
 
     def known(self, name: str, ext: str = None, strict: bool = False):
         compare = _name_plus_suffix(name, ext)
@@ -316,12 +332,13 @@ class GitHubRegistry(RemoteRegistry):
     def registry(self):
         return self._stashed_registry
 
-    def to_file(self, output, wrapper):
+    def _inner_specification_parts(self, wrapper):
         filename = self.filename or f'{self.name}-registry.txt'
         items = [self.name, wrapper.url(self.url or ''), self.version or '', filename]
         if self._stashed_registry:
             items.append(wrapper.url(self._stashed_registry))
-        print(wrapper.line('Registry:', items), file=output)
+        return items
+        
 
     def file_contents(self) -> dict[str, str]:
         fc = super().file_contents()
@@ -349,8 +366,8 @@ class LocalRegistry(Registry):
     def file_contents(self):
         return {'name': self.name, 'root': self.root.as_posix(), 'priority': self.priority}
 
-    def to_file(self, output, wrapper):
-        print(wrapper.line('Registry:', [self.name, wrapper.url(self.root.as_posix())]), file=output)
+    def _inner_specification_parts(self, wrapper=None) -> list[str]:
+        return [self.name, wrapper.url(self.root.as_posix())]
 
     def _filetype_iterator(self, filetype: str):
         return self.root.glob(f'**/*.{filetype}')
