@@ -54,7 +54,9 @@ class Assembler:
 
     def _handle_rotate(self, a=None, at_ref=None) -> tuple[Angles, Union[Instance, None]]:
         rot_tuple, ref = self._handle_at_rotate(a)
-        return Angles(*rot_tuple), ref or at_ref
+        # Only inherit at_ref when ROTATED is fully omitted (a is None).
+        # A bare 3-tuple and an explicit 'ABSOLUTE' both mean the global frame (ref=None).
+        return Angles(*rot_tuple), at_ref if a is None else ref
 
     def component(self, name: str, type_name: str, at=None, rotate=None, parameters=None, **kwargs):
         """Add a component to the underlying Instr.
