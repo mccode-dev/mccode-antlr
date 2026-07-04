@@ -298,10 +298,34 @@ def mccode_run_cmd(flavor: Flavor):
         use_defaults=args.yes,
     )
     # check if the filename is actually a compiled instrument already:
-    if args.output_file is None and filename.exists() and access(filename, X_OK):
+    # os.access(path, X_OK) always returns True on Windows for any existing file (no POSIX execute bit),
+    # so we must also exclude known source-file extensions to avoid treating .instr/.json/.h5 as binaries.
+    _source_suffixes = {'.instr', '.json', '.h5', '.c'}
+    if args.output_file is None and filename.exists() and access(filename, X_OK) \
+            and filename.suffix.lower() not in _source_suffixes:
+        from loguru import logger
+        from mccode_antlr.compiler.c import infer_binary_target
         binary = filename
         name = filename.stem
         has_parameters = None  # unknown for a pre-compiled binary
+        # Infer MPI/ACC type from the binary itself rather than trusting CLI flags,
+        # since the binary may have been compiled externally.
+        inferred = infer_binary_target(binary, count=target.get('count', 1))
+        # Warn if the CLI flags disagree with the binary's actual linkage.
+        cli_mpi = bool(target.get('mpi', False))
+        cli_acc = bool(target.get('acc', False))
+        from mccode_antlr.compiler.c import CBinaryTarget as _CBT
+        if cli_mpi != bool(inferred.type & _CBT.Type.mpi):
+            logger.warning(
+                f"CLI flag --parallel ({cli_mpi}) does not match MPI linkage inferred from {binary.name} "
+                f"({bool(inferred.type & _CBT.Type.mpi)}); using binary-inferred value"
+            )
+        if cli_acc != bool(inferred.type & _CBT.Type.acc):
+            logger.warning(
+                f"CLI flag --gpu ({cli_acc}) does not match OpenACC linkage inferred from {binary.name} "
+                f"({bool(inferred.type & _CBT.Type.acc)}); using binary-inferred value"
+            )
+        target = inferred
     elif not filename.exists() or not access(filename, R_OK):
         raise RuntimeError(f'{filename} does not exist or is not readable')
     else:

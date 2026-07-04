@@ -400,10 +400,53 @@ def compile_c_file(
     return output
 
 
+def infer_binary_target(binary: Path, count: int = 1) -> CBinaryTarget:
+    """Infer a CBinaryTarget by scanning the compiled binary for known symbols.
+
+    Checks for canonical MPI and OpenACC entry-point names in the binary.
+    These appear in the import table (dynamically linked) or the symbol
+    table / string pool (statically linked), so no external tooling is
+    required and the approach works on Windows, Linux, and macOS.
+
+    The file is memory-mapped rather than fully loaded, so large binaries are
+    handled without exhausting RAM.
+
+    The ``count`` (number of MPI processes) cannot be inferred from the binary;
+    callers should pass the value from CLI flags or use the default of 1.
+
+    Parameters
+    ----------
+    binary:
+        Path to the compiled instrument binary to inspect.
+    count:
+        Number of MPI processes to use; cannot be determined from the binary.
+    """
+    import mmap
+    _mpi_markers = [b'MPI_Init', b'MPI_Finalize', b'MPI_Comm_size']
+    _acc_markers = [b'acc_init', b'acc_shutdown', b'_acc_present']
+    try:
+        with open(binary, 'rb') as f:
+            with mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ) as mm:
+                mpi = any(mm.find(m) != -1 for m in _mpi_markers)
+                acc = any(mm.find(m) != -1 for m in _acc_markers)
+    except (IOError, OSError, ValueError):
+        logger.warning(f"Could not read {binary} to infer target type; assuming single-threaded")
+        return CBinaryTarget(count=count)
+    return CBinaryTarget(mpi=mpi, acc=acc, count=count)
+
+
 def run_compiled_instrument(binary: Path, target: CBinaryTarget, options: str, capture=False, dry_run: bool = False):
     from subprocess import run, CalledProcessError
     from platform import system
     from mccode_antlr.config import config
+
+    if not isinstance(target, CBinaryTarget):
+        _t = CBinaryTarget()
+        if isinstance(target, dict):
+            _t.update(target)
+        else:
+            raise TypeError(f"target must be a CBinaryTarget, got {type(target)}")
+        target = _t
 
     # If NeXus output is requested and the InstrumentDescriptionFile is needed, run a different script entirely...
     #   TODO think about actually doing this?
