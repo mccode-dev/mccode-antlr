@@ -191,7 +191,7 @@ class TargetVisitor:
                     fullname = reg.fullname(name)
                     if fullname is None or f'data/{name}' not in str(fullname).replace('\\', '/'):
                         continue
-                    cached = reg.path(fullname)
+                    cached = reg.path(name)
                     logger.info(
                         f'{self.source.name}: pre-fetched data file {name!r} '
                         f'-> {cached}'
