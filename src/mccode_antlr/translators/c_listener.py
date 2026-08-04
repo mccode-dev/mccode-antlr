@@ -1,5 +1,6 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import TypeVar
 
 from loguru import logger
@@ -363,21 +364,116 @@ class DeclaresCVisitor(CVisitor):
         return dec + after_dd_str
 
 
+class _TypedefsCache:
+    """Two-level cache for extract_c_declared_variables_and_defined_types(), keyed by
+    a sha256 hash of the C source block being parsed. Mirrors the pattern of
+    mccode_antlr.reader.reader._ComponentCache (in-memory dict + disk-persisted
+    files, best-effort/self-healing on any disk error).
+
+    This exists because extract_c_declared_variables_and_defined_types() runs a
+    full ANTLR C-grammar parse + tree walk, and is called once per runtime-library
+    include AND once per unique component type's SHARE block on *every* translation
+    (see CTargetVisitor._parse_libraries_for_typedefs and the declared-parameters
+    loop in CTargetVisitor.__post_init__) -- with no memoization. Profiling showed
+    this dominating translation time (60-80% of it, for realistic instruments),
+    almost entirely *re-parsing unchanged library/SHARE-block source* on every
+    single invocation, including the common case of one instrument translated per
+    (freshly-started) CLI process, which an in-memory-only cache would never help.
+    """
+    def __init__(self):
+        self._memory: dict[str, tuple[list[CDeclarator], list[str]]] = {}
+        self._disk_dir = None
+
+    def _disk_cache_dir(self):
+        if self._disk_dir is None:
+            try:
+                import pooch
+                from mccode_antlr.version import version as mccode_antlr_version
+                # version-namespaced: an mccode-antlr upgrade just starts a fresh
+                # (empty) cache directory rather than risking stale/incompatible
+                # pickled objects from an older class definition.
+                d = Path(pooch.os_cache(f'mccode_antlr-typedefs-cache-{mccode_antlr_version()}'))
+                d.mkdir(parents=True, exist_ok=True)
+                self._disk_dir = d
+            except Exception:
+                self._disk_dir = False  # sentinel: disk cache unavailable, memory-only
+        return self._disk_dir or None
+
+    def get(self, key: str):
+        if key in self._memory:
+            return self._memory[key]
+        cache_dir = self._disk_cache_dir()
+        if cache_dir is None:
+            return None
+        cache_file = cache_dir / f'{key}.pickle'
+        try:
+            if cache_file.exists():
+                import pickle
+                with open(cache_file, 'rb') as f:
+                    result = pickle.load(f)
+                self._memory[key] = result
+                return result
+        except Exception:
+            pass  # corrupt/incompatible cache entry -- fall through to recompute
+        return None
+
+    def put(self, key: str, result: tuple[list[CDeclarator], list[str]]):
+        self._memory[key] = result
+        cache_dir = self._disk_cache_dir()
+        if cache_dir is None:
+            return
+        cache_file = cache_dir / f'{key}.pickle'
+        try:
+            import os
+            import pickle
+            tmp_file = cache_file.with_suffix(f'.pickle.tmp{os.getpid()}')
+            with open(tmp_file, 'wb') as f:
+                pickle.dump(result, f)
+            tmp_file.replace(cache_file)  # atomic on POSIX -- safe under concurrent writers
+        except OSError:
+            pass  # best-effort disk persistence; in-memory cache is still populated
+
+
+_typedefs_cache = _TypedefsCache()
+
+
 def extract_c_declared_variables_and_defined_types(
         block: str, user_types: list = None, verbose=False
 ) -> tuple[list[CDeclarator], list[str]]:
-    from antlr4 import InputStream, CommonTokenStream
-    from antlr4.error.ErrorListener import ErrorListener
-    from ..grammar import CLexer
-    stream = InputStream(block)
-    lexer = CLexer(stream)
-    tokens = CommonTokenStream(lexer)
-    parser = CParser(tokens)
-    parser.addErrorListener(make_error_listener(ErrorListener, block))
-    tree = parser.compilationUnit()
-    visitor = DeclaresCVisitor(user_types, verbose=verbose)
-    visitor.visitCompilationUnit(tree)
-    return visitor.declares, visitor.typedefs
+    """Parse *block* as C source, returning (declared variables, defined typedef names).
+
+    The parse/visit result is cached by content hash (see _TypedefsCache), independent
+    of *user_types* and *verbose* -- neither affects the parse itself or the *newly*-
+    discovered declares/typedefs: DeclaresCVisitor never branches control flow on its
+    seed typedefs list, only prepends it to the returned typedefs and gates a
+    diagnostic log line on it. *user_types* is re-applied to the cached result at
+    lookup time, exactly reproducing the original (unseeded-parse-then-prepend)
+    contract.
+    """
+    import hashlib
+    key = hashlib.sha256(block.encode('utf-8')).hexdigest()
+    cached = _typedefs_cache.get(key)
+    if cached is None:
+        from antlr4 import InputStream, CommonTokenStream
+        from antlr4.error.ErrorListener import ErrorListener
+        from ..grammar import CLexer
+        stream = InputStream(block)
+        lexer = CLexer(stream)
+        tokens = CommonTokenStream(lexer)
+        parser = CParser(tokens)
+        parser.addErrorListener(make_error_listener(ErrorListener, block))
+        tree = parser.compilationUnit()
+        visitor = DeclaresCVisitor(None, verbose=verbose)
+        visitor.visitCompilationUnit(tree)
+        cached = (visitor.declares, visitor.typedefs)
+        _typedefs_cache.put(key, cached)
+
+    declares, new_types = cached
+    if user_types:
+        combined_types = list(user_types) + [t for t in new_types if t not in user_types]
+    else:
+        combined_types = list(new_types)
+    return declares, combined_types
 
 
 def extract_c_declared_variables(
