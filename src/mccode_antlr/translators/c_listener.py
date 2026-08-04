@@ -364,11 +364,51 @@ class DeclaresCVisitor(CVisitor):
         return dec + after_dd_str
 
 
+def _cdeclarator_to_dict(d: CDeclarator) -> dict:
+    declare = _cfuncpointer_to_dict(d.declare) if isinstance(d.declare, CFuncPointer) else d.declare
+    return {
+        'declare': declare,
+        'declare_is_funcptr': isinstance(d.declare, CFuncPointer),
+        'pointer': d.pointer,
+        'extensions': list(d.extensions),
+        'elements': list(d.elements) if d.elements is not None else None,
+        'dtype': d.dtype,
+        'init': d.init,
+    }
+
+
+def _cdeclarator_from_dict(data: dict) -> CDeclarator:
+    declare = _cfuncpointer_from_dict(data['declare']) if data['declare_is_funcptr'] else data['declare']
+    elements = tuple(data['elements']) if data['elements'] is not None else None
+    return CDeclarator(declare=declare, pointer=data['pointer'], extensions=data['extensions'],
+                        elements=elements, dtype=data['dtype'], init=data['init'])
+
+
+def _cfuncpointer_to_dict(f: CFuncPointer) -> dict:
+    return {'declare': _cdeclarator_to_dict(f.declare), 'modifiers': f.modifiers, 'args': f.args}
+
+
+def _cfuncpointer_from_dict(data: dict) -> CFuncPointer:
+    return CFuncPointer(declare=_cdeclarator_from_dict(data['declare']), modifiers=data['modifiers'], args=data['args'])
+
+
 class _TypedefsCache:
     """Two-level cache for extract_c_declared_variables_and_defined_types(), keyed by
     a sha256 hash of the C source block being parsed. Mirrors the pattern of
     mccode_antlr.reader.reader._ComponentCache (in-memory dict + disk-persisted
-    files, best-effort/self-healing on any disk error).
+    files, best-effort/self-healing on any disk error) -- and its disk location:
+    ~/.cache/mccodeantlr/typedefs/<version>/, matching the existing
+    ~/.cache/mccodeantlr/{libc,mcstas,...}/<version>/ convention used by the
+    pooch-backed component/runtime-library registries (GitHubRegistry), rather
+    than inventing a separate cache root.
+
+    Entries are plain JSON (not pickle): human-readable/inspectable, safe to load
+    (no arbitrary code execution risk the way unpickling untrusted-ish disk state
+    would be), and portable to any other language/tool that might want to read or
+    populate this cache -- CDeclarator/CFuncPointer aren't registered with
+    mccode_antlr.io.json's Model system (that's for top-level domain objects:
+    Instr, Comp, ...; these are internal-use translator dataclasses), so this uses
+    small local to-dict/from-dict helpers instead.
 
     This exists because extract_c_declared_variables_and_defined_types() runs a
     full ANTLR C-grammar parse + tree walk, and is called once per runtime-library
@@ -389,10 +429,11 @@ class _TypedefsCache:
             try:
                 import pooch
                 from mccode_antlr.version import version as mccode_antlr_version
-                # version-namespaced: an mccode-antlr upgrade just starts a fresh
-                # (empty) cache directory rather than risking stale/incompatible
-                # pickled objects from an older class definition.
-                d = Path(pooch.os_cache(f'mccode_antlr-typedefs-cache-{mccode_antlr_version()}'))
+                # version-namespaced subdirectory, same convention GitHubRegistry
+                # uses for e.g. ~/.cache/mccodeantlr/libc/v3.7.16/: an mccode-antlr
+                # upgrade just starts a fresh (empty) cache directory rather than
+                # risking stale/incompatible entries from an older class definition.
+                d = Path(pooch.os_cache('mccodeantlr/typedefs')) / mccode_antlr_version()
                 d.mkdir(parents=True, exist_ok=True)
                 self._disk_dir = d
             except Exception:
@@ -405,12 +446,13 @@ class _TypedefsCache:
         cache_dir = self._disk_cache_dir()
         if cache_dir is None:
             return None
-        cache_file = cache_dir / f'{key}.pickle'
+        cache_file = cache_dir / f'{key}.json'
         try:
             if cache_file.exists():
-                import pickle
-                with open(cache_file, 'rb') as f:
-                    result = pickle.load(f)
+                import json
+                with open(cache_file, 'r') as f:
+                    payload = json.load(f)
+                result = ([_cdeclarator_from_dict(d) for d in payload['declares']], payload['typedefs'])
                 self._memory[key] = result
                 return result
         except Exception:
@@ -422,13 +464,15 @@ class _TypedefsCache:
         cache_dir = self._disk_cache_dir()
         if cache_dir is None:
             return
-        cache_file = cache_dir / f'{key}.pickle'
+        cache_file = cache_dir / f'{key}.json'
         try:
+            import json
             import os
-            import pickle
-            tmp_file = cache_file.with_suffix(f'.pickle.tmp{os.getpid()}')
-            with open(tmp_file, 'wb') as f:
-                pickle.dump(result, f)
+            declares, typedefs = result
+            payload = {'declares': [_cdeclarator_to_dict(d) for d in declares], 'typedefs': typedefs}
+            tmp_file = cache_file.with_suffix(f'.json.tmp{os.getpid()}')
+            with open(tmp_file, 'w') as f:
+                json.dump(payload, f)
             tmp_file.replace(cache_file)  # atomic on POSIX -- safe under concurrent writers
         except OSError:
             pass  # best-effort disk persistence; in-memory cache is still populated
