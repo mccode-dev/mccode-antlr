@@ -137,9 +137,19 @@ class McCodeCPrinter(C99CodePrinter):
         # to avoid SymPy's %.17g format giving e.g. '0.050000000000000003' for 0.05.
         return repr(float(expr))
 
+    def _handle_UnevaluatedExpr(self, expr):
+        # SymPy's version walks the whole tree with Basic.replace (sympifying at
+        # every node) to unwrap re(UnevaluatedExpr(x)) -- McCode never constructs
+        # UnevaluatedExpr, so skip the traversal.
+        return expr
+
 
 class McCodePyPrinter(PythonCodePrinter):
     """SymPy printer that emits McCode Python-style expressions."""
+
+    def _handle_UnevaluatedExpr(self, expr):
+        # See McCodeCPrinter._handle_UnevaluatedExpr.
+        return expr
 
     def _print_McCodeParameter(self, expr):
         return expr.name
