@@ -397,6 +397,7 @@ class LocalRegistry(Registry):
         self.root = Path(root)
         self.version = mccode_antlr_version()
         self.priority = priority
+        self._index = None  # lazy basename -> [paths] index of everything under root
 
     def __repr__(self):
         return f'LocalRegistry({self.name!r}, {self.root!r}, {self.priority!r})'
@@ -413,8 +414,28 @@ class LocalRegistry(Registry):
     def _filetype_iterator(self, filetype: str):
         return self.root.glob(f'**/*.{filetype}')
 
+    def _file_index(self) -> dict[str, list[Path]]:
+        # Every _file_iterator call is a full recursive walk of root (~0.2s for
+        # mcstas-comps), and one translation makes many such calls (known/
+        # fullname/path per data file, component lookups, ...). Walk once per
+        # registry instance instead; the tree is static for a translation's
+        # lifetime. Includes directories, matching glob('**/name') semantics.
+        if self._index is None:
+            import os
+            index: dict[str, list[Path]] = {}
+            for dirpath, dirnames, filenames in os.walk(self.root):
+                base = Path(dirpath)
+                for n in dirnames + filenames:
+                    index.setdefault(n, []).append(base / n)
+            self._index = index
+        return self._index
+
     def _file_iterator(self, name: str):
-        return self.root.glob(f'**/{name}')
+        # The index only answers plain basenames -- glob metacharacters or an
+        # embedded path separator still need real glob matching.
+        if any(c in name for c in '*?[') or '/' in name or '\\' in name:
+            return self.root.glob(f'**/{name}')
+        return iter(self._file_index().get(name, []))
 
     def _exact_file_iterator(self, name: str):
         return self.root.glob(name)
