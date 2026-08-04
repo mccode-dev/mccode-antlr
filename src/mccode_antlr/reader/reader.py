@@ -300,6 +300,16 @@ class Reader(Struct):
         from ..grammar import McInstr_parse, McInstr_ErrorListener
         from ..instr import InstrVisitor, Instr
         path = name if isinstance(name, Path) else Path(name)
+        if path.suffix not in ('', '.instr'):
+            raise RuntimeError(
+                f"%include of {str(name)!r} is not supported: mccode-antlr's %include always "
+                f"parses its target as an .instr instrument definition, so a suffix other than "
+                f".instr or no suffix (implying .instr) can never resolve. Some McStas-3 "
+                f"instruments abuse %include to splice raw file contents (e.g. generated C "
+                f"fragments) into DECLARE/INITIALIZE/TRACE sections; that pattern is not "
+                f"supported here and would need restructuring (e.g. moving the generated code "
+                f"into a real .instr/.comp, or embedding it directly) to translate with mccode-antlr."
+            )
         if path.suffix != '.instr':
             path = path.with_suffix(f'{path.suffix}.instr')
         if path.exists() and path.is_file():
