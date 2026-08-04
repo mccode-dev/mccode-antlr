@@ -55,6 +55,10 @@ def _to_sympy(value) -> sympy.Basic:
 # Public Expr class
 # ---------------------------------------------------------------------------
 
+# Memoized Expr.__format__ results, keyed on (tuple-of-srepr-strings, format_spec).
+_FORMAT_CACHE: dict[tuple[tuple[str, ...], str], str] = {}
+
+
 class Expr(msgspec.Struct, dict=True, eq=False):
     """Symbolic expression with McCode-specific metadata."""
 
@@ -227,14 +231,22 @@ class Expr(msgspec.Struct, dict=True, eq=False):
     # ------------------------------------------------------------------
 
     def __str__(self):
-        from .printer import _C_PRINTER
-        from .sympy_classes import UNSET_SYMPY
-        # Preserve old Value(None).__str__() = 'None' for null/unset expressions
-        if len(self._exprs) == 1 and self._exprs[0] is UNSET_SYMPY:
-            return 'None'
-        return ','.join(_C_PRINTER.doprint(e) for e in self._exprs)
+        # Same output as an empty format spec (including 'None' for null/unset),
+        # routed through __format__ to share its memoization.
+        return self.__format__('')
 
     def __format__(self, format_spec):
+        # Printing is deterministic given the srepr strings and the format spec,
+        # and translation re-formats the same (component-type-shared) expressions
+        # many times over -- memoize on the srepr strings, NOT on self (whose
+        # __hash__ itself prints).
+        key = (tuple(self.exprs), format_spec)
+        result = _FORMAT_CACHE.get(key)
+        if result is None:
+            _FORMAT_CACHE[key] = result = self._format_uncached(format_spec)
+        return result
+
+    def _format_uncached(self, format_spec):
         from .printer import _C_PRINTER, _P_PRINTER
         from .sympy_classes import UNSET_SYMPY
         # Preserve 'None' for null/unset when used in format strings
