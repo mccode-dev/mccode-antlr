@@ -1,5 +1,5 @@
 from __future__ import annotations
-from dataclasses import dataclass, field
+import msgspec
 from pathlib import Path
 from typing import TypeVar
 
@@ -56,9 +56,12 @@ def not_both_None_or_not_equal(a, b):
 def same_type(a, b):
     return type(a) == type(b)
 
-@dataclass
-class CFuncPointer:
-    declare: TCDeclarator
+class CFuncPointer(msgspec.Struct):
+    # Field annotation is the direct class name (not the TCDeclarator TypeVar) so
+    # msgspec can resolve the forward reference to CDeclarator (defined below) at
+    # decode time -- msgspec doesn't dereference a TypeVar's `bound=` to find the
+    # real target type, it only follows plain forward-reference strings/names.
+    declare: CDeclarator
     modifiers: str | None = None
     args: str | None = None
 
@@ -96,13 +99,25 @@ class CFuncPointer:
         dec = self.declare.as_struct_member(dims=dims, max_array_length=max_array_length)
         return self.string(dec)
 
+    def to_dict(self) -> dict:
+        return msgspec.to_builtins(self)
 
-@dataclass
-class CDeclarator:
+    @classmethod
+    def from_dict(cls, data: dict) -> TCFuncPointer:
+        return msgspec.convert(data, type=cls)
+
+
+class CDeclarator(msgspec.Struct):
     declare: str | CFuncPointer
     pointer: str | None = None
-    extensions: list[str] = field(default_factory=list)
-    elements: tuple[int,...] | tuple[str,...] | None = None
+    extensions: list[str] = msgspec.field(default_factory=list)
+    # A single tuple type with a per-element union, not a union of two whole-tuple
+    # types (tuple[int,...] | tuple[str,...]): msgspec's decoder rejects unions
+    # containing more than one array-like type ("may not contain more than one
+    # array-like type") since JSON arrays can't structurally disambiguate between
+    # them. This is a strict superset of the original type (allows mixed int/str
+    # within one tuple, which never happens in practice) rather than a behavior change.
+    elements: tuple[int | str, ...] | None = None
     dtype: str | None = None
     init: str | None = None
 
@@ -187,6 +202,13 @@ class CDeclarator:
                 no = tuple(m if x == 0 else x for x, m in zip(no, mal))
             return f"{self}{''.join(f'[{n}]' for n in no)}"
         return str(self)
+
+    def to_dict(self) -> dict:
+        return msgspec.to_builtins(self)
+
+    @classmethod
+    def from_dict(cls, data: dict) -> TCDeclarator:
+        return msgspec.convert(data, type=cls)
 
 
 def extract_initializer_size(init: str) -> tuple[int,...]:
@@ -364,34 +386,6 @@ class DeclaresCVisitor(CVisitor):
         return dec + after_dd_str
 
 
-def _cdeclarator_to_dict(d: CDeclarator) -> dict:
-    declare = _cfuncpointer_to_dict(d.declare) if isinstance(d.declare, CFuncPointer) else d.declare
-    return {
-        'declare': declare,
-        'declare_is_funcptr': isinstance(d.declare, CFuncPointer),
-        'pointer': d.pointer,
-        'extensions': list(d.extensions),
-        'elements': list(d.elements) if d.elements is not None else None,
-        'dtype': d.dtype,
-        'init': d.init,
-    }
-
-
-def _cdeclarator_from_dict(data: dict) -> CDeclarator:
-    declare = _cfuncpointer_from_dict(data['declare']) if data['declare_is_funcptr'] else data['declare']
-    elements = tuple(data['elements']) if data['elements'] is not None else None
-    return CDeclarator(declare=declare, pointer=data['pointer'], extensions=data['extensions'],
-                        elements=elements, dtype=data['dtype'], init=data['init'])
-
-
-def _cfuncpointer_to_dict(f: CFuncPointer) -> dict:
-    return {'declare': _cdeclarator_to_dict(f.declare), 'modifiers': f.modifiers, 'args': f.args}
-
-
-def _cfuncpointer_from_dict(data: dict) -> CFuncPointer:
-    return CFuncPointer(declare=_cdeclarator_from_dict(data['declare']), modifiers=data['modifiers'], args=data['args'])
-
-
 class _TypedefsCache:
     """Two-level cache for extract_c_declared_variables_and_defined_types(), keyed by
     a sha256 hash of the C source block being parsed. Mirrors the pattern of
@@ -405,10 +399,12 @@ class _TypedefsCache:
     Entries are plain JSON (not pickle): human-readable/inspectable, safe to load
     (no arbitrary code execution risk the way unpickling untrusted-ish disk state
     would be), and portable to any other language/tool that might want to read or
-    populate this cache -- CDeclarator/CFuncPointer aren't registered with
-    mccode_antlr.io.json's Model system (that's for top-level domain objects:
-    Instr, Comp, ...; these are internal-use translator dataclasses), so this uses
-    small local to-dict/from-dict helpers instead.
+    populate this cache. CDeclarator/CFuncPointer are msgspec.Struct types with
+    their own to_dict()/from_dict() methods (backed by msgspec.to_builtins() /
+    msgspec.convert(), which natively resolve their mutually-recursive Union
+    field) -- not registered with mccode_antlr.io.json's Model system, which is
+    for top-level domain objects (Instr, Comp, ...), not internal-use translator
+    dataclasses like these.
 
     This exists because extract_c_declared_variables_and_defined_types() runs a
     full ANTLR C-grammar parse + tree walk, and is called once per runtime-library
@@ -452,7 +448,7 @@ class _TypedefsCache:
                 import json
                 with open(cache_file, 'r') as f:
                     payload = json.load(f)
-                result = ([_cdeclarator_from_dict(d) for d in payload['declares']], payload['typedefs'])
+                result = ([CDeclarator.from_dict(d) for d in payload['declares']], payload['typedefs'])
                 self._memory[key] = result
                 return result
         except Exception:
@@ -469,7 +465,7 @@ class _TypedefsCache:
             import json
             import os
             declares, typedefs = result
-            payload = {'declares': [_cdeclarator_to_dict(d) for d in declares], 'typedefs': typedefs}
+            payload = {'declares': [d.to_dict() for d in declares], 'typedefs': typedefs}
             tmp_file = cache_file.with_suffix(f'.json.tmp{os.getpid()}')
             with open(tmp_file, 'w') as f:
                 json.dump(payload, f)
