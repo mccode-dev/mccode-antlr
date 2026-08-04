@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import pooch
 from functools import cache
 from pathlib import Path
@@ -14,6 +15,43 @@ from packaging.version import Version, InvalidVersion
 from mccode_antlr.version import version as mccode_antlr_version
 from mccode_antlr import Flavor
 from mccode_antlr.common import TextWrapper
+
+
+def _dedupe_identical_paths(paths: list[Path]) -> Path | None:
+    """Given >=2 candidate file paths for the same lookup, return a single path
+    deterministically if -- and only if -- every candidate has identical content
+    (same sha256 hash). Which physical copy is picked doesn't matter in that case,
+    but the choice must be stable across runs so repeated lookups (and any
+    downstream caching) don't flip-flop between identical copies. Returns None if
+    contents differ, i.e. still genuinely ambiguous.
+    """
+    if len(paths) < 2:
+        return paths[0] if paths else None
+    hashes = set()
+    for p in paths:
+        try:
+            hashes.add(hashlib.sha256(p.read_bytes()).hexdigest())
+        except OSError:
+            return None
+        if len(hashes) > 1:
+            return None
+    return sorted(paths, key=str)[0]
+
+
+def _dedupe_identical_registry_entries(pooch_instance, names: list[str]) -> str | None:
+    """Like _dedupe_identical_paths, but for a pooch-backed remote registry: pooch's
+    registry index already stores a content hash per file (`pooch_instance.registry`
+    maps relative name -> "algo:hexhash"), so ambiguous matches can be deduplicated
+    from that index alone -- no need to download file contents just to hash them.
+    Returns None (still ambiguous) if any candidate is missing a hash or the hashes
+    differ.
+    """
+    if len(names) < 2:
+        return names[0] if names else None
+    hashes = {pooch_instance.registry.get(n) for n in names}
+    if len(hashes) == 1 and None not in hashes:
+        return sorted(names)[0]
+    return None
 
 
 def _fetch_registry_with_retry(url, max_retries=3, timeout=10):
@@ -232,9 +270,12 @@ class RemoteRegistry(Registry):
                     return registry_file
         # Or matching *any* file that contains name
         matches = list(filter(lambda x: name in x, self.pooch.registry_files))
-        if len(matches) != 1:
-            raise RuntimeError(f'More than one match for {name}:{ext}, which is required of:\n{matches}')
-        return matches[0]
+        if len(matches) == 1:
+            return matches[0]
+        deduped = _dedupe_identical_registry_entries(self.pooch, matches)
+        if deduped is not None:
+            return deduped
+        raise RuntimeError(f'More than one match for {name}:{ext}, which is required of:\n{matches}')
 
     def is_available(self, name: str, ext: str = None, exact: bool = True):
         return self.pooch.registry_files(self.fullname(name, ext, exact))
@@ -391,24 +432,35 @@ class LocalRegistry(Registry):
         is_compare = list(self._exact_file_iterator(compare))
         if len(is_compare) == 1:
             return is_compare[0]
+        if len(is_compare) > 1 and (deduped := _dedupe_identical_paths(is_compare)) is not None:
+            return deduped
         # Complete match if name happens to be missing the extension
         is_name = list(self._exact_file_iterator(name))
         if len(is_name) == 1:
             return is_name[0]
+        if len(is_name) > 1 and (deduped := _dedupe_identical_paths(is_name)) is not None:
+            return deduped
         if not exact:
             from loguru import logger
             ends_with_compare = list(self._file_iterator(compare))
             if len(ends_with_compare) == 1:
                 return ends_with_compare[0]
+            if len(ends_with_compare) > 1 and (deduped := _dedupe_identical_paths(ends_with_compare)) is not None:
+                return deduped
             # Complete match if name happens to be missing the extension
             ends_with_name = list(self._file_iterator(name))
             if len(ends_with_name) == 1:
                 return ends_with_name[0]
+            if len(ends_with_name) > 1 and (deduped := _dedupe_identical_paths(ends_with_name)) is not None:
+                return deduped
         # Or matching *any* file that contains name
         matches = list(self._file_iterator(name))
         if len(matches) == 0:
             raise RuntimeError(f'No match for {compare} or {name} under {self.root}')
         if len(matches) != 1:
+            deduped = _dedupe_identical_paths(matches)
+            if deduped is not None:
+                return deduped
             raise RuntimeError(f'More than one match for {name}:{ext}, which is required of:\n{matches}')
         return matches[0]
 
