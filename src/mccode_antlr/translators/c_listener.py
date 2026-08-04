@@ -1,5 +1,6 @@
 from __future__ import annotations
-from dataclasses import dataclass, field
+import msgspec
+from pathlib import Path
 from typing import TypeVar
 
 from loguru import logger
@@ -55,9 +56,12 @@ def not_both_None_or_not_equal(a, b):
 def same_type(a, b):
     return type(a) == type(b)
 
-@dataclass
-class CFuncPointer:
-    declare: TCDeclarator
+class CFuncPointer(msgspec.Struct):
+    # Field annotation is the direct class name (not the TCDeclarator TypeVar) so
+    # msgspec can resolve the forward reference to CDeclarator (defined below) at
+    # decode time -- msgspec doesn't dereference a TypeVar's `bound=` to find the
+    # real target type, it only follows plain forward-reference strings/names.
+    declare: CDeclarator
     modifiers: str | None = None
     args: str | None = None
 
@@ -95,13 +99,25 @@ class CFuncPointer:
         dec = self.declare.as_struct_member(dims=dims, max_array_length=max_array_length)
         return self.string(dec)
 
+    def to_dict(self) -> dict:
+        return msgspec.to_builtins(self)
 
-@dataclass
-class CDeclarator:
+    @classmethod
+    def from_dict(cls, data: dict) -> TCFuncPointer:
+        return msgspec.convert(data, type=cls)
+
+
+class CDeclarator(msgspec.Struct):
     declare: str | CFuncPointer
     pointer: str | None = None
-    extensions: list[str] = field(default_factory=list)
-    elements: tuple[int,...] | tuple[str,...] | None = None
+    extensions: list[str] = msgspec.field(default_factory=list)
+    # A single tuple type with a per-element union, not a union of two whole-tuple
+    # types (tuple[int,...] | tuple[str,...]): msgspec's decoder rejects unions
+    # containing more than one array-like type ("may not contain more than one
+    # array-like type") since JSON arrays can't structurally disambiguate between
+    # them. This is a strict superset of the original type (allows mixed int/str
+    # within one tuple, which never happens in practice) rather than a behavior change.
+    elements: tuple[int | str, ...] | None = None
     dtype: str | None = None
     init: str | None = None
 
@@ -186,6 +202,13 @@ class CDeclarator:
                 no = tuple(m if x == 0 else x for x, m in zip(no, mal))
             return f"{self}{''.join(f'[{n}]' for n in no)}"
         return str(self)
+
+    def to_dict(self) -> dict:
+        return msgspec.to_builtins(self)
+
+    @classmethod
+    def from_dict(cls, data: dict) -> TCDeclarator:
+        return msgspec.convert(data, type=cls)
 
 
 def extract_initializer_size(init: str) -> tuple[int,...]:
@@ -363,21 +386,134 @@ class DeclaresCVisitor(CVisitor):
         return dec + after_dd_str
 
 
+class _TypedefsCache:
+    """Two-level cache for extract_c_declared_variables_and_defined_types(), keyed by
+    a sha256 hash of the C source block being parsed. Mirrors the pattern of
+    mccode_antlr.reader.reader._ComponentCache (in-memory dict + disk-persisted
+    files, best-effort/self-healing on any disk error) -- and its disk location:
+    ~/.cache/mccodeantlr/typedefs/<version>/, matching the existing
+    ~/.cache/mccodeantlr/{libc,mcstas,...}/<version>/ convention used by the
+    pooch-backed component/runtime-library registries (GitHubRegistry), rather
+    than inventing a separate cache root.
+
+    Entries are plain JSON (not pickle): human-readable/inspectable, safe to load
+    (no arbitrary code execution risk the way unpickling untrusted-ish disk state
+    would be), and portable to any other language/tool that might want to read or
+    populate this cache. CDeclarator/CFuncPointer are msgspec.Struct types with
+    their own to_dict()/from_dict() methods (backed by msgspec.to_builtins() /
+    msgspec.convert(), which natively resolve their mutually-recursive Union
+    field) -- not registered with mccode_antlr.io.json's Model system, which is
+    for top-level domain objects (Instr, Comp, ...), not internal-use translator
+    dataclasses like these.
+
+    This exists because extract_c_declared_variables_and_defined_types() runs a
+    full ANTLR C-grammar parse + tree walk, and is called once per runtime-library
+    include AND once per unique component type's SHARE block on *every* translation
+    (see CTargetVisitor._parse_libraries_for_typedefs and the declared-parameters
+    loop in CTargetVisitor.__post_init__) -- with no memoization. Profiling showed
+    this dominating translation time (60-80% of it, for realistic instruments),
+    almost entirely *re-parsing unchanged library/SHARE-block source* on every
+    single invocation, including the common case of one instrument translated per
+    (freshly-started) CLI process, which an in-memory-only cache would never help.
+    """
+    def __init__(self):
+        self._memory: dict[str, tuple[list[CDeclarator], list[str]]] = {}
+        self._disk_dir = None
+
+    def _disk_cache_dir(self):
+        if self._disk_dir is None:
+            try:
+                import pooch
+                from mccode_antlr.version import version as mccode_antlr_version
+                # version-namespaced subdirectory, same convention GitHubRegistry
+                # uses for e.g. ~/.cache/mccodeantlr/libc/v3.7.16/: an mccode-antlr
+                # upgrade just starts a fresh (empty) cache directory rather than
+                # risking stale/incompatible entries from an older class definition.
+                d = Path(pooch.os_cache('mccodeantlr/typedefs')) / mccode_antlr_version()
+                d.mkdir(parents=True, exist_ok=True)
+                self._disk_dir = d
+            except Exception:
+                self._disk_dir = False  # sentinel: disk cache unavailable, memory-only
+        return self._disk_dir or None
+
+    def get(self, key: str):
+        if key in self._memory:
+            return self._memory[key]
+        cache_dir = self._disk_cache_dir()
+        if cache_dir is None:
+            return None
+        cache_file = cache_dir / f'{key}.json'
+        try:
+            if cache_file.exists():
+                import json
+                with open(cache_file, 'r') as f:
+                    payload = json.load(f)
+                result = ([CDeclarator.from_dict(d) for d in payload['declares']], payload['typedefs'])
+                self._memory[key] = result
+                return result
+        except Exception:
+            pass  # corrupt/incompatible cache entry -- fall through to recompute
+        return None
+
+    def put(self, key: str, result: tuple[list[CDeclarator], list[str]]):
+        self._memory[key] = result
+        cache_dir = self._disk_cache_dir()
+        if cache_dir is None:
+            return
+        cache_file = cache_dir / f'{key}.json'
+        try:
+            import json
+            import os
+            declares, typedefs = result
+            payload = {'declares': [d.to_dict() for d in declares], 'typedefs': typedefs}
+            tmp_file = cache_file.with_suffix(f'.json.tmp{os.getpid()}')
+            with open(tmp_file, 'w') as f:
+                json.dump(payload, f)
+            tmp_file.replace(cache_file)  # atomic on POSIX -- safe under concurrent writers
+        except OSError:
+            pass  # best-effort disk persistence; in-memory cache is still populated
+
+
+_typedefs_cache = _TypedefsCache()
+
+
 def extract_c_declared_variables_and_defined_types(
         block: str, user_types: list = None, verbose=False
 ) -> tuple[list[CDeclarator], list[str]]:
-    from antlr4 import InputStream, CommonTokenStream
-    from antlr4.error.ErrorListener import ErrorListener
-    from ..grammar import CLexer
-    stream = InputStream(block)
-    lexer = CLexer(stream)
-    tokens = CommonTokenStream(lexer)
-    parser = CParser(tokens)
-    parser.addErrorListener(make_error_listener(ErrorListener, block))
-    tree = parser.compilationUnit()
-    visitor = DeclaresCVisitor(user_types, verbose=verbose)
-    visitor.visitCompilationUnit(tree)
-    return visitor.declares, visitor.typedefs
+    """Parse *block* as C source, returning (declared variables, defined typedef names).
+
+    The parse/visit result is cached by content hash (see _TypedefsCache), independent
+    of *user_types* and *verbose* -- neither affects the parse itself or the *newly*-
+    discovered declares/typedefs: DeclaresCVisitor never branches control flow on its
+    seed typedefs list, only prepends it to the returned typedefs and gates a
+    diagnostic log line on it. *user_types* is re-applied to the cached result at
+    lookup time, exactly reproducing the original (unseeded-parse-then-prepend)
+    contract.
+    """
+    import hashlib
+    key = hashlib.sha256(block.encode('utf-8')).hexdigest()
+    cached = _typedefs_cache.get(key)
+    if cached is None:
+        from antlr4 import InputStream, CommonTokenStream
+        from antlr4.error.ErrorListener import ErrorListener
+        from ..grammar import CLexer
+        stream = InputStream(block)
+        lexer = CLexer(stream)
+        tokens = CommonTokenStream(lexer)
+        parser = CParser(tokens)
+        parser.addErrorListener(make_error_listener(ErrorListener, block))
+        tree = parser.compilationUnit()
+        visitor = DeclaresCVisitor(None, verbose=verbose)
+        visitor.visitCompilationUnit(tree)
+        cached = (visitor.declares, visitor.typedefs)
+        _typedefs_cache.put(key, cached)
+
+    declares, new_types = cached
+    if user_types:
+        combined_types = list(user_types) + [t for t in new_types if t not in user_types]
+    else:
+        combined_types = list(new_types)
+    return declares, combined_types
 
 
 def extract_c_declared_variables(
