@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from typing_extensions import deprecated
-
 from dataclasses import dataclass, field
 from typing import Any, Union
 from pathlib import Path
+
+from mccode_antlr.utils import deprecated
 
 
 def _require_scipp():
@@ -96,7 +96,7 @@ class DatFileCommon:
         return self.metadata.get('variables', '').split()
 
     @property
-    @deprecated("Access 'I' (with variance) or 'N' via getitem method")
+    @deprecated(since="0.20.1", replacement="Use {object}['I'] (with variance) or {object}['N'] in place of {object}.data", remove_in=None)
     def data(self):
         """Datafile values as a numpy array (backward compat).
 

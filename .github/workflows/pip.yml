@@ -3,9 +3,6 @@ name: Pip
 on:
   workflow_dispatch:
   pull_request:
-  push:
-    branches:
-      - main
 
 env:
   # Pin the McCode version whose component and library files are used in tests.
