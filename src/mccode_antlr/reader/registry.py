@@ -775,6 +775,54 @@ def _get_remote_repository_version_tags(url) -> list[Version] | None:
     return None
 
 
+# The remote tag list changes only when a new McCode version is released, but
+# _get_remote_repository_version_tags costs a ~0.3-0.5s `git ls-remote` network
+# round-trip -- paid once per *process*, i.e. on every CLI translation. Persist
+# it on disk (same best-effort ~/.cache/mccodeantlr/ convention as the typedefs
+# and component caches) with a TTL so new releases are still picked up.
+_REMOTE_TAGS_TTL_SECONDS = 24 * 60 * 60
+
+
+def _remote_tags_cache_file(url: str) -> Path | None:
+    try:
+        d = Path(pooch.os_cache('mccodeantlr/remote-tags'))
+        d.mkdir(parents=True, exist_ok=True)
+        return d / f'{hashlib.sha256(url.encode()).hexdigest()[:16]}.json'
+    except Exception:
+        return None
+
+
+def _cached_remote_repository_version_tags(url: str, force_refresh: bool = False) -> list[Version] | None:
+    import json
+    import os
+    from time import time
+    cache_file = _remote_tags_cache_file(url)
+    entry = None
+    if cache_file is not None and cache_file.exists():
+        try:
+            with open(cache_file, 'r') as f:
+                loaded = json.load(f)
+            if loaded.get('url') == url:
+                entry = loaded
+        except Exception:
+            pass  # corrupt cache entry -- fall through to the network
+    if entry is not None and not force_refresh and time() - entry.get('time', 0) < _REMOTE_TAGS_TTL_SECONDS:
+        return [Version(v) for v in entry['tags']]
+    tags = _get_remote_repository_version_tags(url)
+    if tags is None:
+        # Offline (or git unavailable): a stale cache entry beats nothing.
+        return [Version(v) for v in entry['tags']] if entry is not None else None
+    if cache_file is not None:
+        try:
+            tmp_file = cache_file.with_suffix(f'.json.tmp{os.getpid()}')
+            with open(tmp_file, 'w') as f:
+                json.dump({'url': url, 'time': time(), 'tags': [str(t) for t in tags]}, f)
+            tmp_file.replace(cache_file)  # atomic on POSIX -- safe under concurrent writers
+        except OSError:
+            pass  # best-effort persistence
+    return tags
+
+
 def _get_local_version_tags() -> list[Version]:
     from packaging.version import Version, InvalidVersion
     cache_path = pooch.os_cache(f'mccodeantlr/libc')
@@ -803,13 +851,17 @@ def _source_registry_tag() -> tuple[str, str, Version]:
     registry_url = config['mccode_pooch']['registry'].as_str_expanded()
     source_url = config['mccode_pooch']['source'].as_str_expanded()
 
-    known_versions = _get_remote_repository_version_tags(registry_url)
+    known_versions = _cached_remote_repository_version_tags(registry_url)
     if known_versions is None:
         known_versions = _get_local_version_tags()
     if requested_tag.lower() == 'latest':
         requested_tag = f'v{known_versions[0]}'
     elif Version(requested_tag) not in known_versions:
-        raise RuntimeError(f"The specified version tag, {requested_tag}, is not available in {registry_url}")
+        # The cached tag list may simply be stale (e.g. a just-released tag was
+        # pinned in config) -- force one live lookup before declaring it missing.
+        known_versions = _cached_remote_repository_version_tags(registry_url, force_refresh=True) or known_versions
+        if Version(requested_tag) not in known_versions:
+            raise RuntimeError(f"The specified version tag, {requested_tag}, is not available in {registry_url}")
     return source_url, registry_url, Version(requested_tag)
 
 
