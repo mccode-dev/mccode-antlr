@@ -67,7 +67,7 @@ def ipython_available():
 
 
 def ipython_test(method):
-    if not scipp_available():
+    if not ipython_available():
         @pytest.mark.skip(reason='ipython is not available')
         def no_ipython(*args, **kwargs):
             return method(*args, **kwargs)
