@@ -279,3 +279,86 @@ class TestEndToEnd:
         with pytest.raises(RuntimeError, match='mylib'):
             CTargetVisitor(from_json(blob), flavor=Flavor.MCSTAS,
                            config=dict(output=str(tmp_path / 'no.c')))
+
+
+class TestRuntimeDataFiles:
+    """Embedding makes a data file reachable at *translation* time via reg.path(),
+    which materializes into a cache directory. The compiled binary does not search
+    there: Open_File tries the name as given, the instrument source directory, the
+    executable's directory, $HOME, then $FLAVOR/data and $FLAVOR/contrib. So the
+    file has to be deposited somewhere it will actually be found.
+    """
+
+    def _with_data(self, tmp_path):
+        lib = tmp_path / 'lib'
+        lib.mkdir()
+        (lib / 'myrefl.dat').write_text('# local table\n0.0 1.0\n1.0 0.5\n')
+        instr = tmp_path / 'u.instr'
+        instr.write_text(
+            'DEFINE INSTRUMENT u()\nTRACE\n'
+            'COMPONENT o = Progress_bar() AT (0,0,0) ABSOLUTE\n'
+            'COMPONENT g = Guide_gravity(w1=0.06,h1=0.12,l=1,m=4,reflect="myrefl.dat")'
+            ' AT (0,0,1) ABSOLUTE\nEND\n'
+        )
+        return lib, instr
+
+    def test_data_file_is_captured(self, tmp_path):
+        from mccode_antlr.io.portable import embedded_registry
+        lib, instr = self._with_data(tmp_path)
+        captured = embedded_registry(_read(lib, instr))
+        assert 'myrefl.dat' in captured.filenames()
+
+    def test_deposited_beside_the_generated_c(self, tmp_path):
+        import shutil
+        from mccode_antlr import Flavor
+        from mccode_antlr.io import to_json, from_json
+        from mccode_antlr.translators.c import CTargetVisitor
+        lib, instr = self._with_data(tmp_path)
+        blob = to_json(_read(lib, instr))
+        shutil.rmtree(lib)
+        elsewhere = tmp_path / 'elsewhere'
+        elsewhere.mkdir()
+        output = elsewhere / 'out.c'
+        CTargetVisitor(from_json(blob), flavor=Flavor.MCSTAS,
+                       config=dict(output=str(output))).save(filename=str(output))
+        assert (elsewhere / 'myrefl.dat').read_text().startswith('# local table')
+
+    def test_deposit_targets_a_given_directory(self, tmp_path):
+        """The compile path generates its source in memory, so it deposits beside
+        the binary rather than beside any .c file."""
+        from mccode_antlr.io import to_json, from_json
+        from mccode_antlr.io.portable import deposit_embedded_data_files
+        lib, instr = self._with_data(tmp_path)
+        loaded = from_json(to_json(_read(lib, instr)))
+        destination = tmp_path / 'bin'
+        destination.mkdir()
+        written = deposit_embedded_data_files(loaded, destination)
+        assert [p.name for p in written] == ['myrefl.dat']
+
+    def test_headers_are_not_deposited(self, local_tree):
+        """Only files a parameter names; headers are compiled in, never opened."""
+        from mccode_antlr.io import to_json, from_json
+        from mccode_antlr.io.portable import deposit_embedded_data_files
+        _, lib, instr = local_tree
+        loaded = from_json(to_json(_read(lib, instr)))
+        destination = instr.parent / 'bin'
+        destination.mkdir()
+        assert deposit_embedded_data_files(loaded, destination) == []
+
+    def test_an_existing_different_file_is_not_overwritten(self, tmp_path):
+        from mccode_antlr.io import to_json, from_json
+        from mccode_antlr.io.portable import deposit_embedded_data_files
+        lib, instr = self._with_data(tmp_path)
+        loaded = from_json(to_json(_read(lib, instr)))
+        destination = tmp_path / 'bin'
+        destination.mkdir()
+        (destination / 'myrefl.dat').write_text('the user has their own')
+        assert deposit_embedded_data_files(loaded, destination) == []
+        assert (destination / 'myrefl.dat').read_text() == 'the user has their own'
+
+    def test_no_destination_is_a_no_op(self, tmp_path):
+        from mccode_antlr.io import to_json, from_json
+        from mccode_antlr.io.portable import deposit_embedded_data_files
+        lib, instr = self._with_data(tmp_path)
+        loaded = from_json(to_json(_read(lib, instr)))
+        assert deposit_embedded_data_files(loaded, None) == []

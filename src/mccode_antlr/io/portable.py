@@ -47,6 +47,53 @@ def _resolve(registries, name: str):
     return None, None
 
 
+def deposit_embedded_data_files(instr, destination) -> list:
+    """Write embedded data files where the *compiled binary* will look.
+
+    Translation reaches an embedded file through reg.path(), which materializes it
+    into a cache directory -- but the runtime's Open_File does not search there. It
+    tries the name as given, then the instrument source directory, then the
+    executable's directory, then $HOME, then $FLAVOR/data and $FLAVOR/contrib.
+    Rewriting the parameter to the cache path would work, but only by baking a
+    machine-specific absolute path into the generated C -- exactly the portability
+    problem this is meant to solve. So the file is placed beside the generated C
+    (for a translate-only run) and beside the binary (when compiling), both of
+    which the runtime searches.
+
+    Only files an instrument *parameter* names are deposited: the rest of an
+    embedded registry is headers and libraries, compiled in and never opened at
+    run time.
+    """
+    from pathlib import Path
+    embedded = [reg for reg in (instr.registries or []) if isinstance(reg, InMemoryRegistry)]
+    if not embedded or destination is None:
+        return []
+    wanted = set(_data_file_candidates(instr))
+    written = []
+    for reg in embedded:
+        for name in reg.filenames():
+            if name not in wanted:
+                continue
+            target = Path(destination) / Path(name).name
+            payload = reg.contents_bytes(name)
+            if target.exists():
+                if target.read_bytes() != payload:
+                    logger.warning(
+                        f'{instr.name}: not overwriting {target}, which differs from the copy '
+                        'embedded in the instrument; the existing file will be used'
+                    )
+                continue
+            try:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(payload)
+            except OSError as error:
+                logger.warning(f'{instr.name}: could not write {target}: {error}')
+                continue
+            logger.info(f'{instr.name}: deposited embedded data file {name!r} -> {target}')
+            written.append(target)
+    return written
+
+
 def _data_file_candidates(instr) -> list[str]:
     """String-valued component parameters that name a file.
 
