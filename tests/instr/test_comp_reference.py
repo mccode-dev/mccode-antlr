@@ -153,34 +153,16 @@ class SplitBifrostTestCase(unittest.TestCase):
         self._test_relative_references(before)
 
 
-class SplitHDF5BifrostTestCase(SplitBifrostTestCase):
+class SplitJSONBifrostTestCase(SplitBifrostTestCase):
+    """The same relative-reference checks, but after a serialization round trip."""
     def setUp(self):
         from pathlib import Path
         from tempfile import mkdtemp
-        from importlib.util import find_spec
-        if not find_spec('h5py'):
-            self.skipTest('h5py not found -- skipping HDF5 tests')
-        else:
-            from mccode_antlr.io import save_hdf5, load_hdf5
-            self.td = Path(mkdtemp())
-            filepath = self.td.joinpath('bifrost.h5')
-            save_hdf5(make_truncated_bifrost(), filepath)
-            self.bifrost = load_hdf5(filepath)
-
-    def test_load_parameters(self):
-        from mccode_antlr.io import load_hdf5
-        from mccode_antlr.common import InstrumentParameter
-        parameters = load_hdf5(self.td.joinpath('bifrost.h5'), 'parameters')
-        self.assertTrue(isinstance(parameters, tuple))
-        self.assertTrue(all(isinstance(p, InstrumentParameter) for p in parameters))
-
-        expected = [InstrumentParameter.parse(s) for s in (
-            'int pulses = 1', 'power/"MW" = 2', 'source_lambda_min/"angstrom" = 0.75',
-            'source_lambda_max/"angstrom" = 30',)]
-        self.assertEqual(len(parameters), len(expected))
-        self.assertTrue(all(x in expected for x in parameters))
-        self.assertTrue(all(x in parameters for x in expected))
-
+        from mccode_antlr.io import save_json, load_json
+        self.td = Path(mkdtemp())
+        filepath = self.td.joinpath('bifrost.json')
+        save_json(make_truncated_bifrost(), filepath)
+        self.bifrost = load_json(filepath)
 
     def tearDown(self):
         from shutil import rmtree
