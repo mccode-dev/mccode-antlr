@@ -475,3 +475,124 @@ class TestCollectLocalRegistries:
                      if isinstance(r, LocalRegistry) and r.root == tmp_path]
         assert len(specified) == 1
         assert specified[0].recursive
+
+
+# ---------------------------------------------------------------------------
+# Ambiguous lookups: reported as ambiguity, and survivable by falling through
+# to the next registry
+# ---------------------------------------------------------------------------
+
+class TestAmbiguousLookup:
+    def _two_copies(self, tmp_path, first: str, second: str):
+        """A tree with the same component name in two subdirectories."""
+        for sub, text in (('a', first), ('b', second)):
+            tmp_path.joinpath(sub).mkdir()
+            tmp_path.joinpath(sub, 'Dupe.comp').write_text(text)
+        import mccode_antlr.reader.registry as rm
+        return rm.LocalRegistry('tree', str(tmp_path))
+
+    def test_differing_copies_report_ambiguity(self, tmp_path):
+        import pytest
+        reg = self._two_copies(tmp_path, 'one', 'two')
+        with pytest.raises(RuntimeError) as excinfo:
+            reg.fullname('Dupe', '.comp')
+        message = str(excinfo.value)
+        assert 'Ambiguous' in message
+        # The old bug: an ambiguity reported as its opposite
+        assert 'No match' not in message
+        assert str(tmp_path / 'a' / 'Dupe.comp') in message
+        assert str(tmp_path / 'b' / 'Dupe.comp') in message
+
+    def test_identical_copies_still_dedupe(self, tmp_path):
+        """Guards the content-hash dedupe -- identical copies are not ambiguous."""
+        reg = self._two_copies(tmp_path, 'same', 'same')
+        assert reg.fullname('Dupe', '.comp').name == 'Dupe.comp'
+
+    def test_absent_name_still_says_no_match(self, tmp_path):
+        import pytest
+        import mccode_antlr.reader.registry as rm
+        reg = rm.LocalRegistry('tree', str(tmp_path))
+        with pytest.raises(RuntimeError, match='No match'):
+            reg.fullname('Nothing', '.comp')
+
+    def test_remote_registry_zero_candidates_says_no_match(self):
+        """RemoteRegistry.fullname had the mirror-image bug: zero matches were
+        reported as 'More than one match' with an empty list."""
+        import pytest
+        import mccode_antlr.reader.registry as rm
+
+        class _Pooch:
+            registry_files = ['some/other.comp']
+
+        reg = rm.RemoteRegistry('remote', 'https://example.com', 'v1', 'r.txt')
+        reg.pooch = _Pooch()
+        with pytest.raises(RuntimeError) as excinfo:
+            reg.fullname('Nothing', '.comp', exact=False)
+        assert 'No match' in str(excinfo.value)
+        assert 'More than one' not in str(excinfo.value)
+
+
+class _RaisingRegistry:
+    """Claims to know everything, fails to provide anything.
+
+    Priority must outrank LocalRegistry's 10, or Reader's priority sort puts the
+    working registry first and the fall-through is never exercised.
+    """
+    name = 'broken'
+    root = None
+    version = '0'
+    priority = 20
+
+    def known(self, name, ext=None, strict=False):
+        return True
+
+    def path(self, name, ext=None):
+        raise RuntimeError('deliberately broken')
+
+    contents = path
+    fullname = path
+
+
+class TestReaderFallsThrough:
+    def _reader(self, tmp_path, *extra):
+        import mccode_antlr.reader.registry as rm
+        from mccode_antlr.reader import Reader
+        tmp_path.joinpath('Good.comp').write_text('DEFINE COMPONENT Good')
+        working = rm.LocalRegistry('good', str(tmp_path))
+        return Reader(registries=[*extra, working])
+
+    def test_locate_skips_a_registry_that_cannot_deliver(self, tmp_path):
+        reader = self._reader(tmp_path, _RaisingRegistry())
+        assert reader.locate('Good', ext='.comp') == tmp_path / 'Good.comp'
+
+    def test_contents_and_fullname_also_fall_through(self, tmp_path):
+        reader = self._reader(tmp_path, _RaisingRegistry())
+        assert reader.contents('Good', ext='.comp') == 'DEFINE COMPONENT Good'
+        assert reader.fullname('Good', ext='.comp') == tmp_path / 'Good.comp'
+
+    def test_all_failing_registries_are_named_in_the_error(self, tmp_path):
+        import pytest
+        from mccode_antlr.reader import Reader
+        first, second = _RaisingRegistry(), _RaisingRegistry()
+        second.name = 'also_broken'
+        reader = Reader(registries=[first, second])
+        with pytest.raises(RuntimeError) as excinfo:
+            reader.locate('Anything', ext='.comp')
+        message = str(excinfo.value)
+        assert 'broken' in message and 'also_broken' in message
+        assert 'deliberately broken' in message
+
+    def test_ambiguous_registry_falls_through_to_a_usable_one(self, tmp_path):
+        """The original symptom: an ambiguous tree must not abort the lookup."""
+        import mccode_antlr.reader.registry as rm
+        from mccode_antlr.reader import Reader
+        ambiguous = tmp_path / 'ambiguous'
+        for sub, text in (('a', 'one'), ('b', 'two')):
+            ambiguous.joinpath(sub).mkdir(parents=True)
+            ambiguous.joinpath(sub, 'Dupe.comp').write_text(text)
+        good = tmp_path / 'good'
+        good.mkdir()
+        good.joinpath('Dupe.comp').write_text('the real one')
+        reader = Reader(registries=[rm.LocalRegistry('ambiguous', str(ambiguous)),
+                                    rm.LocalRegistry('good', str(good))])
+        assert reader.contents('Dupe', ext='.comp') == 'the real one'
