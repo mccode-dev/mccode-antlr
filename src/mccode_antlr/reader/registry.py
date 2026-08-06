@@ -272,6 +272,8 @@ class RemoteRegistry(Registry):
         matches = list(filter(lambda x: name in x, self.pooch.registry_files))
         if len(matches) == 1:
             return matches[0]
+        if len(matches) == 0:
+            raise RuntimeError(f'No match for {compare} or {name} in {self.name}')
         deduped = _dedupe_identical_registry_entries(self.pooch, matches)
         if deduped is not None:
             return deduped
@@ -486,41 +488,41 @@ class LocalRegistry(Registry):
 
     def fullname(self, name: str, ext: str = None, exact: bool = False):
         compare = _name_plus_suffix(name, ext)
-        # Complete match
-        is_compare = list(self._exact_file_iterator(compare))
-        if len(is_compare) == 1:
-            return is_compare[0]
-        if len(is_compare) > 1 and (deduped := _dedupe_identical_paths(is_compare)) is not None:
-            return deduped
-        # Complete match if name happens to be missing the extension
-        is_name = list(self._exact_file_iterator(name))
-        if len(is_name) == 1:
-            return is_name[0]
-        if len(is_name) > 1 and (deduped := _dedupe_identical_paths(is_name)) is not None:
-            return deduped
+        # Candidate sets that had several entries which _dedupe_identical_paths
+        # refused to collapse, i.e. real ambiguities. A later stage can legitimately
+        # find nothing at all, so without remembering these an ambiguous lookup
+        # ends up reported as "No match" -- the opposite of what happened.
+        ambiguous: list[list[Path]] = []
+
+        def resolve(candidates: list[Path]):
+            if len(candidates) == 1:
+                return candidates[0]
+            if len(candidates) > 1:
+                if (deduped := _dedupe_identical_paths(candidates)) is not None:
+                    return deduped
+                ambiguous.append(candidates)
+            return None
+
+        # Complete match, then a complete match if name is missing the extension
+        for candidates in (self._exact_file_iterator(compare), self._exact_file_iterator(name)):
+            if (found := resolve(list(candidates))) is not None:
+                return found
         if not exact:
-            from loguru import logger
-            ends_with_compare = list(self._file_iterator(compare))
-            if len(ends_with_compare) == 1:
-                return ends_with_compare[0]
-            if len(ends_with_compare) > 1 and (deduped := _dedupe_identical_paths(ends_with_compare)) is not None:
-                return deduped
-            # Complete match if name happens to be missing the extension
-            ends_with_name = list(self._file_iterator(name))
-            if len(ends_with_name) == 1:
-                return ends_with_name[0]
-            if len(ends_with_name) > 1 and (deduped := _dedupe_identical_paths(ends_with_name)) is not None:
-                return deduped
+            for candidates in (self._file_iterator(compare), self._file_iterator(name)):
+                if (found := resolve(list(candidates))) is not None:
+                    return found
         # Or matching *any* file that contains name
-        matches = list(self._file_iterator(name))
-        if len(matches) == 0:
-            raise RuntimeError(f'No match for {compare} or {name} under {self.root}')
-        if len(matches) != 1:
-            deduped = _dedupe_identical_paths(matches)
-            if deduped is not None:
-                return deduped
-            raise RuntimeError(f'More than one match for {name}:{ext}, which is required of:\n{matches}')
-        return matches[0]
+        if (found := resolve(list(self._file_iterator(name)))) is not None:
+            return found
+        if ambiguous:
+            distinct = sorted({p for candidates in ambiguous for p in candidates}, key=str)
+            listing = '\n'.join(f'  {p}' for p in distinct)
+            raise RuntimeError(
+                f'Ambiguous match for {compare} under {self.root}: {len(distinct)} '
+                f'candidates with differing contents\n{listing}\n'
+                'Narrow the search with -I/--search-dir, or remove the duplicates.'
+            )
+        raise RuntimeError(f'No match for {compare} or {name} under {self.root}')
 
     def is_available(self, name: str, ext: str = None):
         return self.known(name, ext)
@@ -617,6 +619,35 @@ class InMemoryRegistry(Registry):
 def ordered_registries(registries: list[Registry]):
     """Sort the registries by their priority"""
     return sorted(registries, key=lambda x: x.priority, reverse=True)
+
+
+def resolve_from_registries(registries, name: str, action, ext: str = None, strict: bool = False):
+    """Apply *action* to the first registry that can actually resolve *name*.
+
+    ``known()`` is a claim, not a guarantee: a registry may answer truthfully and
+    still fail to produce the file -- ambiguous candidates it cannot choose
+    between, an unreadable file, a network error on a remote. Treating the first
+    claim as binding lets one such registry abort a lookup that a later registry
+    would have satisfied. Try each in turn instead, and if none succeed report
+    every failure rather than a bare "not found".
+    """
+    registries = list(registries or [])
+    problems = []
+    for reg in registries:
+        if not reg.known(name, ext, strict=strict):
+            continue
+        try:
+            return action(reg)
+        except Exception as error:
+            logger.warning(f'Registry {reg.name!r} knows of {name} but could not provide '
+                           f'it ({error}); trying the next registry')
+            problems.append(f'  {reg.name}: {error}')
+    names = [reg.name for reg in registries]
+    msg = "registry " + names[0] if len(names) == 1 else 'registries: ' + ','.join(names)
+    if problems:
+        raise RuntimeError(f'{name} not found in {msg}; every registry that knew of it '
+                           'failed to provide it:\n' + '\n'.join(problems))
+    raise RuntimeError(f'{name} not found in {msg}')
 
 
 def registries_match(registry: Registry, spec):
