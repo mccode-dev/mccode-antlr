@@ -88,6 +88,90 @@ class TestCapture:
         assert captured.priority < REGISTRY_PRIORITY_HIGHEST
 
 
+class TestUnresolvableIncludes:
+    """An %include that resolves nowhere is a translate-time error, but saving an
+    instrument that does not yet translate is legitimate -- the file may appear
+    before it is translated, or on the machine that translates it."""
+
+    def _warnings(self, call):
+        from loguru import logger
+        messages = []
+        sink = logger.add(lambda m: messages.append(str(m)), level='WARNING')
+        try:
+            result = call()
+        finally:
+            logger.remove(sink)
+        return result, messages
+
+    def _deferred(self, tmp_path):
+        lib = tmp_path / 'lib'
+        lib.mkdir()
+        (lib / 'Deferred.comp').write_text(
+            'DEFINE COMPONENT Deferred\nSHARE %{ %include "not_here_yet.h" %}\n'
+            'TRACE %{ SCATTER; %}\nEND\n'
+        )
+        instr = tmp_path / 'u.instr'
+        instr.write_text(
+            'DEFINE INSTRUMENT u()\nTRACE\n'
+            'COMPONENT o = Progress_bar() AT (0,0,0) ABSOLUTE\n'
+            'COMPONENT d = Deferred() AT (0,0,1) ABSOLUTE\nEND\n'
+        )
+        return lib, instr
+
+    def test_saving_still_succeeds(self, tmp_path):
+        from mccode_antlr.io import to_json
+        lib, instr = self._deferred(tmp_path)
+        assert len(to_json(_read(lib, instr))) > 0
+
+    def test_the_user_is_told_which_include_is_missing(self, tmp_path):
+        from mccode_antlr.io import to_json
+        lib, instr = self._deferred(tmp_path)
+        _, messages = self._warnings(lambda: to_json(_read(lib, instr)))
+        assert any('not_here_yet.h' in m for m in messages)
+
+    def test_a_resolvable_instrument_is_quiet(self, local_tree):
+        from mccode_antlr.io import to_json
+        _, lib, instr = local_tree
+        _, messages = self._warnings(lambda: to_json(_read(lib, instr)))
+        assert not any('could not be resolved' in m for m in messages)
+
+    def test_a_header_only_library_does_not_warn(self, tmp_path):
+        """A bare %include pulls {name}.h and {name}.c, but only the header is
+        required -- many libraries have no .c at all."""
+        from mccode_antlr.io.portable import embedded_registry
+        lib = tmp_path / 'lib'
+        lib.mkdir()
+        (lib / 'onlyh.h').write_text('/* HEADER ONLY */\n')
+        (lib / 'HdrOnly.comp').write_text(
+            'DEFINE COMPONENT HdrOnly\nSHARE %{ %include "onlyh" %}\n'
+            'TRACE %{ SCATTER; %}\nEND\n'
+        )
+        instr = tmp_path / 'u.instr'
+        instr.write_text(
+            'DEFINE INSTRUMENT u()\nTRACE\n'
+            'COMPONENT o = Progress_bar() AT (0,0,0) ABSOLUTE\n'
+            'COMPONENT h = HdrOnly() AT (0,0,1) ABSOLUTE\nEND\n'
+        )
+        captured, messages = self._warnings(lambda: embedded_registry(_read(lib, instr)))
+        assert captured.filenames() == ['onlyh.h']
+        assert not any('could not be resolved' in m for m in messages)
+
+    def test_output_filenames_are_not_reported_as_missing(self, local_tree):
+        """Data-file candidates are heuristic: a string parameter ending in an
+        extension is usually an *output* name, so it must never be reported."""
+        from mccode_antlr.io.portable import embedded_registry
+        _, lib, instr = local_tree
+        instr.write_text(
+            'DEFINE INSTRUMENT u()\nTRACE\n'
+            'COMPONENT o = Progress_bar() AT (0,0,0) ABSOLUTE\n'
+            'COMPONENT m = UsesLib(thing=3) AT (0,0,1) ABSOLUTE\n'
+            'COMPONENT p = PSD_monitor(filename="never_going_to_exist.psd") '
+            'AT (0,0,2) ABSOLUTE\nEND\n'
+        )
+        _, messages = self._warnings(lambda: embedded_registry(_read(lib, instr)))
+        assert not any('never_going_to_exist' in m for m in messages)
+
+
 class TestSerializedInstrument:
     def test_captured_files_reach_the_json(self, local_tree):
         from mccode_antlr.io import to_json

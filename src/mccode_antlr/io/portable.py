@@ -97,29 +97,41 @@ def embedded_registry(instr, size_limit_mb: float | None = None) -> InMemoryRegi
         size_limit_mb = _config_flag('embed_size_limit_mb', 32)
     budget = int(float(size_limit_mb) * 1024 * 1024)
 
-    pending: list[str] = []
-    for _, text in source_blocks(instr):
+    # Names are tracked with their provenance. Only %include names are hard
+    # requirements -- the translator fails outright on one it cannot resolve. Data
+    # file and GETPATH names are heuristic guesses (filename="D0_Source.psd" names
+    # an *output*), so an unresolved one means nothing and must not be reported.
+    pending: list[tuple[str, str]] = []
+
+    def queue_includes(text: str):
         libraries, files = included_names(text)
         for library in libraries:
-            # The translator fetches {lib}.h, and {lib}.c too when embedding the
-            # runtime, so both have to travel.
-            pending.extend((f'{library}.h', f'{library}.c'))
-        pending.extend(files)
-    pending.extend(_data_file_candidates(instr))
-    pending.extend(_getpath_candidates(instr))
+            # A bare name is a library: the translator fetches {lib}.h, and
+            # {lib}.c too when embedding the runtime, so both have to travel.
+            # Only the header is required to exist.
+            pending.append((f'{library}.h', 'include'))
+            pending.append((f'{library}.c', 'optional'))
+        pending.extend((name, 'include') for name in files)
 
-    embedded, seen, total = {}, set(), 0
+    for _, text in source_blocks(instr):
+        queue_includes(text)
+    pending.extend((name, 'optional') for name in _data_file_candidates(instr))
+    pending.extend((name, 'optional') for name in _getpath_candidates(instr))
+
+    embedded, seen, total, unresolved = {}, set(), 0, []
     while pending:
-        name = pending.pop(0)
+        name, kind = pending.pop(0)
         if name in seen:
             continue
         seen.add(name)
         reg, path = _resolve(registries, name)
         if reg is None:
-            # Missing, or supplied by a remote registry: either way not ours to
-            # carry. A genuinely missing file is reported at translation time.
+            if kind == 'include':
+                unresolved.append(name)
             continue
         if not isinstance(reg, LocalRegistry):
+            # Supplied by a remote registry: reachable anywhere by name and
+            # content hash, so not ours to carry.
             continue
         try:
             payload = path.read_bytes()
@@ -137,12 +149,22 @@ def embedded_registry(instr, size_limit_mb: float | None = None) -> InMemoryRegi
         total += len(payload)
         # Followed transitively: a share library may %include further files.
         try:
-            libraries, files = included_names(payload.decode('utf-8'))
+            queue_includes(payload.decode('utf-8'))
         except UnicodeDecodeError:
-            continue
-        for library in libraries:
-            pending.extend((f'{library}.h', f'{library}.c'))
-        pending.extend(files)
+            pass
+
+    if unresolved:
+        # Not an error: saving an instrument that does not yet translate is
+        # legitimate, and the file may appear before it is translated. But the
+        # alternative to saying so here is a failure much later, possibly on
+        # someone else's machine.
+        listed = ', '.join(sorted(unresolved))
+        logger.warning(
+            f'{instr.name}: %include of {listed} could not be resolved, so '
+            f'{"they were" if len(unresolved) > 1 else "it was"} not embedded. '
+            'Translating this instrument will fail unless the file is available '
+            'wherever it is translated.'
+        )
 
     if not embedded:
         return None
