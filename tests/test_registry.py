@@ -377,3 +377,101 @@ class TestEnsureRegistries:
         assert len(warnings) == 1
         assert (tmp_path / 'default').as_posix() in warnings[0]
         assert (tmp_path / 'file').as_posix() in warnings[0]
+
+
+# ---------------------------------------------------------------------------
+# LocalRegistry recursion — the working directory is searched top-level only,
+# matching `mcstas`, while -I/--search-dir directories are whole trees
+# ---------------------------------------------------------------------------
+
+class TestLocalRegistryRecursion:
+    def _tree(self, tmp_path):
+        tmp_path.joinpath('Top.comp').write_text('top')
+        tmp_path.joinpath('sub').mkdir()
+        tmp_path.joinpath('sub', 'Deep.comp').write_text('deep')
+        return tmp_path
+
+    def test_recursive_is_the_default(self, tmp_path):
+        import mccode_antlr.reader.registry as rm
+        assert rm.LocalRegistry('mylib', str(tmp_path)).recursive
+
+    def test_non_recursive_finds_top_level(self, tmp_path):
+        import mccode_antlr.reader.registry as rm
+        root = self._tree(tmp_path)
+        reg = rm.LocalRegistry('wd', str(root), recursive=False)
+        assert reg.known('Top', '.comp')
+        assert reg.path('Top', '.comp') == root / 'Top.comp'
+
+    def test_non_recursive_ignores_subdirectories(self, tmp_path):
+        import mccode_antlr.reader.registry as rm
+        root = self._tree(tmp_path)
+        assert not rm.LocalRegistry('wd', str(root), recursive=False).known('Deep', '.comp')
+        assert rm.LocalRegistry('tree', str(root)).known('Deep', '.comp')
+
+    def test_non_recursive_still_resolves_explicit_relative_paths(self, tmp_path):
+        """A name that spells out a subdirectory is a path, not a tree search."""
+        import mccode_antlr.reader.registry as rm
+        root = self._tree(tmp_path)
+        reg = rm.LocalRegistry('wd', str(root), recursive=False)
+        assert reg.known('sub/Deep.comp')
+        assert reg.path('sub/Deep.comp') == root / 'sub' / 'Deep.comp'
+
+    def test_non_recursive_filenames_and_filetypes_stay_top_level(self, tmp_path):
+        from pathlib import Path
+        import mccode_antlr.reader.registry as rm
+        root = self._tree(tmp_path)
+        reg = rm.LocalRegistry('wd', str(root), recursive=False)
+        assert [p.name for p in reg._filetype_iterator('comp')] == ['Top.comp']
+        assert sorted(Path(f).name for f in reg.filenames()) == ['Top.comp', 'sub']
+
+    def test_recursive_spec_is_unchanged(self, tmp_path):
+        import mccode_antlr.reader.registry as rm
+        reg = rm.LocalRegistry('mylib', str(tmp_path))
+        assert reg.specification_string() == f'mylib {tmp_path.as_posix()}'
+
+    def test_non_recursive_spec_roundtrips(self, tmp_path):
+        import mccode_antlr.reader.registry as rm
+        reg = rm.LocalRegistry('wd', str(tmp_path), recursive=False)
+        spec = reg.specification_string()
+        assert spec == f'wd {tmp_path.as_posix()} non-recursive'
+        recovered = rm.registry_from_specification(spec)
+        assert recovered is not None
+        assert not recovered.recursive
+        assert recovered == reg
+
+    def test_spec_without_token_is_recursive(self, tmp_path):
+        """Specs written before the flag existed describe recursive registries."""
+        import mccode_antlr.reader.registry as rm
+        for spec in (tmp_path.as_posix(), f'mylib {tmp_path.as_posix()}'):
+            assert rm.registry_from_specification(spec).recursive
+
+    def test_serializable_registry_roundtrips_recursion(self, tmp_path):
+        import mccode_antlr.reader.registry as rm
+        for recursive in (True, False):
+            reg = rm.LocalRegistry('wd', str(tmp_path), recursive=recursive)
+            back = rm.SerializableRegistry.from_registry(reg).to_registry()
+            assert back.recursive is recursive
+            assert back == reg
+
+    def test_registries_differing_only_in_recursion_are_unequal(self, tmp_path):
+        import mccode_antlr.reader.registry as rm
+        assert rm.LocalRegistry('wd', str(tmp_path)) != rm.LocalRegistry('wd', str(tmp_path), recursive=False)
+
+
+class TestCollectLocalRegistries:
+    def test_working_directory_is_not_recursive(self):
+        from mccode_antlr import Flavor
+        from mccode_antlr.reader.registry import collect_local_registries
+        wd = [r for r in collect_local_registries(Flavor.MCSTAS) if r.name == 'working_directory']
+        assert len(wd) == 1
+        assert not wd[0].recursive
+
+    def test_search_dir_registries_are_recursive(self, tmp_path):
+        """-I directories are tree roots, including -I . for the working directory."""
+        from mccode_antlr import Flavor
+        from mccode_antlr.reader.registry import collect_local_registries, LocalRegistry
+        registries = collect_local_registries(Flavor.MCSTAS, [tmp_path])
+        specified = [r for r in registries
+                     if isinstance(r, LocalRegistry) and r.root == tmp_path]
+        assert len(specified) == 1
+        assert specified[0].recursive

@@ -391,28 +391,57 @@ class GitHubRegistry(RemoteRegistry):
         return super().file_keys() + ('registry',)
 
 
+NON_RECURSIVE_SPECIFICATION = 'non-recursive'
+
+
+def _as_recursive(value) -> bool:
+    """Coerce a serialized LocalRegistry 'recursive' flag back to a bool.
+
+    Round-trips hand this back as a numpy bool (HDF5 attribute), a string (a
+    specification token or JSON), or None (files written before the flag
+    existed, which described recursive registries).
+    """
+    if value is None or value == '':
+        return True
+    if isinstance(value, str):
+        return value.strip().lower() not in ('false', '0', 'no', NON_RECURSIVE_SPECIFICATION)
+    return bool(value)
+
+
 class LocalRegistry(Registry):
-    def __init__(self, name: str, root: str, priority: int = 10):
+    def __init__(self, name: str, root: str, priority: int = 10, recursive=True):
         self.name = name
         self.root = Path(root)
         self.version = mccode_antlr_version()
         self.priority = priority
-        self._index = None  # lazy basename -> [paths] index of everything under root
+        # A recursive registry is a whole searchable tree, as -I/--search-dir and
+        # the configured component directories are. A non-recursive one holds only
+        # the files directly in root -- what `mcstas` does for the working
+        # directory, which it never descends into.
+        self.recursive = _as_recursive(recursive)
+        self._index = None  # lazy basename -> [paths] index of root's contents
 
     def __repr__(self):
-        return f'LocalRegistry({self.name!r}, {self.root!r}, {self.priority!r})'
+        return (f'LocalRegistry({self.name!r}, {self.root!r}, {self.priority!r}, '
+                f'recursive={self.recursive!r})')
 
     def __hash__(self):
         return hash(str(self))
 
     def file_contents(self):
-        return {'name': self.name, 'root': self.root.as_posix(), 'priority': self.priority}
+        return {'name': self.name, 'root': self.root.as_posix(), 'priority': self.priority,
+                'recursive': self.recursive}
 
     def _inner_specification_parts(self, wrapper=None) -> list[str]:
-        return [self.name, wrapper.url(self.root.as_posix())]
+        parts = [self.name, wrapper.url(self.root.as_posix())]
+        # Only non-default behaviour is spelled out, so specifications for the
+        # usual recursive registry are unchanged.
+        if not self.recursive:
+            parts.append(NON_RECURSIVE_SPECIFICATION)
+        return parts
 
     def _filetype_iterator(self, filetype: str):
-        return self.root.glob(f'**/*.{filetype}')
+        return self.root.glob(f'**/*.{filetype}' if self.recursive else f'*.{filetype}')
 
     def _file_index(self) -> dict[str, list[Path]]:
         # Every _file_iterator call is a full recursive walk of root (~0.2s for
@@ -423,10 +452,18 @@ class LocalRegistry(Registry):
         if self._index is None:
             import os
             index: dict[str, list[Path]] = {}
-            for dirpath, dirnames, filenames in os.walk(self.root):
-                base = Path(dirpath)
-                for n in dirnames + filenames:
-                    index.setdefault(n, []).append(base / n)
+            if self.recursive:
+                for dirpath, dirnames, filenames in os.walk(self.root):
+                    base = Path(dirpath)
+                    for n in dirnames + filenames:
+                        index.setdefault(n, []).append(base / n)
+            else:
+                try:
+                    names = os.listdir(self.root)
+                except OSError:
+                    names = []
+                for n in names:
+                    index[n] = [self.root / n]
             self._index = index
         return self._index
 
@@ -434,7 +471,7 @@ class LocalRegistry(Registry):
         # The index only answers plain basenames -- glob metacharacters or an
         # embedded path separator still need real glob matching.
         if any(c in name for c in '*?[') or '/' in name or '\\' in name:
-            return self.root.glob(f'**/{name}')
+            return self.root.glob(f'**/{name}' if self.recursive else name)
         return iter(self._file_index().get(name, []))
 
     def _exact_file_iterator(self, name: str):
@@ -492,7 +529,7 @@ class LocalRegistry(Registry):
         return self.root.joinpath(self.fullname(name, ext, exact))
 
     def filenames(self) -> list[str]:
-        return [str(x) for x in self.root.glob('**')]
+        return [str(x) for x in self.root.glob('**' if self.recursive else '*')]
 
     def __eq__(self, other):
         if not isinstance(other, Registry):
@@ -500,6 +537,8 @@ class LocalRegistry(Registry):
         if other.name != self.name:
             return False
         if other.root != self.root:
+            return False
+        if getattr(other, 'recursive', True) != self.recursive:
             return False
         return True
 
@@ -669,13 +708,15 @@ def registry_from_specification(spec: str):
     Expected specifications are:
 
     1. ``{resolvable folder path}``
-    2. ``{name} {resolvable folder path}``
+    2. ``{name} {resolvable folder path}`` or ``{name} {resolvable folder path} non-recursive``
     3. ``{name} {resolvable url} {resolvable file path}``
     4. ``{name} {resolvable url} {version} {registry file name}``
     5. ``git+{url}@{version}`` or ``git+{url}@{version}#{registry-file}``
     6. ``{owner}/{repo}@{version}`` or ``{owner}/{repo}@{version}#{registry-file}``
 
     The first two variants make a LocalRegistry, which searches the provided directory for files.
+    The optional trailing ``non-recursive`` token restricts the search to the files directly in
+    that directory, as used for the working directory; without it the whole tree is searched.
     The third makes a ModuleRemoteRegistry using pooch. The resolvable file path should point at a Pooch registry file.
     The fourth makes a GitHubRegistry, which uses the specific folder structure of GitHub.
     Formats 5 and 6 are compact git-reference forms that also produce a GitHubRegistry.
@@ -710,7 +751,7 @@ def registry_from_specification(spec: str):
     p5 = p5[1:-1] if p5 is not None and p5.startswith('"') and p5.endswith('"') else p5
 
     if Path(p2).exists() and Path(p2).is_dir():
-        return LocalRegistry(p1, str(Path(p2).resolve()))
+        return LocalRegistry(p1, str(Path(p2).resolve()), recursive=p3)
 
     # (simple) URL validation:
     if not simple_url_validator(p2, file_ok=True):
@@ -931,7 +972,12 @@ def collect_local_registries(
     if specified is not None and len(specified) > 0:
         registries.extend([_local_reg(d) for d in specified])
 
-    registries.append(LocalRegistry('working_directory', f'{Path().resolve()}'))
+    # Not recursive: `mcstas` resolves a bare name against the working directory
+    # itself and never descends into it, so neither do we. Searching the tree
+    # makes an unrelated checkout below the working directory shadow -- and, when
+    # it holds two differing copies of a name, break -- the real component
+    # registries. Pass the directory via -I/--search-dir to search it as a tree.
+    registries.append(LocalRegistry('working_directory', f'{Path().resolve()}', recursive=False))
 
     return registries
 
