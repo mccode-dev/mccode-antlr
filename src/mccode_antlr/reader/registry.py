@@ -272,6 +272,8 @@ class RemoteRegistry(Registry):
         matches = list(filter(lambda x: name in x, self.pooch.registry_files))
         if len(matches) == 1:
             return matches[0]
+        if len(matches) == 0:
+            raise RuntimeError(f'No match for {compare} or {name} in {self.name}')
         deduped = _dedupe_identical_registry_entries(self.pooch, matches)
         if deduped is not None:
             return deduped
@@ -391,28 +393,57 @@ class GitHubRegistry(RemoteRegistry):
         return super().file_keys() + ('registry',)
 
 
+NON_RECURSIVE_SPECIFICATION = 'non-recursive'
+
+
+def _as_recursive(value) -> bool:
+    """Coerce a serialized LocalRegistry 'recursive' flag back to a bool.
+
+    Round-trips hand this back as a numpy bool (HDF5 attribute), a string (a
+    specification token or JSON), or None (files written before the flag
+    existed, which described recursive registries).
+    """
+    if value is None or value == '':
+        return True
+    if isinstance(value, str):
+        return value.strip().lower() not in ('false', '0', 'no', NON_RECURSIVE_SPECIFICATION)
+    return bool(value)
+
+
 class LocalRegistry(Registry):
-    def __init__(self, name: str, root: str, priority: int = 10):
+    def __init__(self, name: str, root: str, priority: int = 10, recursive=True):
         self.name = name
         self.root = Path(root)
         self.version = mccode_antlr_version()
         self.priority = priority
-        self._index = None  # lazy basename -> [paths] index of everything under root
+        # A recursive registry is a whole searchable tree, as -I/--search-dir and
+        # the configured component directories are. A non-recursive one holds only
+        # the files directly in root -- what `mcstas` does for the working
+        # directory, which it never descends into.
+        self.recursive = _as_recursive(recursive)
+        self._index = None  # lazy basename -> [paths] index of root's contents
 
     def __repr__(self):
-        return f'LocalRegistry({self.name!r}, {self.root!r}, {self.priority!r})'
+        return (f'LocalRegistry({self.name!r}, {self.root!r}, {self.priority!r}, '
+                f'recursive={self.recursive!r})')
 
     def __hash__(self):
         return hash(str(self))
 
     def file_contents(self):
-        return {'name': self.name, 'root': self.root.as_posix(), 'priority': self.priority}
+        return {'name': self.name, 'root': self.root.as_posix(), 'priority': self.priority,
+                'recursive': self.recursive}
 
     def _inner_specification_parts(self, wrapper=None) -> list[str]:
-        return [self.name, wrapper.url(self.root.as_posix())]
+        parts = [self.name, wrapper.url(self.root.as_posix())]
+        # Only non-default behaviour is spelled out, so specifications for the
+        # usual recursive registry are unchanged.
+        if not self.recursive:
+            parts.append(NON_RECURSIVE_SPECIFICATION)
+        return parts
 
     def _filetype_iterator(self, filetype: str):
-        return self.root.glob(f'**/*.{filetype}')
+        return self.root.glob(f'**/*.{filetype}' if self.recursive else f'*.{filetype}')
 
     def _file_index(self) -> dict[str, list[Path]]:
         # Every _file_iterator call is a full recursive walk of root (~0.2s for
@@ -423,10 +454,18 @@ class LocalRegistry(Registry):
         if self._index is None:
             import os
             index: dict[str, list[Path]] = {}
-            for dirpath, dirnames, filenames in os.walk(self.root):
-                base = Path(dirpath)
-                for n in dirnames + filenames:
-                    index.setdefault(n, []).append(base / n)
+            if self.recursive:
+                for dirpath, dirnames, filenames in os.walk(self.root):
+                    base = Path(dirpath)
+                    for n in dirnames + filenames:
+                        index.setdefault(n, []).append(base / n)
+            else:
+                try:
+                    names = os.listdir(self.root)
+                except OSError:
+                    names = []
+                for n in names:
+                    index[n] = [self.root / n]
             self._index = index
         return self._index
 
@@ -434,7 +473,7 @@ class LocalRegistry(Registry):
         # The index only answers plain basenames -- glob metacharacters or an
         # embedded path separator still need real glob matching.
         if any(c in name for c in '*?[') or '/' in name or '\\' in name:
-            return self.root.glob(f'**/{name}')
+            return self.root.glob(f'**/{name}' if self.recursive else name)
         return iter(self._file_index().get(name, []))
 
     def _exact_file_iterator(self, name: str):
@@ -449,41 +488,41 @@ class LocalRegistry(Registry):
 
     def fullname(self, name: str, ext: str = None, exact: bool = False):
         compare = _name_plus_suffix(name, ext)
-        # Complete match
-        is_compare = list(self._exact_file_iterator(compare))
-        if len(is_compare) == 1:
-            return is_compare[0]
-        if len(is_compare) > 1 and (deduped := _dedupe_identical_paths(is_compare)) is not None:
-            return deduped
-        # Complete match if name happens to be missing the extension
-        is_name = list(self._exact_file_iterator(name))
-        if len(is_name) == 1:
-            return is_name[0]
-        if len(is_name) > 1 and (deduped := _dedupe_identical_paths(is_name)) is not None:
-            return deduped
+        # Candidate sets that had several entries which _dedupe_identical_paths
+        # refused to collapse, i.e. real ambiguities. A later stage can legitimately
+        # find nothing at all, so without remembering these an ambiguous lookup
+        # ends up reported as "No match" -- the opposite of what happened.
+        ambiguous: list[list[Path]] = []
+
+        def resolve(candidates: list[Path]):
+            if len(candidates) == 1:
+                return candidates[0]
+            if len(candidates) > 1:
+                if (deduped := _dedupe_identical_paths(candidates)) is not None:
+                    return deduped
+                ambiguous.append(candidates)
+            return None
+
+        # Complete match, then a complete match if name is missing the extension
+        for candidates in (self._exact_file_iterator(compare), self._exact_file_iterator(name)):
+            if (found := resolve(list(candidates))) is not None:
+                return found
         if not exact:
-            from loguru import logger
-            ends_with_compare = list(self._file_iterator(compare))
-            if len(ends_with_compare) == 1:
-                return ends_with_compare[0]
-            if len(ends_with_compare) > 1 and (deduped := _dedupe_identical_paths(ends_with_compare)) is not None:
-                return deduped
-            # Complete match if name happens to be missing the extension
-            ends_with_name = list(self._file_iterator(name))
-            if len(ends_with_name) == 1:
-                return ends_with_name[0]
-            if len(ends_with_name) > 1 and (deduped := _dedupe_identical_paths(ends_with_name)) is not None:
-                return deduped
+            for candidates in (self._file_iterator(compare), self._file_iterator(name)):
+                if (found := resolve(list(candidates))) is not None:
+                    return found
         # Or matching *any* file that contains name
-        matches = list(self._file_iterator(name))
-        if len(matches) == 0:
-            raise RuntimeError(f'No match for {compare} or {name} under {self.root}')
-        if len(matches) != 1:
-            deduped = _dedupe_identical_paths(matches)
-            if deduped is not None:
-                return deduped
-            raise RuntimeError(f'More than one match for {name}:{ext}, which is required of:\n{matches}')
-        return matches[0]
+        if (found := resolve(list(self._file_iterator(name)))) is not None:
+            return found
+        if ambiguous:
+            distinct = sorted({p for candidates in ambiguous for p in candidates}, key=str)
+            listing = '\n'.join(f'  {p}' for p in distinct)
+            raise RuntimeError(
+                f'Ambiguous match for {compare} under {self.root}: {len(distinct)} '
+                f'candidates with differing contents\n{listing}\n'
+                'Narrow the search with -I/--search-dir, or remove the duplicates.'
+            )
+        raise RuntimeError(f'No match for {compare} or {name} under {self.root}')
 
     def is_available(self, name: str, ext: str = None):
         return self.known(name, ext)
@@ -492,7 +531,7 @@ class LocalRegistry(Registry):
         return self.root.joinpath(self.fullname(name, ext, exact))
 
     def filenames(self) -> list[str]:
-        return [str(x) for x in self.root.glob('**')]
+        return [str(x) for x in self.root.glob('**' if self.recursive else '*')]
 
     def __eq__(self, other):
         if not isinstance(other, Registry):
@@ -500,6 +539,8 @@ class LocalRegistry(Registry):
         if other.name != self.name:
             return False
         if other.root != self.root:
+            return False
+        if getattr(other, 'recursive', True) != self.recursive:
             return False
         return True
 
@@ -578,6 +619,35 @@ class InMemoryRegistry(Registry):
 def ordered_registries(registries: list[Registry]):
     """Sort the registries by their priority"""
     return sorted(registries, key=lambda x: x.priority, reverse=True)
+
+
+def resolve_from_registries(registries, name: str, action, ext: str = None, strict: bool = False):
+    """Apply *action* to the first registry that can actually resolve *name*.
+
+    ``known()`` is a claim, not a guarantee: a registry may answer truthfully and
+    still fail to produce the file -- ambiguous candidates it cannot choose
+    between, an unreadable file, a network error on a remote. Treating the first
+    claim as binding lets one such registry abort a lookup that a later registry
+    would have satisfied. Try each in turn instead, and if none succeed report
+    every failure rather than a bare "not found".
+    """
+    registries = list(registries or [])
+    problems = []
+    for reg in registries:
+        if not reg.known(name, ext, strict=strict):
+            continue
+        try:
+            return action(reg)
+        except Exception as error:
+            logger.warning(f'Registry {reg.name!r} knows of {name} but could not provide '
+                           f'it ({error}); trying the next registry')
+            problems.append(f'  {reg.name}: {error}')
+    names = [reg.name for reg in registries]
+    msg = "registry " + names[0] if len(names) == 1 else 'registries: ' + ','.join(names)
+    if problems:
+        raise RuntimeError(f'{name} not found in {msg}; every registry that knew of it '
+                           'failed to provide it:\n' + '\n'.join(problems))
+    raise RuntimeError(f'{name} not found in {msg}')
 
 
 def registries_match(registry: Registry, spec):
@@ -669,13 +739,15 @@ def registry_from_specification(spec: str):
     Expected specifications are:
 
     1. ``{resolvable folder path}``
-    2. ``{name} {resolvable folder path}``
+    2. ``{name} {resolvable folder path}`` or ``{name} {resolvable folder path} non-recursive``
     3. ``{name} {resolvable url} {resolvable file path}``
     4. ``{name} {resolvable url} {version} {registry file name}``
     5. ``git+{url}@{version}`` or ``git+{url}@{version}#{registry-file}``
     6. ``{owner}/{repo}@{version}`` or ``{owner}/{repo}@{version}#{registry-file}``
 
     The first two variants make a LocalRegistry, which searches the provided directory for files.
+    The optional trailing ``non-recursive`` token restricts the search to the files directly in
+    that directory, as used for the working directory; without it the whole tree is searched.
     The third makes a ModuleRemoteRegistry using pooch. The resolvable file path should point at a Pooch registry file.
     The fourth makes a GitHubRegistry, which uses the specific folder structure of GitHub.
     Formats 5 and 6 are compact git-reference forms that also produce a GitHubRegistry.
@@ -710,7 +782,7 @@ def registry_from_specification(spec: str):
     p5 = p5[1:-1] if p5 is not None and p5.startswith('"') and p5.endswith('"') else p5
 
     if Path(p2).exists() and Path(p2).is_dir():
-        return LocalRegistry(p1, str(Path(p2).resolve()))
+        return LocalRegistry(p1, str(Path(p2).resolve()), recursive=p3)
 
     # (simple) URL validation:
     if not simple_url_validator(p2, file_ok=True):
@@ -931,7 +1003,12 @@ def collect_local_registries(
     if specified is not None and len(specified) > 0:
         registries.extend([_local_reg(d) for d in specified])
 
-    registries.append(LocalRegistry('working_directory', f'{Path().resolve()}'))
+    # Not recursive: `mcstas` resolves a bare name against the working directory
+    # itself and never descends into it, so neither do we. Searching the tree
+    # makes an unrelated checkout below the working directory shadow -- and, when
+    # it holds two differing copies of a name, break -- the real component
+    # registries. Pass the directory via -I/--search-dir to search it as a tree.
+    registries.append(LocalRegistry('working_directory', f'{Path().resolve()}', recursive=False))
 
     return registries
 

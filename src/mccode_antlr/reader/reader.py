@@ -3,7 +3,8 @@ from pathlib import Path
 from loguru import logger
 from msgspec import Struct, field
 
-from .registry import Registry, registries_match, registry_from_specification
+from .registry import (Registry, registries_match, registry_from_specification,
+                       resolve_from_registries)
 from ..comp import Comp
 
 from mccode_antlr import Flavor
@@ -179,14 +180,15 @@ class Reader(Struct):
             else:
                 raise RuntimeError(f"Registry specification {spec} did not specify a valid registry!")
 
+    def _candidates(self, which: str = None):
+        return self.registries if which is None else [x for x in self.registries if x.name in which]
+
+    def _first_resolved(self, action, name: str, which: str = None, ext: str = None,
+                        strict: bool = False):
+        return resolve_from_registries(self._candidates(which), name, action, ext, strict)
+
     def locate(self, name: str, which: str = None, ext: str = None, strict: bool = False):
-        registries = self.registries if which is None else [x for x in self.registries if x.name in which]
-        for reg in registries:
-            if reg.known(name, ext, strict=strict):
-                return reg.path(name, ext)
-        names = [reg.name for reg in registries]
-        msg = "registry " + names[0] if len(names) == 1 else 'registries: ' + ','.join(names)
-        raise RuntimeError(f'{name} not found in {msg}')
+        return self._first_resolved(lambda reg: reg.path(name, ext), name, which, ext, strict)
 
     def contents(self, name: str, which: str = None, ext: str = None, strict: bool = False):
         # Return in-memory override (unsaved LSP edits) when available.
@@ -194,24 +196,10 @@ class Reader(Struct):
             override = component_cache.get_override(name)
             if override is not None:
                 return override
-        registries = self.registries if which is None else [x for x in self.registries
-                                                            if x.name in which]
-        for reg in registries:
-            if reg.known(name, ext, strict=strict):
-                return reg.contents(name, ext)
-        names = [reg.name for reg in registries]
-        msg = "registry " + names[0] if len(names) == 1 else 'registries: ' + ','.join(
-            names)
-        raise RuntimeError(f'{name} not found in {msg}')
+        return self._first_resolved(lambda reg: reg.contents(name, ext), name, which, ext, strict)
 
     def fullname(self, name: str, which: str = None, ext: str=None, strict: bool = False):
-        registries = self.registries if which is None else [x for x in self.registries if x.name in which]
-        for reg in registries:
-            if reg.known(name, ext, strict=strict):
-                return reg.fullname(name, ext)
-        names = [reg.name for reg in registries]
-        msg = "registry " + names[0] if len(names) == 1 else 'registries: ' + ','.join(names)
-        raise RuntimeError(f'{name} not found in {msg}')
+        return self._first_resolved(lambda reg: reg.fullname(name, ext), name, which, ext, strict)
 
     def known(self, name: str, which: str = None, strict: bool = False):
         registries = self.registries if which is None else [x for x in self.registries if x.name in which]

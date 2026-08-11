@@ -70,13 +70,9 @@ class TargetVisitor:
         return any([reg.known(name, strict=strict) for reg in registries])
 
     def locate(self, name: str, which: str = None):
+        from ..reader.registry import resolve_from_registries
         registries = self.registries if which is None else [x for x in self.registries if x.name in which]
-        for reg in registries:
-            if reg.known(name):
-                return reg.path(name)
-        names = [reg.name for reg in registries]
-        msg = "registry " + names[0] if len(names) == 1 else 'registries: ' + ','.join(names)
-        raise RuntimeError(f'{name} not found in {msg}')
+        return resolve_from_registries(registries, name, lambda reg: reg.path(name))
 
     def library_path(self, filename=None):
         return self.locate(filename)
@@ -98,7 +94,15 @@ class TargetVisitor:
         # It's not great to do this here. TODO Find a better place for this
         reg = [reg for reg in self.registries if reg.unique(filename)]
         if len(reg) != 1:
-            raise RuntimeError(f"Expected exactly one registry for file {filename}")
+            # Which registry wins decides the @MCCODE_*@ macro values, so guessing
+            # here would silently change the generated C. Say who is competing.
+            named = ', '.join(r.name for r in reg) or '(none)'
+            raise RuntimeError(
+                f"Expected exactly one registry to uniquely provide {filename}, found "
+                f"{len(reg)}: {named}. A search directory that contains a copy of the "
+                "McCode sources will collide with the built-in registries; narrow it "
+                "with -I/--search-dir."
+            )
         # updates mccode_antlr.config.config
         registry_defaults(reg[0], [reg[0].name])
 
