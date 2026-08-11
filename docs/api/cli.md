@@ -120,11 +120,11 @@ Compile a McCode instrument to a binary without running it.
     mxc-antlr [OPTIONS] FILENAME
     ```
 
-Accepts `.instr`, `.json`, `.h5`, or pre-generated `.c` files.
+Accepts `.instr`, `.json`, or pre-generated `.c` files.
 
 | Flag | Default | Description |
 |---|---|---|
-| `FILENAME` | *(required)* | `.instr` / `.json` / `.h5` / `.c` file to compile |
+| `FILENAME` | *(required)* | `.instr` / `.json` / `.c` file to compile |
 | `-o OUTPUT`, `--output OUTPUT` | CWD | Output path for the compiled binary (file or directory) |
 | `-I DIR`, `--search-dir DIR` | — | Extra component search directory (may be given more than once) |
 | `-t` / `--trace` / `--no-trace` | on | Enable *trace* mode for instrument display |

@@ -3,7 +3,7 @@
 ``mcc-antlr``  – compile for McStas
 ``mxc-antlr``  – compile for McXtrace
 
-Accepts ``.instr``, ``.json``, ``.h5`` (Instr objects), or pre-generated ``.c``
+Accepts ``.instr``, ``.json`` (Instr objects), or pre-generated ``.c``
 files and produces a compiled binary without running it.
 """
 from __future__ import annotations
@@ -21,12 +21,12 @@ def compile_script_parser(prog: str):
         prog=prog,
         description=(
             f'Compile McCode instrument files to C binaries using {prog}.\n'
-            'Accepts .instr, .json, .h5, or pre-generated .c files.'
+            'Accepts .instr, .json, or pre-generated .c files.'
         ),
     )
     aa = parser.add_argument
 
-    aa('filename', type=resolvable, nargs=1, help='.instr / .json / .h5 / .c file to compile')
+    aa('filename', type=resolvable, nargs=1, help='.instr / .json / .c file to compile')
     aa('-v', '--version', action='version', version=__version__)
     aa('-o', '--output', type=resolvable, default=None,
        help='Output path for the compiled binary (file or directory; defaults to CWD)')
@@ -88,14 +88,11 @@ def mccode_compile_cmd(flavor, prog: str | None = None):
         print(f'Compiled binary: {binary}')
 
     else:
-        # .instr / .json / .h5 – build an Instr object first, then compile.
+        # .instr / .json – build an Instr object first, then compile.
         from mccode_antlr.reader.registry import collect_local_registries
         from mccode_antlr.run.runner import mccode_compile
 
-        if suffix == '.h5':
-            from mccode_antlr.io import load_hdf5
-            instrument = load_hdf5(filename)
-        elif suffix == '.json':
+        if suffix == '.json':
             from mccode_antlr.io.json import load_json
             instrument = load_json(filename)
         else:

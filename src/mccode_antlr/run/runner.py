@@ -299,8 +299,8 @@ def mccode_run_cmd(flavor: Flavor):
     )
     # check if the filename is actually a compiled instrument already:
     # os.access(path, X_OK) always returns True on Windows for any existing file (no POSIX execute bit),
-    # so we must also exclude known source-file extensions to avoid treating .instr/.json/.h5 as binaries.
-    _source_suffixes = {'.instr', '.json', '.h5', '.c'}
+    # so we must also exclude known source-file extensions to avoid treating .instr/.json as binaries.
+    _source_suffixes = {'.instr', '.json', '.c'}
     if args.output_file is None and filename.exists() and access(filename, X_OK) \
             and filename.suffix.lower() not in _source_suffixes:
         from loguru import logger
@@ -329,10 +329,7 @@ def mccode_run_cmd(flavor: Flavor):
     elif not filename.exists() or not access(filename, R_OK):
         raise RuntimeError(f'{filename} does not exist or is not readable')
     else:
-        if filename.suffix.lower() == '.h5':
-            from mccode_antlr.io import load_hdf5
-            instrument = load_hdf5(filename)
-        elif filename.suffix.lower() == '.json':
+        if filename.suffix.lower() == '.json':
             from mccode_antlr.io.json import load_json
             instrument = load_json(filename)
         else:
