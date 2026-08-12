@@ -22,6 +22,8 @@ def mccode_script_parse(prog: str):
     parser.add_argument('--verbose', action=BooleanOptionalAction, default=False, help='Verbose output during conversion')
     parser.add_argument('-L', '--line-directives', action=BooleanOptionalAction, default=False,
                         help='Emit #line directives in generated C for debugging')
+    parser.add_argument('--trust-local-registries', action=BooleanOptionalAction, default=None,
+                        help='Trust local registries from a serialized instrument')
 
     args = parser.parse_args()
 
@@ -45,6 +47,7 @@ def mccode_script_parse(prog: str):
 def mccode(flavor: Flavor):
     args = mccode_script_parse(str(flavor).lower() + '-antlr')
     from mccode_antlr.reader import Reader, collect_local_registries
+    from mccode_antlr.cli.trust import apply_registry_trust
     from mccode_antlr.translators.c import CTargetVisitor
     config = dict(default_main=args.main,
                   enable_trace=args.trace,
@@ -54,9 +57,11 @@ def mccode(flavor: Flavor):
                   verbose=args.verbose,
                   output=args.output_file if args.output_file is not None else args.filename.with_suffix('.c')
                   )
+    apply_registry_trust(args)
     if args.filename.suffix.lower() == '.json':
         from mccode_antlr.io.json import load_json
-        instrument = load_json(args.filename)
+        from mccode_antlr.reader.registry import with_local_registries
+        instrument = with_local_registries(load_json(args.filename), flavor, args.search_dir)
     else:
         # Construct the object which will read the instrument and component files, producing Python objects
         reader = Reader(registries=collect_local_registries(flavor, args.search_dir))

@@ -842,7 +842,7 @@ def registries_from_instr_header(source: str) -> list[Registry]:
         if reg is not None and reg.name not in seen_names:
             seen_names.add(reg.name)
             registries.append(reg)
-    return registries
+    return screen_deserialized_registries(registries, 'an instrument header comment')
 
 
 REGISTRY_PRIORITY_LOWEST=-10
@@ -1094,3 +1094,58 @@ def ensure_registries(flavor: Flavor, have: list[Registry] | None):
         merged[reg.name] = reg
 
     return [merged[name] for name in order]
+
+
+def trust_local_registries() -> bool:
+    """Configuration for whether a serialized LocalRegistry artifact can be used"""
+    from mccode_antlr.config import config
+    key = config['serialization']['trust_local_registries']
+    return bool(key.get()) if key.exists() else False
+
+
+def screen_deserialized_registries(registries, origin: str):
+    """Drop LocalRegistry entries reconstructed from a serialized instrument.
+
+    A LocalRegistry records a directory path, which describes the filesystem of
+    whoever saved the instrument. Nothing about a serialized instrument establishes
+    where it came from, so the default is to ignore these and let the loading
+    environment supply its own search directories.
+
+    Remote registries are unaffected: they are content-addressed through pooch and
+    carry no local path.
+    """
+    if trust_local_registries():
+        return list(registries)
+    kept, dropped = [], []
+    for reg in registries:
+        (dropped if isinstance(reg, LocalRegistry) else kept).append(reg)
+    for reg in dropped:
+        # Lead with the root: `-I .` yields a registry whose name is '', so the
+        # name alone would not tell anyone which directory went missing.
+        logger.warning(
+            f'Ignoring search directory {reg.root.as_posix()!r} (registry {reg.name!r}) '
+            f'restored from {origin}: local search directories from serialized '
+            'instruments are not trusted. Pass the directory with -I/--search-dir if '
+            'you want it, or set serialization.trust_local_registries=true '
+            '(--trust-local-registries) to restore the previous behaviour.'
+        )
+    return kept
+
+
+def with_local_registries(instrument, flavor: Flavor, specified=None):
+    """Give a deserialized instrument the loading environment's search directories.
+
+    An instrument read from a serialized artifact arrives without usable local
+    registries -- either it never had any, or screen_deserialized_registries()
+    dropped them. Without this, -I/--search-dir and the configured component
+    directories would silently not apply to a .json input.
+
+    Registries already on the instrument win: a name that is present is left
+    alone, so an explicitly trusted local registry is not displaced.
+    """
+    have = {reg.name for reg in instrument.registries}
+    extra = [reg for reg in collect_local_registries(flavor, specified)
+             if isinstance(reg, LocalRegistry) and reg.name not in have]
+    if extra:
+        instrument.registries = tuple(extra) + tuple(instrument.registries)
+    return instrument

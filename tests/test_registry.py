@@ -261,7 +261,13 @@ class TestRegistriesFromInstrHeader:
         source = '/* Instrument foo\nSource: foo.instr\n*/\nDEFINE INSTRUMENT foo()\n'
         assert registries_from_instr_header(source) == []
 
-    def test_local_registry_recovered(self, tmp_path):
+    def test_local_registry_dropped_by_default(self, tmp_path):
+        """A header names a directory on whoever wrote the .instr -- not trusted."""
+        from mccode_antlr.reader.registry import registries_from_instr_header
+        source = f'/* Instrument foo\nRegistry: mylib {tmp_path.as_posix()}\n*/\n'
+        assert registries_from_instr_header(source) == []
+
+    def test_local_registry_recovered(self, tmp_path, trusted_local_registries):
         from mccode_antlr.reader.registry import registries_from_instr_header
         source = f'/* Instrument foo\nRegistry: mylib {tmp_path.as_posix()}\n*/\n'
         regs = registries_from_instr_header(source)
@@ -269,13 +275,14 @@ class TestRegistriesFromInstrHeader:
         assert regs[0].name == 'mylib'
         assert regs[0].root == tmp_path.resolve()
 
-    def test_nonexistent_local_path_skipped(self):
+    def test_nonexistent_local_path_skipped(self, trusted_local_registries):
+        """Trusting a non-existent path does not yield a LocalRegistry"""
         from mccode_antlr.reader.registry import registries_from_instr_header
         source = '/* Instrument foo\nRegistry: mylib /nonexistent/path/that/does/not/exist\n*/\n'
         regs = registries_from_instr_header(source)
         assert regs == []
 
-    def test_multiple_registries_recovered(self, tmp_path):
+    def test_multiple_registries_recovered(self, tmp_path, trusted_local_registries):
         from mccode_antlr.reader.registry import registries_from_instr_header
         dir_a = tmp_path / 'a'
         dir_b = tmp_path / 'b'
@@ -291,7 +298,7 @@ class TestRegistriesFromInstrHeader:
         assert len(regs) == 2
         assert {r.name for r in regs} == {'libA', 'libB'}
 
-    def test_duplicate_names_deduplicated(self, tmp_path):
+    def test_duplicate_names_deduplicated(self, tmp_path, trusted_local_registries):
         from mccode_antlr.reader.registry import registries_from_instr_header
         source = (
             f'/* Instrument foo\n'
@@ -302,12 +309,13 @@ class TestRegistriesFromInstrHeader:
         regs = registries_from_instr_header(source)
         assert len(regs) == 1
 
-    def test_unclosed_comment_returns_empty(self):
+    def test_unclosed_comment_returns_empty(self, trusted_local_registries):
+        """A trusted but malformed registry does not return a LocalRegistry"""
         from mccode_antlr.reader.registry import registries_from_instr_header
         source = '/* Instrument foo\nRegistry: mylib /some/path\n'
         assert registries_from_instr_header(source) == []
 
-    def test_leading_whitespace_ignored(self, tmp_path):
+    def test_leading_whitespace_ignored(self, tmp_path, trusted_local_registries):
         from mccode_antlr.reader.registry import registries_from_instr_header
         source = f'\n\n/* Instrument foo\nRegistry: mylib {tmp_path.as_posix()}\n*/\n'
         regs = registries_from_instr_header(source)
@@ -377,6 +385,72 @@ class TestEnsureRegistries:
         assert len(warnings) == 1
         assert (tmp_path / 'default').as_posix() in warnings[0]
         assert (tmp_path / 'file').as_posix() in warnings[0]
+
+
+# ---------------------------------------------------------------------------
+# screen_deserialized_registries — LocalRegistry entries restored from an
+# untrusted artifact are ignored unless explicitly trusted
+# ---------------------------------------------------------------------------
+
+class TestScreenDeserializedRegistries:
+    def _mixed(self, tmp_path):
+        import mccode_antlr.reader.registry as rm
+        local = rm.LocalRegistry('mylib', str(tmp_path))
+        remote = rm.RemoteRegistry('remote', 'https://example.com', 'v1', 'r.txt')
+        return local, remote
+
+    def test_local_dropped_remote_kept(self, tmp_path):
+        import mccode_antlr.reader.registry as rm
+        local, remote = self._mixed(tmp_path)
+        kept = rm.screen_deserialized_registries([local, remote], 'a test')
+        assert kept == [remote]
+
+    def test_kept_when_trusted(self, tmp_path, trusted_local_registries):
+        import mccode_antlr.reader.registry as rm
+        local, remote = self._mixed(tmp_path)
+        assert rm.screen_deserialized_registries([local, remote], 'a test') == [local, remote]
+
+    def test_warning_names_the_root_not_only_the_name(self, tmp_path, caplog):
+        """`-I .` produces a registry named '', so the root has to be in the text."""
+        import mccode_antlr.reader.registry as rm
+        from loguru import logger
+        messages = []
+        sink = logger.add(lambda m: messages.append(str(m)), level='WARNING')
+        try:
+            rm.screen_deserialized_registries([rm.LocalRegistry('', str(tmp_path))], 'a test')
+        finally:
+            logger.remove(sink)
+        assert any(tmp_path.as_posix() in m for m in messages)
+        assert any('--trust-local-registries' in m for m in messages)
+
+    def test_instr_json_round_trip_drops_local_registries(self, tmp_path):
+        """The end-to-end path: a serialized instrument cannot carry a search
+        directory into the loading environment."""
+        import mccode_antlr.reader.registry as rm
+        from mccode_antlr.io import to_json, from_json
+        from mccode_antlr.loader import parse_mcstas_instr
+        instr = parse_mcstas_instr(
+            'DEFINE INSTRUMENT t()\nTRACE\n'
+            'COMPONENT o = Progress_bar() AT (0,0,0) ABSOLUTE\nEND\n'
+        )
+        instr.registries = tuple(instr.registries) + (rm.LocalRegistry('sneaky', str(tmp_path)),)
+        back = from_json(to_json(instr))
+        assert not any(isinstance(r, rm.LocalRegistry) for r in back.registries)
+        assert {r.name for r in back.registries} == {
+            r.name for r in instr.registries if not isinstance(r, rm.LocalRegistry)}
+
+    def test_with_local_registries_restores_the_loading_environment(self, tmp_path):
+        import mccode_antlr.reader.registry as rm
+        from mccode_antlr import Flavor
+        from mccode_antlr.io import to_json, from_json
+        from mccode_antlr.loader import parse_mcstas_instr
+        instr = parse_mcstas_instr(
+            'DEFINE INSTRUMENT t()\nTRACE\n'
+            'COMPONENT o = Progress_bar() AT (0,0,0) ABSOLUTE\nEND\n'
+        )
+        back = rm.with_local_registries(from_json(to_json(instr)), Flavor.MCSTAS, [tmp_path])
+        roots = [r.root for r in back.registries if isinstance(r, rm.LocalRegistry)]
+        assert tmp_path in roots
 
 
 # ---------------------------------------------------------------------------
