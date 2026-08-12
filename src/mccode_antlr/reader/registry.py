@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import pooch
 from functools import cache
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from re import Pattern
 from loguru import logger
 from typing import Type, Any
@@ -216,6 +216,9 @@ def find_registry_file(name: str):
     from json import loads
     if isinstance(name, Path):
         name = name.as_posix()
+    if name is None or _escapes_package(name):
+        logger.warning(f'Refusing to look for registry file {name!r} outside of mccode_antlr package')
+        return None
     if files('mccode_antlr').joinpath(name).is_file():
         return files('mccode_antlr').joinpath(name)
     info = loads(distribution('mccode_antlr').read_text('direct_url.json'))
@@ -224,6 +227,19 @@ def find_registry_file(name: str):
         return path if path.is_file() else None
     return None
 
+def _escapes_package(name: str) -> bool:
+    candidate = PurePosixPath(str(name).replace('\\', '/'))
+    return candidate.is_absolute() or '..' in candidate.parts
+
+def _safe_cache_component(value: str, fallback: str) -> str:
+    if value is None:
+        return fallback
+    cleaned = str(value).strip().replace('\\', '/')
+    cleaned = cleaned.rsplit('/', 1)[-1]  # discard any directory
+    if cleaned in ('', '.', '..') or cleaned.startswith('.'):
+        return fallback
+    return cleaned
+
 
 class RemoteRegistry(Registry):
     def __init__(self, name: str, url: str | None, version: str | None, filename: str | None, priority: int = 0):
@@ -231,11 +247,30 @@ class RemoteRegistry(Registry):
         self.url = url
         self.version = version
         self.filename = filename
-        self.pooch = None
         self.priority = priority
+        self._pooch = None
+
+    @property
+    def pooch(self):
+        """Delay-built pooch index to avoid network/file IO"""
+        if self._pooch is None:
+            self._pooch = self._build_pooch()
+        return self._pooch
+
+    @pooch.setter
+    def pooch(self, value):
+        self._pooch = value
+
+    def _build_pooch(self):
+        return None
 
     def __hash__(self):
         return hash(str(self))
+
+    def __eq__(self, other):
+        if not isinstance(other, RemoteRegistry):
+            return False
+        return other.name == self.name and other.url == self.url and other.version == self.version and other.filename == self.filename
 
     @classmethod
     def file_keys(cls) -> tuple[str, ...]:
@@ -307,43 +342,34 @@ class RemoteRegistry(Registry):
     def filenames(self) -> list[str]:
         return [x for x in self.pooch.registry_files]
 
-    def __eq__(self, other):
-        if not isinstance(other, Registry):
-            return False
-        if other.name != self.name:
-            return False
-        if other.pooch is None:
-            return False
-        if other.pooch.path != self.pooch.path:
-            return False
-        if other.pooch.base_url != self.pooch.base_url:
-            return False
-        return True
-
 
 class ModuleRemoteRegistry(RemoteRegistry):
     def __init__(self, name: str, url: str, filename=None, version=None, priority: int = 0):
         super().__init__(name, url, version, filename, priority)
-        self.pooch = pooch.create(
-            path=pooch.os_cache(f'mccode_antlr/mccode_antlr-{self.name}'),
+
+    def _build_pooch(self):
+        safe_name = _safe_cache_component(self.name, "unnamed")
+        instance = pooch.create(
+            path=pooch.os_cache(f'mccode_antlr/mccode_antlr-{safe_name}'),
             base_url=self.url,
             version=self.version or mccode_antlr_version(),
             version_dev="main",
             registry=None,
         )
         if isinstance(self.filename, Path):
-            self.pooch.load_registry(self.filename)
+            instance.load_registry(self.filename)
         else:
             filepath = find_registry_file(self.filename)
             if filepath is None:
                 raise RuntimeError(f"Provided filename {self.filename} is not a path or file packaged with this module")
-            self.pooch.load_registry(filepath)
+            instance.load_registry(filepath)
+        return instance
 
 
 class GitHubRegistry(RemoteRegistry):
     def __init__(self, name: str, url: str, version: str, filename: str | None = None,
                  registry: str | dict | None = None, priority: int = 0):
-        from os import access, R_OK, W_OK
+
         if filename is None:
             filename = f'{name}-registry.txt'
         super().__init__(name, url, version, filename, priority)
@@ -352,12 +378,22 @@ class GitHubRegistry(RemoteRegistry):
         self._stashed_registry = None
         if isinstance(registry, str) and simple_url_validator(registry, file_ok=True):
             self._stashed_registry = registry
-            registry = f'{registry}/raw/{self.version}/'
+        self._registry_dict = registry if isinstance(registry, dict) else None
+
+    def _build_pooch(self):
+        from os import access, R_OK, W_OK
+        registry = self._registry_dict
+        if registry is None and self._stashed_registry:
+            registry = f'{self._stashed_registry}/raw/{self.version}/'
+
+        safe_name = _safe_cache_component(self.name, "unnamed")
+        safe_version = _safe_cache_component(self.version, "unversioned")
+        registry_file = self.filename or 'pooch-registry.txt'
+        safe_file = _safe_cache_component(registry_file, 'pooch_registry.txt')
 
         base_url = f'{self.url}/raw/{self.version}/'
-        cache_path = pooch.os_cache(f'mccodeantlr/{self.name}')
-        registry_file = self.filename or 'pooch-registry.txt'
-        registry_file_path = cache_path.joinpath(self.version, registry_file)
+        cache_path = pooch.os_cache(f'mccodeantlr/{safe_name}')
+        registry_file_path = cache_path.joinpath(safe_version, safe_file)
         if registry_file_path.exists() and registry_file_path.is_file() and access(registry_file_path, R_OK):
             with registry_file_path.open('r') as file:
                 registry = {k: v for k, v in [x.strip().split(maxsplit=1) for x in file.readlines() if len(x)]}
@@ -382,10 +418,12 @@ class GitHubRegistry(RemoteRegistry):
             else:
                 logger.warning(f'Can not output {registry_file_path}, you lack write permissions for {check}')
 
-        self.pooch = pooch.create(
+        version = self.version if self.version and self.version.startswith('v') else None
+
+        return pooch.create(
             path=cache_path,
             base_url=base_url,
-            version=version if version.startswith('v') else None,
+            version=version,
             version_dev="main",
             registry=registry,
         )
