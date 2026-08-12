@@ -1,4 +1,9 @@
-def cogen_display(source, declared_parameters, line_directives: bool = False):
+def cogen_display(
+        source,
+        declared_parameters,
+        line_directives: bool = False,
+        shorten = None
+):
     lines = ["/* *****************************************************************************",
              f"* instrument '{source.name}' and components DISPLAY",
              "***************************************************************************** */",
@@ -13,7 +18,7 @@ def cogen_display(source, declared_parameters, line_directives: bool = False):
         lines.append(f'  #define {x} {v}')
 
     for comp in source.component_types():
-        lines.extend(cogen_comp_display_class(comp, declared_parameters[comp.name], line_directives))
+        lines.extend(cogen_comp_display_class(comp, declared_parameters[comp.name], line_directives, shorten))
 
     for x in macros:
         lines.append(f'  #undef {x}')
@@ -60,7 +65,12 @@ def cogen_display(source, declared_parameters, line_directives: bool = False):
     return '\n'.join(lines)
 
 
-def cogen_comp_display_class(comp, declared_parameters, line_directives: bool = False):
+def cogen_comp_display_class(
+        comp,
+        declared_parameters, line_directives:
+        bool = False,
+        shorten = None
+):
     from .c_defines import cogen_parameter_define, cogen_parameter_undef
     if not len(comp.display):
         return []
@@ -71,7 +81,7 @@ def cogen_comp_display_class(comp, declared_parameters, line_directives: bool = 
         f'void class_{comp.name}_display(_class_{comp.name} *_comp) {{',
         cogen_parameter_define(comp, declared_parameters)
     ]
-    f, n = comp.display[0].fn if len(comp.final) else (comp.name, 0)
+    f, n = comp.display[0].fn_display(shorten) if len(comp.final) else (comp.name, 0)
     lines.append(f'  SIG_MESSAGE("[_{comp.name}_display] component NULL={comp.name}() [{f}:{n}]");')
     lines.append('  printf("MCDISPLAY: component %s\\n", _comp->_name);')
 

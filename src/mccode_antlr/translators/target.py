@@ -27,14 +27,31 @@ CONFIG = dict(default_main=True, enable_trace=True, portable=True, include_runti
 
 # Follow the logic of codegen.c(.in) from McCode-3, but make use of visitor semantics for possible alternate runtimes
 class TargetVisitor:
-    def __init__(self, instr: Instr, flavor: Flavor = Flavor.MCSTAS, config: dict = None, verbose=False,
-                 line_directives: bool = False):
+    def __init__(self,
+                 instr: Instr,
+                 flavor: Flavor = Flavor.MCSTAS,
+                 config: dict | None = None,
+                 verbose: bool = False,
+                 debug: bool = False,
+                 line_directives: bool | None = None
+                 ):
         self.flavor = flavor
         self.config = CONFIG if config is None else config
         self.source = instr
         self.output = None
         self.verbose = verbose
-        self.line_directives = line_directives
+        if line_directives is not None:
+            from mccode_antlr.utils import McCodeAntlrDeprecationWarning
+            import warnings
+            warnings.warn(
+                'line_directives is deprecated since 0.23.0. Use debug instead, which '
+                'emits #line directives and keeps absolute source paths in SIG_MESSAGE.',
+                McCodeAntlrDeprecationWarning, stacklevel=2)
+            debug = debug or line_directives
+        self.debug = debug
+        # Retained because --debug subsumes it: it still selects #line emission.
+        self.line_directives = debug
+        self._registry_base_cache = None
         self.warnings = 0
         self.instrument_uservars = ()
         self.component_uservars = dict()
@@ -63,33 +80,83 @@ class TargetVisitor:
         # TODO always ensure this is sorted by priority?
         return self.source.registries
 
-    def known(self, name: str, which: str = None, strict: bool = False):
+    def _which(self, which: str | None):
+        registries = self.registries
+        return registries if which is None else [x for x in registries if x.name in which]
+
+    def known(self, name: str, which: str | None = None, strict: bool = False):
         if self.registries is None:
             return False
-        registries = self.registries if which is None else [x for x in self.registries if x.name in which]
-        return any([reg.known(name, strict=strict) for reg in registries])
+        return any([reg.known(name, strict=strict) for reg in self._which(which)])
 
-    def locate(self, name: str, which: str = None):
+    def locate(self, name: str, which: str | None = None):
         from ..reader.registry import resolve_from_registries
-        registries = self.registries if which is None else [x for x in self.registries if x.name in which]
-        return resolve_from_registries(registries, name, lambda reg: reg.path(name))
+        return resolve_from_registries(self._which(which), name, lambda reg: reg.path(name))
 
     def library_path(self, filename=None):
         return self.locate(filename)
+
+    def _registry_bases(self):
+        """Directories the registries resolve files under, longest first.
+
+        Reads the *already built* pooch index rather than the `pooch` property:
+        touching that would build an index on demand, which for a registry this
+        translation never uses means an HTTP request purely to shorten a comment.
+        """
+        from pathlib import Path
+        if self._registry_base_cache is None:
+            bases = []
+            for reg in self.registries or []:
+                root = getattr(reg, 'root', None)
+                if isinstance(root, Path):
+                    bases.append(root)
+                built = getattr(reg, '_pooch', None)
+                if built is not None and getattr(built, 'path', None):
+                    bases.append(Path(built.path))
+            self._registry_base_cache = sorted(bases, key=lambda b: len(str(b)), reverse=True)
+        return self._registry_base_cache
+
+    def display_source_path(self, filename):
+        """How a source location should be named in the generated C.
+
+        Under --debug the recorded absolute path is kept, which is what a
+        debugger and a crash trace want. Otherwise it is made relative to the
+        registry that supplied it, so identical input yields identical C on any
+        machine while still naming a real file and line -- classic McCode reports
+        neither, only the component type and line 0.
+        """
+        from pathlib import Path
+        if self.debug or not filename:
+            return filename
+        path = Path(filename)
+        for base in self._registry_bases():
+            try:
+                return path.relative_to(base).as_posix()
+            except ValueError:
+                continue
+        # fallback to just the filename
+        return path.name
+
+    def file_text(self, name: str, which: str | None = None) -> str:
+        """Text contents of a registry file, which may only exist in memory or on disk"""
+        regs = []
+        for reg in self._which(which):
+            if reg.known(name):
+                return reg.contents(name)
+            else:
+                regs.append(reg.name)
+        msg = "registry " + regs[0] if len(regs) == 1 else "registries: " + ','.join(regs)
+        raise RuntimeError(f'{name} not found in {msg}')
 
     def configure_file(self, filename: str, flavor: str):
         """McStasMcXtrace/McCode makes use of CMake configure_file to define runtime-header macros.
         These file(s) have the extension .h.in and are changed to .h after replacing all "@MCCODE_*@ keys
         """
         import re
-        from importlib.resources import as_file
         from mccode_antlr.config import config, registry_defaults
         if not filename.endswith(".h.in"):
             raise RuntimeError(f"Expected to configure only header files, not {filename}")
-        with as_file(self.library_path(filename)) as file_at:
-            not_configured_name = str(file_at)
-            with open(file_at, 'r') as file:
-                contents = file.read()
+        contents = self.file_text(filename)
 
         # It's not great to do this here. TODO Find a better place for this
         reg = [reg for reg in self.registries if reg.unique(filename)]
@@ -120,27 +187,19 @@ class TargetVisitor:
         # find all occurances of @MCCODE_([A-Z]*)@, replace them with their equivalent config[flavor][$1].get()
         contents = re.sub(r'@MCCODE_([A-Z_]*)@', replacement, contents)
 
-        # one could consider writing the configured contents to a (temporary) file for use if the translator
-        # is not set to 'include_runtime'
-        self.out(f'/* embedding configured version of file "{not_configured_name}" */')
+        self.out(f'/* embedding configured version of file "{filename}" */')
         self.out(contents)
-        self.out(f'/* end of configured version of file "{not_configured_name}" */')
+        self.out(f'/* end of configured version of file "{filename}" */')
 
     def embed_file(self, filename):
-        """Reads the library file, even if embedded in a module archive, writes to the output IO Stream"""
-        from importlib.resources import as_file
-        with as_file(self.library_path(filename)) as file_at:
-            with open(file_at, 'r') as file:
-                self.out(f'/* embedding file "{file_at}" */')
+        """Reads the library file and writes it to the output IO Stream"""
+        file_contents = self.file_text(filename)
+        if file_replacement := self.file_replacements.get(filename):
+            file_contents = file_replacement.filter(file_contents)
 
-                file_contents = file.read()
-
-                if file_replacement := self.file_replacements.get(filename):
-                    file_contents = file_replacement.filter(file_contents)
-
-                self.output.write(file_contents)
-
-                self.out(f'/* end of file "{file_at}" */')
+        self.out(f'/* embedding file "{filename}" */')
+        self.output.write(file_contents)
+        self.out(f'/* end of file "{filename}" */')
 
     def include_path(self, filename=None):
         if filename is None:

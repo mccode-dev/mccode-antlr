@@ -20,12 +20,24 @@ def mccode_script_parse(prog: str):
     parser.add_argument('--main', action=BooleanOptionalAction, default=True, help='Create main(), --no-main for external embedding')
     parser.add_argument('--runtime', action=BooleanOptionalAction, default=True, help='Embed run-time libraries')
     parser.add_argument('--verbose', action=BooleanOptionalAction, default=False, help='Verbose output during conversion')
-    parser.add_argument('-L', '--line-directives', action=BooleanOptionalAction, default=False,
-                        help='Emit #line directives in generated C for debugging')
+    parser.add_argument('-g', '--debug', action=BooleanOptionalAction, default=False,
+                        help='Emit debugging information in the generated C: #line directives, '
+                             'and absolute source paths in SIG_MESSAGE. Without it, source '
+                             'locations are named relative to the registry that supplied them, '
+                             'so the output does not depend on this machine')
+    parser.add_argument('-L', '--line-directives', action=BooleanOptionalAction,
+                        default=None,
+                        help='Deprecated alias for --debug')
     parser.add_argument('--trust-local-registries', action=BooleanOptionalAction, default=None,
                         help='Trust local registries from a serialized instrument')
 
     args = parser.parse_args()
+    if args.line_directives is not None:
+        from mccode_antlr.utils import McCodeAntlrDeprecationWarning
+        import warnings
+        warnings.warn('--line-directives is deprecated since 0.23.0, use --debug instead',
+                      McCodeAntlrDeprecationWarning, stacklevel=2)
+        args.debug = args.debug or args.line_directives
 
     if args.version:
         from sys import exit
@@ -70,7 +82,7 @@ def mccode(flavor: Flavor):
 
     # Construct the object which will translate the Python instrument to C
     visitor = CTargetVisitor(instrument, flavor=flavor, config=config, verbose=config['verbose'],
-                             line_directives=args.line_directives)
+                             debug=args.debug)
     # Go through the instrument, finish by writing the output file:
     visitor.save(filename=config['output'])
 

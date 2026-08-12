@@ -49,6 +49,18 @@ class RawC(Struct):
     def fn(self):
         return escape_str_for_c(self.filename), self.line
 
+    def fn_display(self, shorten=None):
+        """(filename, line) for a SIG_MESSAGE, optionally shortened.
+
+        `shorten` maps the recorded absolute path to something reportable; the
+        translator uses it to emit a registry-relative path, so that identical
+        input produces identical C on any machine.
+        """
+        filename = self.filename
+        if shorten is not None and filename:
+            filename = shorten(filename)
+        return escape_str_for_c(filename), self.line
+
     def copy(self):
         return RawC(self.filename, self.line, self.source)
 

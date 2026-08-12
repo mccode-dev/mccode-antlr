@@ -99,7 +99,14 @@ def cogen_comp_init_position(index, comp, last, instr):
     return '\n'.join(lines)
 
 
-def cogen_comp_setpos(index, comp, last, instr, component_declared_parameters):
+def cogen_comp_setpos(
+        index,
+        comp,
+        last,
+        instr,
+        component_declared_parameters,
+        shorten=None
+):
     from ..common import Expr
 
     def parameter_line(default):
@@ -174,7 +181,7 @@ def cogen_comp_setpos(index, comp, last, instr, component_declared_parameters):
 
         return '\n'.join(lns + ['    );','    }','  }', '#endif'])
 
-    f, n = comp.type.initialize[0].fn if len(comp.type.initialize) else (comp.name, 0)
+    f, n = comp.type.initialize[0].fn_display(shorten) if len(comp.type.initialize) else (comp.name, 0)
 
     lines = [
         f'/* component {comp.name}={comp.type.name}() SETTING, POSITION/ROTATION */',
@@ -224,7 +231,13 @@ def cogen_comp_setpos(index, comp, last, instr, component_declared_parameters):
     return lines
 
 
-def cogen_initialize(source, component_declared_parameters, ok_to_skip, line_directives: bool = False):
+def cogen_initialize(
+        source,
+        component_declared_parameters,
+        ok_to_skip,
+        line_directives: bool = False,
+        shorten = None
+):
     from packaging.version import Version
     from mccode_antlr.reader.registry import mccode_registry_version
     version = mccode_registry_version()
@@ -236,13 +249,13 @@ def cogen_initialize(source, component_declared_parameters, ok_to_skip, line_dir
 
     last = 0
     for idx, comp in enumerate(source.components):
-        lines.extend(cogen_comp_setpos(idx, comp, last, source, component_declared_parameters))
+        lines.extend(cogen_comp_setpos(idx, comp, last, source, component_declared_parameters, shorten))
         if ok_to_skip is not None and not ok_to_skip[idx]:
             last = idx
 
     # generate class functions
     for comp in source.component_types():
-        lines.extend(cogen_comp_initialize_class(comp, component_declared_parameters[comp.name], line_directives))
+        lines.extend(cogen_comp_initialize_class(comp, component_declared_parameters[comp.name], line_directives, shorten))
 
     # write the instrument main code, which calls component ones
     lines.extend([
@@ -267,7 +280,7 @@ def cogen_initialize(source, component_declared_parameters, ok_to_skip, line_dir
 
     # insert user code from instrument definition
     if len(source.initialize):
-        f, n = source.initialize[0].fn
+        f, n = source.initialize[0].fn_display(shorten)
         lines.extend([
             f'  /* Instrument {source.name} INITIALIZE */',
             f'  SIG_MESSAGE("[{source.name} INITIALIZE [{f}:{n}]");'
@@ -312,7 +325,12 @@ def cogen_initialize(source, component_declared_parameters, ok_to_skip, line_dir
     return '\n'.join(lines)
 
 
-def cogen_comp_initialize_class(comp, declared_parameters, line_directives: bool = False):
+def cogen_comp_initialize_class(
+        comp,
+        declared_parameters,
+        line_directives: bool = False,
+        shorten = None
+):
     from .c_defines import cogen_parameter_define, cogen_parameter_undef
     if not len(comp.initialize):
         return []
@@ -323,7 +341,7 @@ def cogen_comp_initialize_class(comp, declared_parameters, line_directives: bool
         f'void class_{comp.name}_initialize(_class_{comp.name} *_comp) {{',
         cogen_parameter_define(comp, declared_parameters)
     ]
-    f, n = comp.initialize[0].fn if len(comp.initialize) else (comp.name, 0)
+    f, n = comp.initialize[0].fn_display(shorten) if len(comp.initialize) else (comp.name, 0)
     lines.append(f'SIG_MESSAGE("[_{comp.name}_initialize] component NULL={comp.name}() [{f}:{n}]");')
 
     for block in comp.initialize:

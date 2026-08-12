@@ -101,15 +101,9 @@ def sort_include_hierarchy(includes: list[CInclude]):
 
 class CTargetVisitor(TargetVisitor, target_language='c'):
     def _file_contents(self, filename, preserve_escapes=False):
-        # First try the McCode C runtime libraries:
-        path = self.include_path(filename)
-        # Then any registries used in reading the file(s)
-        if not path.is_file() and self.known(filename):
-            path = self.locate(filename)
-        if not path.is_file():
-            raise RuntimeError(f"Can not include the file {filename} because it is not locatable")
-        with path.open('r') as file:
-            lines = [line.strip('\n') for line in file.readlines()]
+        lines = self.file_text(filename).split('\n')
+        if lines and lines[-1] == '':
+            lines.pop()
         if preserve_escapes:
             lines = [line.encode('unicode-escape').decode('utf-8') for line in lines]
         return '\n'.join(lines)
@@ -436,14 +430,16 @@ class CTargetVisitor(TargetVisitor, target_language='c'):
     def visit_initialize(self):
         from .c_initialise import cogen_initialize
         self.out(cogen_initialize(self.source, self.component_declared_parameters, self.ok_to_skip,
-                                  line_directives=self.line_directives))
+                                  line_directives=self.line_directives,
+                                  shorten=self.display_source_path))
 
     def enter_trace(self):
         from .c_trace import def_trace_section, cogen_trace_section
         self.out(def_trace_section(self.flavor))
         self.out(cogen_trace_section(self.flavor, self.source, self.component_declared_parameters,
                                      self.instrument_uservars, self.component_uservars,
-                                     line_directives=self.line_directives))
+                                     line_directives=self.line_directives,
+                                     shorten=self.display_source_path))
 
     def leave_trace(self):
         from .c_trace import undef_trace_section
@@ -470,17 +466,20 @@ class CTargetVisitor(TargetVisitor, target_language='c'):
     def visit_save(self):
         from .c_save import cogen_save
         self.out(cogen_save(self.source, self.component_declared_parameters,
-                            line_directives=self.line_directives))
+                            line_directives=self.line_directives,
+                            shorten=self.display_source_path))
 
     def visit_finally(self):
         from .c_finally import cogen_finally
         self.out(cogen_finally(self.source, self.component_declared_parameters,
-                               line_directives=self.line_directives))
+                               line_directives=self.line_directives,
+                               shorten=self.display_source_path))
 
     def visit_display(self):
         from .c_display import cogen_display
         self.out(cogen_display(self.source, self.component_declared_parameters,
-                               line_directives=self.line_directives))
+                               line_directives=self.line_directives,
+                               shorten=self.display_source_path))
 
     def visit_macros(self):
         from .c_macros import cogen_getvarpars_fct, cogen_getcompindex_fct, cogen_getparticlevar_fct

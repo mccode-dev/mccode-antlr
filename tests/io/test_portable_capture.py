@@ -362,3 +362,90 @@ class TestRuntimeDataFiles:
         lib, instr = self._with_data(tmp_path)
         loaded = from_json(to_json(_read(lib, instr)))
         assert deposit_embedded_data_files(loaded, None) == []
+
+
+class TestIncludeResolutionWithoutDisk:
+    """%include resolution asks registries for text, not a path.
+
+    Requiring a path forces an in-memory registry to write itself out first, which
+    is pointless when the caller only reads the file and discards the location.
+    """
+
+    def _materialized_count(self, instr):
+        from mccode_antlr.reader.registry import InMemoryRegistry
+        return sum(len(r._materialized) for r in instr.registries
+                   if isinstance(r, InMemoryRegistry))
+
+    def test_translation_materializes_nothing(self, local_tree, tmp_path):
+        import shutil
+        from mccode_antlr import Flavor
+        from mccode_antlr.io import to_json, from_json
+        from mccode_antlr.translators.c import CTargetVisitor
+        _, lib, instr = local_tree
+        blob = to_json(_read(lib, instr))
+        shutil.rmtree(lib)
+        elsewhere = tmp_path / 'elsewhere'
+        elsewhere.mkdir()
+        output = elsewhere / 'out.c'
+        loaded = from_json(blob)
+        CTargetVisitor(loaded, flavor=Flavor.MCSTAS,
+                       config=dict(output=str(output))).save(filename=str(output))
+        assert 'MYLIB SENTINEL' in output.read_text()
+        assert self._materialized_count(loaded) == 0
+
+    def test_file_text_prefers_contents_over_path(self, local_tree):
+        from mccode_antlr import Flavor
+        from mccode_antlr.io import to_json, from_json
+        from mccode_antlr.translators.c import CTargetVisitor
+        _, lib, instr = local_tree
+        loaded = from_json(to_json(_read(lib, instr)))
+        visitor = CTargetVisitor.__new__(CTargetVisitor)
+        visitor.source = loaded
+        assert 'MYLIB SENTINEL' in visitor.file_text('mylib.h')
+        assert self._materialized_count(loaded) == 0
+
+    def test_missing_name_still_reports_the_registries(self):
+        import pytest
+        from mccode_antlr import Flavor
+        from mccode_antlr.loader import parse_mcstas_instr
+        from mccode_antlr.translators.c import CTargetVisitor
+        instr = parse_mcstas_instr(
+            'DEFINE INSTRUMENT t()\nTRACE\n'
+            'COMPONENT o = Progress_bar() AT (0,0,0) ABSOLUTE\nEND\n'
+        )
+        visitor = CTargetVisitor.__new__(CTargetVisitor)
+        visitor.source = instr
+        with pytest.raises(RuntimeError, match='not found in registr'):
+            visitor.file_text('definitely_absent.h')
+
+    def test_embedded_runtime_files_are_named_not_located(self):
+        """embed_file and configure_file used to print the resolved absolute path
+        into the generated C, so identical input produced different output on
+        different machines. Upstream McCode emits no path either."""
+        import re
+        from io import StringIO
+        from mccode_antlr import Flavor
+        from mccode_antlr.translators.target import TargetVisitor
+
+        class DummyInstr:
+            name = 'dummy'
+            registries = []
+            components = []
+
+            def verify_instance_parameters(self):
+                return None
+
+        class DummyVisitor(TargetVisitor):
+            def file_text(self, name, which=None):
+                return 'int body;\n'
+
+        visitor = DummyVisitor(DummyInstr(), Flavor.MCSTAS)
+        visitor.output = StringIO()
+        visitor.embed_file('mccode-r.c')
+        output = visitor.output.getvalue()
+        assert '/* embedding file "mccode-r.c" */' in output
+        assert '/* end of file "mccode-r.c" */' in output
+        assert 'int body;' in output
+        named = re.search(r'embedding file "([^"]*)"', output).group(1)
+        # Both separators: a Windows path would contain '\', not '/'
+        assert '/' not in named and '\\' not in named, named

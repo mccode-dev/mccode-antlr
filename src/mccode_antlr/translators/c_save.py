@@ -1,11 +1,16 @@
-def cogen_save(source, declared_parameters, line_directives: bool = False):
+def cogen_save(
+        source,
+        declared_parameters,
+        line_directives: bool = False,
+        shorten = None
+):
     lines = ["/* *****************************************************************************",
              f"* instrument '{source.name}' and components SAVE",
              "***************************************************************************** */",
              ]
 
     for comp in source.component_types():
-        lines.extend(cogen_comp_save_class(comp, declared_parameters[comp.name], line_directives))
+        lines.extend(cogen_comp_save_class(comp, declared_parameters[comp.name], line_directives, shorten))
 
     # write the instrument main code, which calls component ones
     lines.extend([
@@ -15,7 +20,7 @@ def cogen_save(source, declared_parameters, line_directives: bool = False):
 
     # insert user code from instrument definition
     if len(source.save):
-        f, n = source.save[0].fn
+        f, n = source.save[0].fn_display(shorten)
         lines.extend([
             f'  /* Instrument {source.name} SAVE */',
             f'  SIG_MESSAGE("[{source.name} SAVE [{f}:{n}]");'
@@ -43,7 +48,12 @@ def cogen_save(source, declared_parameters, line_directives: bool = False):
     return '\n'.join(lines)
 
 
-def cogen_comp_save_class(comp, declared_parameters, line_directives: bool = False):
+def cogen_comp_save_class(
+        comp,
+        declared_parameters,
+        line_directives: bool = False,
+        shorten = None
+):
     from .c_defines import cogen_parameter_define, cogen_parameter_undef
     if not len(comp.save):
         return []
@@ -54,7 +64,7 @@ def cogen_comp_save_class(comp, declared_parameters, line_directives: bool = Fal
         f'void class_{comp.name}_save(_class_{comp.name} *_comp) {{',
         cogen_parameter_define(comp, declared_parameters)
     ]
-    f, n = comp.initialize[0].fn if len(comp.initialize) else (comp.name, 0)
+    f, n = comp.initialize[0].fn_display(shorten) if len(comp.initialize) else (comp.name, 0)
     lines.append(f'  SIG_MESSAGE("[_{comp.name}_save] component NULL={comp.name}() [{f}:{n}]");')
 
     for block in comp.save:
