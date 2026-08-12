@@ -36,6 +36,7 @@ class Instr(Struct):
     @classmethod
     def from_dict(cls, args: dict):
         from mccode_antlr.reader.registry import SerializableRegistry as SR
+        from mccode_antlr.reader.registry import screen_deserialized_registries
         from mccode_antlr.instr.instance import make_independent
         from mccode_antlr.instr.flow import FlowEdgeRecord
         popt = 'name', 'source'
@@ -51,6 +52,13 @@ class Instr(Struct):
         data.update({k: tuple(a for a in args[k]) for k in tpreq})
         data.update({k: tuple(t.from_dict(a) for a in args[k]) for k, t in tmtype.items()})
         data.update({k: {n: t.from_dict(v) for n, v in args[k].items()} for k, t in dtype.items()})
+
+        name = data.get('name', '<unnamed>')
+        data['registries'] = tuple(
+            screen_deserialized_registries(
+                data['registries'], f'serialized instrument {name!r}'
+            )
+        )
 
         instances = data.pop('instances')
         components = data.pop('components')
@@ -92,7 +100,7 @@ class Instr(Struct):
         if wrapper is None:
             from mccode_antlr.common import TextWrapper
             wrapper = TextWrapper(width=120)
-        print(wrapper.start_block_comment(f'Instrument {self.name}'), file=output)
+        print(wrapper.start_block_comment(f"Instrument {self.name or 'None'}"), file=output)
         print(wrapper.line('Instrument:', [self.name or 'None']), file=output)
         print(wrapper.line('Source:', [self.source or 'None']), file=output)
         print(wrapper.line('Contains:', [f'"%include {include}"' for include in self.included]), file=output)
@@ -102,7 +110,7 @@ class Instr(Struct):
         print(wrapper.end_block_comment(), file=output)
 
         instr_parameters = wrapper.hide(', '.join(p.to_string(wrapper=wrapper) for p in self.parameters))
-        first_line = wrapper.line('DEFINE INSTRUMENT', [f'{self.name}({instr_parameters})'])
+        first_line = wrapper.line('DEFINE INSTRUMENT', [f"{self.name or 'None'}({instr_parameters})"])
         print(first_line, file=output)
 
         for metadata in self.metadata:

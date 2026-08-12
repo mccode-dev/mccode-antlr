@@ -137,6 +137,8 @@ def mccode_run_script_parser(prog: str):
     aa('--parallel', action='store_true', default=False, help='Use MPI multi-process parallelism')
     aa('--gpu', action='store_true', default=False, help='Use GPU OpenACC parallelism')
     aa('--process-count', nargs=1, type=int, default=0, help='MPI process count, 0 == System Default')
+    aa('--trust-local-registries', action=BooleanOptionalAction, default=None,
+       help='Trust local registries from a serialized instrument')
 
     return parser
 
@@ -329,9 +331,12 @@ def mccode_run_cmd(flavor: Flavor):
     elif not filename.exists() or not access(filename, R_OK):
         raise RuntimeError(f'{filename} does not exist or is not readable')
     else:
+        from mccode_antlr.cli.trust import apply_registry_trust
+        apply_registry_trust(args)
         if filename.suffix.lower() == '.json':
             from mccode_antlr.io.json import load_json
-            instrument = load_json(filename)
+            from mccode_antlr.reader.registry import with_local_registries
+            instrument = with_local_registries(load_json(filename), flavor, args.search_dir)
         else:
             # Construct the object which will read the instrument and component files, producing Python objects
             reader = Reader(registries=collect_local_registries(flavor, args.search_dir))

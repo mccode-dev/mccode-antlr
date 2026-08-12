@@ -46,6 +46,8 @@ def compile_script_parser(prog: str):
        help='Enable NeXus output support')
     aa('-c', '--dump-source', action='store_true', default=False, dest='dump_source',
        help='Keep the generated C source file alongside the binary')
+    aa('--trust-local-registries', action=BooleanOptionalAction, default=None,
+        help='Trust local registries from a serialized instrument')
 
     return parser
 
@@ -89,12 +91,15 @@ def mccode_compile_cmd(flavor, prog: str | None = None):
 
     else:
         # .instr / .json – build an Instr object first, then compile.
+        from mccode_antlr.cli.trust import apply_registry_trust
         from mccode_antlr.reader.registry import collect_local_registries
         from mccode_antlr.run.runner import mccode_compile
 
+        apply_registry_trust(args)
         if suffix == '.json':
             from mccode_antlr.io.json import load_json
-            instrument = load_json(filename)
+            from mccode_antlr.reader.registry import with_local_registries
+            instrument = with_local_registries(load_json(filename), flavor, args.search_dir)
         else:
             from mccode_antlr.reader import Reader
             reader = Reader(registries=collect_local_registries(flavor, args.search_dir))

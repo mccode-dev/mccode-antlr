@@ -39,7 +39,8 @@ def _default_output_path(input_path: Path, target: str) -> Path:
 def _load_instr(path: Path, flavor: str, search_dir: list[Path] | None):
     if path.suffix.lower() == '.json':
         from mccode_antlr.io.json import load_json
-        instr = load_json(path)
+        from mccode_antlr.reader.registry import with_local_registries
+        instr = with_local_registries(load_json(path), Flavor[flavor.upper()], search_dir)
     elif path.suffix.lower() == '.instr':
         from mccode_antlr.reader import Reader, collect_local_registries
         registries = collect_local_registries(Flavor[flavor.upper()], search_dir)
@@ -58,7 +59,11 @@ def convert(
         optimize: bool = False,
         flavor: str = 'mcstas',
         search_dir: list[Path] | None = None,
+        trust_local_registries: bool | None = None,
 ):
+    from types import SimpleNamespace
+    from mccode_antlr.cli.trust import apply_registry_trust
+    apply_registry_trust(SimpleNamespace(trust_local_registries=trust_local_registries))
     source = Path(filename).resolve()
     target = _resolve_target(to, output)
 
@@ -86,6 +91,7 @@ def convert(
 
 
 def add_convert_management_parser(modes):
+    from argparse import BooleanOptionalAction
     parser = modes.add_parser(
         name='convert',
         help='Convert instrument descriptions between file formats',
@@ -122,6 +128,12 @@ def add_convert_management_parser(modes):
         action='append',
         type=Path,
         help='Extra component search directory for .instr input',
+    )
+    parser.add_argument(
+        '--trust-local-registries',
+        action=BooleanOptionalAction,
+        default=None,
+        help='Trust local registries from a serialized instrument'
     )
     parser.set_defaults(action=convert)
     return parser
