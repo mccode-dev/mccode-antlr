@@ -654,7 +654,7 @@ class InMemoryRegistry(Registry):
             self.files[key] = _decode_stored_bytes(value)
         for key, value in components.items():
             self.add_comp(key, value)
-        self._materialized = False
+        self._materialized: set[str] = set()
 
     @property
     def components(self) -> dict[str, str]:
@@ -747,29 +747,28 @@ class InMemoryRegistry(Registry):
             from tempfile import mkdtemp
             return Path(mkdtemp(prefix='mccodeantlr-in-memory-'))
 
-    def _ensure_materialized(self) -> Path:
-        """Write the entries to disk so they can be opened by path."""
-        root = self.root
-        if not self._materialized:
+    def _ensure_materialized(self, key: str) -> Path:
+        """Write the one entry to disk so it can be opened by path."""
+        target = self.root / key
+        if key in self._materialized:
+            return target
+        payload = self.files[key]
+        if not (target.exists() and target.read_bytes() == payload):
             from os import getpid
-            for key, value in self.files.items():
-                target = root / key
-                if target.exists() and target.read_bytes() == value:
-                    continue
-                target.parent.mkdir(parents=True, exist_ok=True)
-                # Write-then-rename so a concurrent reader never sees a partial file.
-                tmp = target.with_name(f'{target.name}.{getpid()}.tmp')
-                tmp.write_bytes(value)
-                tmp.replace(target)
-            self._materialized = True
-        return root
+            target.parent.mkdir(parents=True, exist_ok=True)
+            # Write-then-rename so a concurrent reader never sees a partial file.
+            tmp = target.with_name(f'{target.name}.{getpid()}.tmp')
+            tmp.write_bytes(payload)
+            tmp.replace(target)
+            self._materialized.add(key)
+        return target
 
     def path(self, name: str, ext: str | None = None) -> Path:
         full_name = self.fullname(name, ext=ext)
         if full_name is None:
             err_name = name if ext is None else name + ext
             raise KeyError(f'InMemoryRegistry does not know of {err_name!r}')
-        return self._ensure_materialized() / full_name
+        return self._ensure_materialized(full_name)
 
     def to_file(self, output, wrapper):
         print(

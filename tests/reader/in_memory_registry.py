@@ -76,11 +76,23 @@ class TestMaterialization:
         reg = _registry()
         assert reg.path('data/blob.dat').read_bytes() == bytes(range(256))
 
-    def test_all_entries_are_written_together(self):
-        """One entry may %include another, so siblings must be present."""
+    def test_only_the_requested_entry_is_written(self):
+        """Writing the whole registry would put data files on disk that nothing
+        reads: a %include inside a materialized file is resolved by name through
+        the registry, not by filesystem adjacency.
+
+        Uses a unique name so the content-addressed directory is this test's
+        alone -- it is shared by construction, so a sibling written by another
+        instance would still be present.
+        """
+        from uuid import uuid4
         reg = _registry()
-        reg.path('MyComp.comp')
-        assert (reg.root / 'share' / 'helper.h').is_file()
+        reg.name = f'inmem-{uuid4().hex}'
+        written = reg.path('MyComp.comp')
+        assert written.is_file()
+        assert not (reg.root / 'data' / 'blob.dat').exists()
+        # ...until it is asked for
+        assert reg.path('data/blob.dat').is_file()
 
     def test_root_is_content_addressed_and_stable(self):
         assert _registry().root == _registry().root
