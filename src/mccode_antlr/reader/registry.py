@@ -378,8 +378,7 @@ class GitHubRegistry(RemoteRegistry):
         self._stashed_registry = None
         if isinstance(registry, str) and simple_url_validator(registry, file_ok=True):
             self._stashed_registry = registry
-
-        self._registry_dict = registry if isinstance(registry, dict) else {}
+        self._registry_dict = registry if isinstance(registry, dict) else None
 
     def _build_pooch(self):
         from os import access, R_OK, W_OK

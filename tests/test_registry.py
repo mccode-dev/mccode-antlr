@@ -11,6 +11,10 @@ def test_mccode_pooch_codegen_registry():
     registries = codegen_registries()
     assert isinstance(registries, list)
     assert len(registries) == 1
+    # Perform an action that should populate the remote registry
+    # like asking if it knows about a file:
+    registries[0].known('windirent.h')
+    assert registries[0].pooch is not None, "The remote registry needs to be populated"
     assert registries[0].name == 'codegen'
     assert registries[0].known('windirent.h')
 
