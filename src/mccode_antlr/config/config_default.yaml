@@ -20,3 +20,5 @@ mccode_pooch:
   tag: latest
 serialization:
   trust_local_registries: false
+  embed_local_files: true
+  embed_size_limit_mb: 32

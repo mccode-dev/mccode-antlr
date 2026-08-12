@@ -126,7 +126,7 @@ def add_convert_management_parser(modes):
     parser.add_argument(
         '-I', '--search-dir',
         action='append',
-        type=Path,
+        type=lambda name: Path(name).resolve(),
         help='Extra component search directory for .instr input',
     )
     parser.add_argument(

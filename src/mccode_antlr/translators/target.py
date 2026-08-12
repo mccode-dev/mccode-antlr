@@ -201,6 +201,19 @@ class TargetVisitor:
                         f'-> {cached}'
                     )
                     break
+        # Only reaches a destination when translating to a file; the compile path
+        # generates the source in memory and deposits beside the binary instead.
+        from ..io.portable import deposit_embedded_data_files
+        deposit_embedded_data_files(self.source, self._output_directory())
+
+    def _output_directory(self):
+        """Directory the generated C is written to, or None if not yet known."""
+        from pathlib import Path
+        output = self.config.get('output')
+        if output is None:
+            return None
+        path = Path(output)
+        return path.parent if path.suffix else path
 
     def translate(self, reprocess=True):
         if self.output is not None:

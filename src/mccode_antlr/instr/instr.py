@@ -69,11 +69,13 @@ class Instr(Struct):
     def to_dict(self):
         from msgspec.structs import fields
         from mccode_antlr.reader.registry import SerializableRegistry as SR
+        from mccode_antlr.io.portable import with_embedded_files
         data = {k.name: getattr(self, k.name) for k in fields(self)}
         instances = tuple(DepInstance.from_independent(inst) for inst in self.components)
         components = {inst.type.name: inst.type for inst in self.components}
 
-        data['registries'] = [SR.from_registry(r) for r in self.registries]
+        data['registries'] = [SR.from_registry(r)
+                              for r in with_embedded_files(self.registries, self)]
         data['instances'] = instances
         data['components'] = components
         return data

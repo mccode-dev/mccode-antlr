@@ -96,12 +96,17 @@ class TestInstrParameters(TestCase):
         self.assertTrue(params['f'].value.is_vector)
 
     def test_symbol_parameter_warns_and_parses(self):
+        from uuid import uuid4
         from mccode_antlr import Flavor
         from mccode_antlr.assembler import Assembler
         from mccode_antlr.reader.registry import InMemoryRegistry
         from mccode_antlr.common import DataType
         from textwrap import dedent
-        comps = InMemoryRegistry('components')
+        # The warning is emitted while parsing, after-which a cached version of
+        # WithSymbol.json will exist on disk. To allow this error to be raised on
+        # subsequent tests a unique registry name is needed (or we could clean-up the
+        # cache directory)
+        comps = InMemoryRegistry(f'test-components-{uuid4().hex}')
         comps.add_comp('WithSymbol', dedent("""
         DEFINE COMPONENT WithSymbol
         SETTING PARAMETERS (

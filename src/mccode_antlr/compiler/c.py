@@ -210,6 +210,14 @@ def _compile_instrument(
         # allow for the user to specify only the output *directory*
         output = output.joinpath(instrument.name).with_suffix(config['ext'].get(str))
 
+    # Data files carried inside the instrument have to sit somewhere the compiled
+    # binary looks. It searches its own directory, so put them beside the binary:
+    # the source is generated in memory here and never written, so the translator
+    # has no output directory to deposit into. Done before the cached-binary
+    # return, since an existing binary still needs its data files present.
+    from mccode_antlr.io.portable import deposit_embedded_data_files
+    deposit_embedded_data_files(instrument, output.parent)
+
     if output.exists() and not replace:
         return output
 

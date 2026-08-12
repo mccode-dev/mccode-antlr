@@ -4,7 +4,8 @@ import msgspec
 import numpy as np
 
 from mccode_antlr.reader.registry import (
-    Registry, RemoteRegistry, ModuleRemoteRegistry, GitHubRegistry, LocalRegistry
+    Registry, RemoteRegistry, ModuleRemoteRegistry, GitHubRegistry, LocalRegistry,
+    InMemoryRegistry
 )
 from mccode_antlr.comp import Comp
 from mccode_antlr.instr import Instance, Instr, Group
@@ -39,7 +40,8 @@ MODEL_DEC['Orient'] = Orient
 LEGACY_EXPR_TYPES = {'Value', 'UnaryOp', 'BinaryOp', 'TrinaryOp'}
 
 REGISTRY_TYPES = (
-    Registry, RemoteRegistry, ModuleRemoteRegistry, GitHubRegistry, LocalRegistry
+    Registry, RemoteRegistry, ModuleRemoteRegistry, GitHubRegistry, LocalRegistry,
+    InMemoryRegistry
 )
 
 
