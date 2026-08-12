@@ -50,15 +50,20 @@ def datafile_list(flavor: str, pattern: str | None):
 
 def _fetch_one(name: str, flavor: str) -> Path:
     """Fetch *name* into the Pooch cache and return the local path."""
-    from mccode_antlr.reader.registry import ordered_registries
+    from mccode_antlr.reader.registry import ordered_registries, resolve_from_registries
     registries = ordered_registries(_data_registries(flavor))
-    for reg in registries:
-        if reg.known(name):
-            return reg.path(name)
-    raise FileNotFoundError(
-        f"Data file {name!r} not found in any {flavor} registry.\n"
-        f"Use 'mccode-antlr datafile list --flavor {flavor}' to see available files."
-    )
+    try:
+        return resolve_from_registries(registries, name, lambda reg: reg.path(name))
+    except RuntimeError as error:
+        # FileNotFoundError and the pointer to `datafile list` are kept, but the
+        # helper's per-registry detail comes along: a fetch can now fail because a
+        # registry knew the file and could not deliver it -- a network error, say --
+        # and reporting that as "not found" would send the user looking for a
+        # missing file rather than at the real cause.
+        raise FileNotFoundError(
+            f"Data file {name!r} could not be fetched for {flavor}: {error}\n"
+            f"Use 'mccode-antlr datafile list --flavor {flavor}' to see available files."
+        ) from error
 
 
 def datafile_fetch(name: str, flavor: str):
