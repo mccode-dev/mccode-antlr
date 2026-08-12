@@ -63,19 +63,32 @@ class TargetVisitor:
         # TODO always ensure this is sorted by priority?
         return self.source.registries
 
-    def known(self, name: str, which: str = None, strict: bool = False):
+    def _which(self, which: str | None):
+        registries = self.registries
+        return registries if which is None else [x for x in registries if x.name in which]
+
+    def known(self, name: str, which: str | None = None, strict: bool = False):
         if self.registries is None:
             return False
-        registries = self.registries if which is None else [x for x in self.registries if x.name in which]
-        return any([reg.known(name, strict=strict) for reg in registries])
+        return any([reg.known(name, strict=strict) for reg in self._which(which)])
 
-    def locate(self, name: str, which: str = None):
+    def locate(self, name: str, which: str | None = None):
         from ..reader.registry import resolve_from_registries
-        registries = self.registries if which is None else [x for x in self.registries if x.name in which]
-        return resolve_from_registries(registries, name, lambda reg: reg.path(name))
+        return resolve_from_registries(self._which(which), name, lambda reg: reg.path(name))
 
     def library_path(self, filename=None):
         return self.locate(filename)
+
+    def file_text(self, name: str, which: str | None = None) -> str:
+        """Text contents of a registry file, which may only exist in memory or on disk"""
+        regs = []
+        for reg in self._which(which):
+            if reg.known(name):
+                return reg.contents(name)
+            else:
+                regs.append(reg.name)
+        msg = "registry " + regs[0] if len(regs) == 1 else "registries: " + ','.join(regs)
+        raise RuntimeError(f'{name} not found in {msg}')
 
     def configure_file(self, filename: str, flavor: str):
         """McStasMcXtrace/McCode makes use of CMake configure_file to define runtime-header macros.

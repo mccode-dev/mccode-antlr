@@ -101,15 +101,9 @@ def sort_include_hierarchy(includes: list[CInclude]):
 
 class CTargetVisitor(TargetVisitor, target_language='c'):
     def _file_contents(self, filename, preserve_escapes=False):
-        # First try the McCode C runtime libraries:
-        path = self.include_path(filename)
-        # Then any registries used in reading the file(s)
-        if not path.is_file() and self.known(filename):
-            path = self.locate(filename)
-        if not path.is_file():
-            raise RuntimeError(f"Can not include the file {filename} because it is not locatable")
-        with path.open('r') as file:
-            lines = [line.strip('\n') for line in file.readlines()]
+        lines = self.file_text(filename).split('\n')
+        if lines and lines[-1] == '':
+            lines.pop()
         if preserve_escapes:
             lines = [line.encode('unicode-escape').decode('utf-8') for line in lines]
         return '\n'.join(lines)
