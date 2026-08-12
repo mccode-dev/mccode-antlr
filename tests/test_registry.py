@@ -720,3 +720,89 @@ class TestSerializableRegistryCodec:
         import mccode_antlr.reader.registry as rm
         with pytest.raises(RuntimeError, match='Unknown registry type'):
             rm.SerializableRegistry('NotARegistry', {}).to_registry()
+
+
+# ---------------------------------------------------------------------------
+# Constructing a remote registry must have no side effects: registries are
+# rebuilt while deserializing an instrument, before anything has decided to
+# trust it
+# ---------------------------------------------------------------------------
+
+class _NoNetwork:
+    """Turns any outbound connection attempt into a test failure."""
+    def __enter__(self):
+        import socket
+        self._real = socket.socket
+
+        class Blocked(self._real):
+            def connect(self, *args, **kwargs):
+                raise AssertionError(f'network access attempted: {args}')
+            connect_ex = connect
+
+        socket.socket = Blocked
+        return self
+
+    def __exit__(self, *exc):
+        import socket
+        socket.socket = self._real
+        return False
+
+
+class TestRemoteRegistryConstruction:
+    def test_github_registry_construction_does_no_io(self):
+        import mccode_antlr.reader.registry as rm
+        with _NoNetwork():
+            reg = rm.GitHubRegistry('evil', 'https://attacker.invalid/repo', 'v1',
+                                    filename='x.txt')
+        assert reg.name == 'evil'
+
+    def test_deserializing_a_hostile_artifact_does_no_io(self):
+        """load_json used to fetch the registry index during construction, so
+        merely reading a file performed an HTTP request to an attacker's URL."""
+        import mccode_antlr.reader.registry as rm
+        hostile = {'registry_type': 'GitHubRegistry',
+                   'registry_data': {'name': 'evil', 'url': 'https://attacker.invalid/repo',
+                                     'version': 'v1', 'filename': 'x.txt', 'registry': ''}}
+        with _NoNetwork():
+            reg = rm.SerializableRegistry.from_dict(hostile)
+        assert isinstance(reg, rm.GitHubRegistry)
+
+    def test_equality_does_not_build_the_index(self):
+        import mccode_antlr.reader.registry as rm
+        with _NoNetwork():
+            a = rm.GitHubRegistry('x', 'https://attacker.invalid/r', 'v1', filename='f.txt')
+            b = rm.GitHubRegistry('x', 'https://attacker.invalid/r', 'v1', filename='f.txt')
+            assert a == b
+
+    def test_a_remote_registry_equals_itself(self):
+        """The old __eq__ bailed on `other.pooch is None`, so an unbuilt registry
+        compared unequal to itself and any equality assertion about one was
+        vacuous."""
+        import mccode_antlr.reader.registry as rm
+        reg = rm.RemoteRegistry('r', 'https://example.invalid', 'v1', 'r.txt')
+        assert reg == reg
+
+    def test_module_remote_registry_construction_does_no_io(self):
+        import mccode_antlr.reader.registry as rm
+        with _NoNetwork():
+            reg = rm.ModuleRemoteRegistry('m', 'https://attacker.invalid/r', filename='nope.txt')
+        assert reg.name == 'm'
+
+
+class TestUntrustedPathComponents:
+    def test_cache_components_cannot_escape(self):
+        from mccode_antlr.reader.registry import _safe_cache_component
+        for value in ('../../../../etc', '../../..', '/absolute/path', '..\\..\\windows'):
+            cleaned = _safe_cache_component(value, 'FALLBACK')
+            assert '/' not in cleaned and '\\' not in cleaned
+            assert cleaned not in ('..', '.', '')
+
+    def test_ordinary_names_are_untouched(self):
+        from mccode_antlr.reader.registry import _safe_cache_component
+        assert _safe_cache_component('mcstas', 'FALLBACK') == 'mcstas'
+        assert _safe_cache_component('v3.7.17', 'FALLBACK') == 'v3.7.17'
+
+    def test_find_registry_file_refuses_to_leave_the_package(self):
+        from mccode_antlr.reader.registry import find_registry_file
+        assert find_registry_file('../../../etc/passwd') is None
+        assert find_registry_file('/etc/passwd') is None
