@@ -47,7 +47,8 @@ class Simulation:
         runtime: bool = True,
         embed: bool = False,
         verbose: bool = False,
-        line_directives: bool = False,
+        debug : bool = False,
+        line_directives: bool | None = None,
     ):
         """
         Output the C source code of the instrument to a specified directory or CWD.
@@ -65,7 +66,7 @@ class Simulation:
             'output': directory / f'{self.instr.name}.c',
         }
         visitor = CTargetVisitor(self.instr, flavor=self.flavor, config=config,
-                                 verbose=verbose, line_directives=line_directives)
+                                 verbose=verbose, debug=debug, line_directives=line_directives)
         visitor.save(filename=config['output'])
 
     def compile(

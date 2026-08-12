@@ -27,14 +27,31 @@ CONFIG = dict(default_main=True, enable_trace=True, portable=True, include_runti
 
 # Follow the logic of codegen.c(.in) from McCode-3, but make use of visitor semantics for possible alternate runtimes
 class TargetVisitor:
-    def __init__(self, instr: Instr, flavor: Flavor = Flavor.MCSTAS, config: dict = None, verbose=False,
-                 line_directives: bool = False):
+    def __init__(self,
+                 instr: Instr,
+                 flavor: Flavor = Flavor.MCSTAS,
+                 config: dict | None = None,
+                 verbose: bool = False,
+                 debug: bool = False,
+                 line_directives: bool | None = None
+                 ):
         self.flavor = flavor
         self.config = CONFIG if config is None else config
         self.source = instr
         self.output = None
         self.verbose = verbose
-        self.line_directives = line_directives
+        if line_directives is not None:
+            from mccode_antlr.utils import McCodeAntlrDeprecationWarning
+            import warnings
+            warnings.warn(
+                'line_directives is deprecated since 0.23.0. Use debug instead, which '
+                'emits #line directives and keeps absolute source paths in SIG_MESSAGE.',
+                McCodeAntlrDeprecationWarning, stacklevel=2)
+            debug = debug or line_directives
+        self.debug = debug
+        # Retained because --debug subsumes it: it still selects #line emission.
+        self.line_directives = debug
+        self._registry_base_cache = None
         self.warnings = 0
         self.instrument_uservars = ()
         self.component_uservars = dict()
@@ -78,6 +95,47 @@ class TargetVisitor:
 
     def library_path(self, filename=None):
         return self.locate(filename)
+
+    def _registry_bases(self):
+        """Directories the registries resolve files under, longest first.
+
+        Reads the *already built* pooch index rather than the `pooch` property:
+        touching that would build an index on demand, which for a registry this
+        translation never uses means an HTTP request purely to shorten a comment.
+        """
+        from pathlib import Path
+        if self._registry_base_cache is None:
+            bases = []
+            for reg in self.registries or []:
+                root = getattr(reg, 'root', None)
+                if isinstance(root, Path):
+                    bases.append(root)
+                built = getattr(reg, '_pooch', None)
+                if built is not None and getattr(built, 'path', None):
+                    bases.append(Path(built.path))
+            self._registry_base_cache = sorted(bases, key=lambda b: len(str(b)), reverse=True)
+        return self._registry_base_cache
+
+    def display_source_path(self, filename):
+        """How a source location should be named in the generated C.
+
+        Under --debug the recorded absolute path is kept, which is what a
+        debugger and a crash trace want. Otherwise it is made relative to the
+        registry that supplied it, so identical input yields identical C on any
+        machine while still naming a real file and line -- classic McCode reports
+        neither, only the component type and line 0.
+        """
+        from pathlib import Path
+        if self.debug or not filename:
+            return filename
+        path = Path(filename)
+        for base in self._registry_bases():
+            try:
+                return path.relative_to(base).as_posix()
+            except ValueError:
+                continue
+        # fallback to just the filename
+        return path.name
 
     def file_text(self, name: str, which: str | None = None) -> str:
         """Text contents of a registry file, which may only exist in memory or on disk"""

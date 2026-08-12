@@ -1,11 +1,16 @@
-def cogen_finally(source, declared_parameters, line_directives: bool = False):
+def cogen_finally(
+        source,
+        declared_parameters,
+        line_directives: bool = False,
+        shorten = None
+):
     lines = ["/* *****************************************************************************",
              f"* instrument {source.name} and components FINALLY",
              "***************************************************************************** */",
              ]
 
     for comp in source.component_types():
-        lines.extend(cogen_comp_finally_class(comp, declared_parameters[comp.name], line_directives))
+        lines.extend(cogen_comp_finally_class(comp, declared_parameters[comp.name], line_directives, shorten))
 
     # write the instrument main code, which calls component ones
     lines.append(f'int finally(void) {{ /* called by mccode_main for {source.name}:FINALLY */')
@@ -19,7 +24,7 @@ def cogen_finally(source, declared_parameters, line_directives: bool = False):
 
     # insert user code from instrument definition
     if len(source.final):
-        f, n = source.final[0].fn
+        f, n = source.final[0].fn_display(shorten)
         lines.extend([
             f'  /* Instrument {source.name} FINALLY */',
             f'  SIG_MESSAGE("[{source.name} FINALLY [{f}:{n}]");'
@@ -53,7 +58,12 @@ def cogen_finally(source, declared_parameters, line_directives: bool = False):
     return '\n'.join(lines)
 
 
-def cogen_comp_finally_class(comp, declared_parameters, line_directives: bool = False):
+def cogen_comp_finally_class(
+        comp,
+        declared_parameters,
+        line_directives: bool = False,
+        shorten = None
+):
     from .c_defines import cogen_parameter_define, cogen_parameter_undef
     if not len(comp.final):
         return []
@@ -64,7 +74,7 @@ def cogen_comp_finally_class(comp, declared_parameters, line_directives: bool = 
         f'void class_{comp.name}_finally(_class_{comp.name} *_comp) {{',
         cogen_parameter_define(comp, declared_parameters)
     ]
-    f, n = comp.final[0].fn if len(comp.final) else (comp.name, 0)
+    f, n = comp.final[0].fn_display(shorten) if len(comp.final) else (comp.name, 0)
     lines.append(f'  SIG_MESSAGE("[_{comp.name}_finally] component NULL={comp.name}() [{f}:{n}]");')
 
     for block in comp.final:

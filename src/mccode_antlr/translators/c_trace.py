@@ -86,6 +86,7 @@ def cogen_trace_section(
         instrument_uservars: list[CDeclarator],
         component_uservars: dict[str, list[CDeclarator]],
         line_directives: bool = False,
+        shorten = None,
 ) -> str:
     return '\n'.join([
         cogen_comp_trace_class(
@@ -96,6 +97,7 @@ def cogen_trace_section(
             instrument_uservars,
             component_uservars[component_type.name],
             line_directives,
+            shorten,
         ) for component_type in source.component_types()
     ])
 
@@ -108,6 +110,7 @@ def cogen_comp_trace_class(
         instr_uservars: list[CDeclarator],
         comp_uservars: list[CDeclarator],
         line_directives: bool = False,
+        shorten=None,
 ) -> str:
     from .c_defines import cogen_parameter_define, cogen_parameter_undef
     # count matching component type instances which define an EXTEND block:
@@ -122,7 +125,7 @@ def cogen_comp_trace_class(
         'ABSORBED=SCATTERED=RESTORE=0;',
         cogen_parameter_define(comp, declared_parameters),
     ]
-    f, n = comp.trace[0].fn if len(comp.trace) else (comp.name, 0)
+    f, n = comp.trace[0].fn_display(shorten) if len(comp.trace) else (comp.name, 0)
     lines.append(f'SIG_MESSAGE("[_{comp.name}_trace] component NULL={comp.name}() [{f}:{n}]");')
 
     # FIXME This should be checking *only* for file.comp *formal* parameters specified with `symbol` as the typename
