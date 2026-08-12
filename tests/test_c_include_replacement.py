@@ -108,10 +108,10 @@ def test_embed_file_applies_mccode_r_c_replacement_pattern(tmp_path):
             return None
 
     class DummyVisitor(TargetVisitor):
-        def library_path(self, filename=None):
-            if filename == "mccode-r.c":
-                return runtime_file
-            raise RuntimeError(f"Unexpected filename: {filename}")
+        def file_text(self, name, which=None):
+            if name == "mccode-r.c":
+                return runtime_file.read_text()
+            raise RuntimeError(f"Unexpected filename: {name}")
 
     visitor = DummyVisitor(DummyInstr(), Flavor.MCSTAS)
     visitor.output = StringIO()

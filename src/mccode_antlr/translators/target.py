@@ -95,14 +95,10 @@ class TargetVisitor:
         These file(s) have the extension .h.in and are changed to .h after replacing all "@MCCODE_*@ keys
         """
         import re
-        from importlib.resources import as_file
         from mccode_antlr.config import config, registry_defaults
         if not filename.endswith(".h.in"):
             raise RuntimeError(f"Expected to configure only header files, not {filename}")
-        with as_file(self.library_path(filename)) as file_at:
-            not_configured_name = str(file_at)
-            with open(file_at, 'r') as file:
-                contents = file.read()
+        contents = self.file_text(filename)
 
         # It's not great to do this here. TODO Find a better place for this
         reg = [reg for reg in self.registries if reg.unique(filename)]
@@ -133,27 +129,19 @@ class TargetVisitor:
         # find all occurances of @MCCODE_([A-Z]*)@, replace them with their equivalent config[flavor][$1].get()
         contents = re.sub(r'@MCCODE_([A-Z_]*)@', replacement, contents)
 
-        # one could consider writing the configured contents to a (temporary) file for use if the translator
-        # is not set to 'include_runtime'
-        self.out(f'/* embedding configured version of file "{not_configured_name}" */')
+        self.out(f'/* embedding configured version of file "{filename}" */')
         self.out(contents)
-        self.out(f'/* end of configured version of file "{not_configured_name}" */')
+        self.out(f'/* end of configured version of file "{filename}" */')
 
     def embed_file(self, filename):
-        """Reads the library file, even if embedded in a module archive, writes to the output IO Stream"""
-        from importlib.resources import as_file
-        with as_file(self.library_path(filename)) as file_at:
-            with open(file_at, 'r') as file:
-                self.out(f'/* embedding file "{file_at}" */')
+        """Reads the library file and writes it to the output IO Stream"""
+        file_contents = self.file_text(filename)
+        if file_replacement := self.file_replacements.get(filename):
+            file_contents = file_replacement.filter(file_contents)
 
-                file_contents = file.read()
-
-                if file_replacement := self.file_replacements.get(filename):
-                    file_contents = file_replacement.filter(file_contents)
-
-                self.output.write(file_contents)
-
-                self.out(f'/* end of file "{file_at}" */')
+        self.out(f'/* embedding file "{filename}" */')
+        self.output.write(file_contents)
+        self.out(f'/* end of file "{filename}" */')
 
     def include_path(self, filename=None):
         if filename is None:

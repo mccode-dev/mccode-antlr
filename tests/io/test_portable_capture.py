@@ -417,3 +417,33 @@ class TestIncludeResolutionWithoutDisk:
         visitor.source = instr
         with pytest.raises(RuntimeError, match='not found in registr'):
             visitor.file_text('definitely_absent.h')
+
+    def test_embedded_runtime_files_are_named_not_located(self):
+        """embed_file and configure_file used to print the resolved absolute path
+        into the generated C, so identical input produced different output on
+        different machines. Upstream McCode emits no path either."""
+        import re
+        from io import StringIO
+        from mccode_antlr import Flavor
+        from mccode_antlr.translators.target import TargetVisitor
+
+        class DummyInstr:
+            name = 'dummy'
+            registries = []
+            components = []
+
+            def verify_instance_parameters(self):
+                return None
+
+        class DummyVisitor(TargetVisitor):
+            def file_text(self, name, which=None):
+                return 'int body;\n'
+
+        visitor = DummyVisitor(DummyInstr(), Flavor.MCSTAS)
+        visitor.output = StringIO()
+        visitor.embed_file('mccode-r.c')
+        output = visitor.output.getvalue()
+        assert '/* embedding file "mccode-r.c" */' in output
+        assert '/* end of file "mccode-r.c" */' in output
+        assert 'int body;' in output
+        assert '/' not in re.search(r'embedding file "([^"]*)"', output).group(1)
