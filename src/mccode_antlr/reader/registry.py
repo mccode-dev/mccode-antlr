@@ -16,6 +16,25 @@ from mccode_antlr.version import version as mccode_antlr_version
 from mccode_antlr import Flavor
 from mccode_antlr.common import TextWrapper
 
+def _decode_stored_bytes(value) -> bytes:
+    """Decode one entry of an InMemoryRegistry `files` mapping
+
+    Values are base64, as written by InMemoryRegistry.file_contents. They are not
+    sniffed: short component sources such as 'abcd' are themselves valid base64,
+    so guessing between text and base64 could silently corrupt an entry. Callers
+    building a registry by hand use add()/add_comp(), which take text or bytes.
+    """
+    if isinstance(value, (bytes, bytearray)):
+        return bytes(value)
+    if isinstance(value, str):
+        from base64 import b64decode
+        try:
+            return b64decode(value.encode('ascii'), validate=True)
+        except Exception as error:
+            raise ValueError('InMemoryRegistry `files` values must be base64; use '
+                             'add()/add_comp() to store text or bytes') from error
+    raise TypeError(f'Cannot store {type(value).__name__} in an InMemoryRegistry')
+
 
 def _dedupe_identical_paths(paths: list[Path]) -> Path | None:
     """Given >=2 candidate file paths for the same lookup, return a single path
@@ -545,18 +564,19 @@ class LocalRegistry(Registry):
         return True
 
 
-SERIALIZABLE_REGISTRY_TYPES = (GitHubRegistry, LocalRegistry, RemoteRegistry, ModuleRemoteRegistry)
-
-
+@cache
 def _registry_type_map() -> dict[str, type]:
     """Accepted spellings of a registry type in a serialized artifact.
 
     Written as the bare class name or fully-qualified module path which are likely
     to break if class definitions are moved within the module.
     """
-    nt = {k.__name__: k for k in SERIALIZABLE_REGISTRY_TYPES}
-    nt.update({str(k): k for k in SERIALIZABLE_REGISTRY_TYPES})
-    return nt
+    types = (
+        GitHubRegistry, LocalRegistry, RemoteRegistry, ModuleRemoteRegistry,
+        InMemoryRegistry
+    )
+    return {k.__name__: k for k in types} | {str(k): k for k in types}
+
 
 class SerializableRegistry(Struct):
     registry_type: str
@@ -587,47 +607,149 @@ class SerializableRegistry(Struct):
 
 
 class InMemoryRegistry(Registry):
-    def __init__(self, name, priority: int = 100, **components):
+    def __init__(self, name, priority: int = 100, files=None, **components):
         self.name = name
-        self.root = '/proc/memory/'  # Something pathlike is needed?
         self.version = mccode_antlr_version()
-        self.components = {k if k.lower().endswith('.comp') else f'{k}.comp': v for k, v in components.items()}
         self.priority = priority
+        self.files: dict[str, bytes] = {}
+        for key, value in (files or {}).items():
+            self.files[key] = _decode_stored_bytes(value)
+        for key, value in components.items():
+            self.add_comp(key, value)
+        self._materialized = False
 
-    def to_file(self, output, wrapper):
-        print(wrapper.line('InMemoryRegistry:', [self.name, f'({len(self.components)} components)']), file=output)
+    @property
+    def components(self) -> dict[str, str]:
+        out = {}
+        for key, value in self.files.items():
+            try:
+                out[key] = value.decode('utf-8')
+            except UnicodeDecodeError:
+                continue
+        return out
 
-    def add(self, name: str, definition: str):
-        self.components[name] = definition
+    def add(self, name: str, definition):
+        self.files[name] = definition.encode('utf-8') if isinstance(definition, str) else bytes(definition)
 
-    def add_comp(self, name: str, definition: str):
+    def add_comp(self, name: str, definition):
         if not name.lower().endswith('.comp'):
             name += '.comp'
         self.add(name, definition)
 
-    def add_instr(self, name: str, definition: str):
+    def add_instr(self, name: str, definition):
         if not name.lower().endswith('.instr'):
             name += '.instr'
         self.add(name, definition)
 
+    @classmethod
+    def file_keys(cls) -> tuple[str, ...]:
+        return 'name', 'priority', 'files'
+
+    def file_contents(self) -> dict:
+        from base64 import b64encode
+        return {
+            'name': self.name,
+            'priority': self.priority,
+            'files': {k: b64encode(v).decode('ascii') for k, v in self.files.items()}
+        }
+
     def filenames(self) -> list[str]:
-        return list(self.components.keys())
+        return list(self.files.keys())
 
     def fullname(self, name: str, ext: str | None = None):
         full_name = name if ext is None else name + ext
-        return full_name if full_name in self.components else None
+        return full_name if full_name in self.files else None
 
     def known(self, name: str, ext: str | None = None, strict: bool = False):
+        return self.fullname(name, ext=ext) is not None
+
+    def is_available(self, name: str, ext: str | None = None):
+        return self.known(name, ext)
+
+    def unique(self, name: str):
+        return sum(1 for key in self.files if name in key) == 1
+
+    def contents_bytes(self, name: str, ext: str | None = None) -> bytes:
         full_name = self.fullname(name, ext=ext)
-        if full_name is not None and full_name in self.components:
-            return True
-        return False
+        if full_name is None:
+            err_name = name if ext is None else name + ext
+            raise KeyError(f'InMemoryRegistry does not know of {err_name}')
+        return self.files[full_name]
 
     def contents(self, name: str, ext: str | None = None):
+        raw = self.contents_bytes(name, ext)
+        try:
+            return raw.decode('utf-8')
+        except UnicodeDecodeError as error:
+            full = name if ext is None else name + ext
+            raise RuntimeError(f'{full} in registry {self.name!r} is not UTF-8 text; '
+                               'use contents_bytes or path to read it') from error
+
+    @property
+    def root(self) -> Path:
+        """Directory the entries occupy once written out.
+
+        Content-addressed, so repeated translations and concurrent processes
+        converge on the same directory.
+        """
+        digest = hashlib.sha256()
+        for key in sorted(self.files):
+            digest.update(key.encode('utf-8'))
+            digest.update(hashlib.sha256(self.files[key]).digest())
+        return self._cache_root() / self.name / digest.hexdigest()[:16]
+
+    @staticmethod
+    @cache
+    def _cache_root() -> Path:
+        base = Path(pooch.os_cache('mccodeantlr')) / 'in-memory'
+        try:
+            base.mkdir(parents=True, exist_ok=True)
+            return base
+        except OSError:
+            from tempfile import mkdtemp
+            return Path(mkdtemp(prefix='mccodeantlr-in-memory-'))
+
+    def _ensure_materialized(self) -> Path:
+        """Write the entries to disk so they can be opened by path."""
+        root = self.root
+        if not self._materialized:
+            from os import getpid
+            for key, value in self.files.items():
+                target = root / key
+                if target.exists() and target.read_bytes() == value:
+                    continue
+                target.parent.mkdir(parents=True, exist_ok=True)
+                # Write-then-rename so a concurrent reader never sees a partial file.
+                tmp = target.with_name(f'{target.name}.{getpid()}.tmp')
+                tmp.write_bytes(value)
+                tmp.replace(target)
+            self._materialized = True
+        return root
+
+    def path(self, name: str, ext: str | None = None) -> Path:
         full_name = self.fullname(name, ext=ext)
-        if full_name is not None and full_name in self.components:
-            return self.components[full_name]
-        raise KeyError(f'InMemoryRegistry does not know of {name if ext is None else name + ext}')
+        if full_name is None:
+            err_name = name if ext is None else name + ext
+            raise KeyError(f'InMemoryRegistry does not know of {err_name!r}')
+        return self._ensure_materialized() / full_name
+
+    def to_file(self, output, wrapper):
+        print(
+            wrapper.line('InMemoryRegistry:', [self.name, f'({len(self.files)} files)']),
+            file=output
+        )
+
+    def __eq__(self, other):
+        if not isinstance(other, InMemoryRegistry):
+            return False
+        return self.name == other.name and self.files == other.files
+
+    def __hash__(self):
+        return hash(
+            (self.name, tuple(sorted(
+                 (k, hashlib.sha256(v).hexdigest()) for k, v in self.files.items()
+            )))
+        )
 
 
 def ordered_registries(registries: list[Registry]):
