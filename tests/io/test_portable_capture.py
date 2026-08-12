@@ -449,3 +449,37 @@ class TestIncludeResolutionWithoutDisk:
         named = re.search(r'embedding file "([^"]*)"', output).group(1)
         # Both separators: a Windows path would contain '\', not '/'
         assert '/' not in named and '\\' not in named, named
+
+    def test_falls_through_a_registry_that_cannot_deliver(self):
+        """%include resolution was the last lookup still binding to the first
+        registry whose known() answered True, even when it then failed."""
+        from mccode_antlr import Flavor
+        from mccode_antlr.reader.registry import InMemoryRegistry
+        from mccode_antlr.translators.c import CTargetVisitor
+
+        class _Broken:
+            name = 'broken'
+            root = None
+            version = '0'
+            priority = 20          # must outrank the working one to be tried first
+
+            def known(self, name, ext=None, strict=False):
+                return True
+
+            def contents(self, name, ext=None):
+                raise RuntimeError('deliberately broken')
+
+        working = InMemoryRegistry('working', priority=0)
+        working.add('mylib.h', '/* THE REAL ONE */\n')
+
+        class DummyInstr:
+            name = 'dummy'
+            registries = [_Broken(), working]
+            components = []
+
+            def verify_instance_parameters(self):
+                return None
+
+        visitor = CTargetVisitor.__new__(CTargetVisitor)
+        visitor.source = DummyInstr()
+        assert 'THE REAL ONE' in visitor.file_text('mylib.h')
