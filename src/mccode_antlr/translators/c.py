@@ -116,16 +116,15 @@ class CTargetVisitor(TargetVisitor, target_language='c'):
 
     def _handle_raw_c_include(self, parent: str, raw_c: str):
         import re
-        re_lib = re.compile(r'^\s*%include\s*"(?P<libname>[^"\n\.]+)"\s*$', re.MULTILINE)
-        re_inc = re.compile(r'^\s*%include\s*"(?P<filename>[^"\n]+)"\s*$', re.MULTILINE)
+        from mccode_antlr.translators.includes import LIBRARY_INCLUDE_RE, FILE_INCLUDE_RE
         # Include statements without an extension are library includes (.h, plus .c if embedding the runtime)
         # McCode3 would insert the library immediately on first-encounter, but we want to collect all libraries
         # and ensure they're included before all components.
 
         # Get any library names in this block:
-        libraries = list(dict.fromkeys([match.group('libname') for match in re_lib.finditer(raw_c)]))
+        libraries = list(dict.fromkeys([match.group('libname') for match in LIBRARY_INCLUDE_RE.finditer(raw_c)]))
         # *erase* the library includes from the block:
-        raw_c = re.sub(re_lib, '', raw_c)
+        raw_c = re.sub(LIBRARY_INCLUDE_RE, '', raw_c)
 
         # We must look through the to-be-included code *now* to see if it *also* includes more libraries.
         includes = [CInclude(parent=parent, name=lib, order=index, content=self._file_contents(f'{lib}.h'))
@@ -141,7 +140,7 @@ class CTargetVisitor(TargetVisitor, target_language='c'):
             includes = list(dict.fromkeys(includes))
 
         # If there are any non-library includes remaining, we should insert them immediately:
-        matches = list(re_inc.finditer(raw_c))
+        matches = list(FILE_INCLUDE_RE.finditer(raw_c))
         count = 0
         while len(matches):
             count += 1
@@ -157,7 +156,7 @@ class CTargetVisitor(TargetVisitor, target_language='c'):
             #raw_c = re.sub(this_re, self._file_contents(filename, True), raw_c)
 
             # re-match since we modified raw_c
-            matches = list(re_inc.finditer(raw_c))
+            matches = list(FILE_INCLUDE_RE.finditer(raw_c))
 
         if count:
             found_includes, raw_c = self._handle_raw_c_include(parent, raw_c)
