@@ -446,4 +446,6 @@ class TestIncludeResolutionWithoutDisk:
         assert '/* embedding file "mccode-r.c" */' in output
         assert '/* end of file "mccode-r.c" */' in output
         assert 'int body;' in output
-        assert '/' not in re.search(r'embedding file "([^"]*)"', output).group(1)
+        named = re.search(r'embedding file "([^"]*)"', output).group(1)
+        # Both separators: a Windows path would contain '\', not '/'
+        assert '/' not in named and '\\' not in named, named
