@@ -670,3 +670,53 @@ class TestReaderFallsThrough:
         reader = Reader(registries=[rm.LocalRegistry('ambiguous', str(ambiguous)),
                                     rm.LocalRegistry('good', str(good))])
         assert reader.contents('Dupe', ext='.comp') == 'the real one'
+
+# ---------------------------------------------------------------------------
+# SerializableRegistry — the codec itself
+# ---------------------------------------------------------------------------
+
+class TestSerializableRegistryCodec:
+    def test_typed_decode_of_a_local_registry(self, tmp_path):
+        """registry_data was annotated dict[str, str] but has always held
+        LocalRegistry.priority, an int, so a typed decode raised ValidationError."""
+        import msgspec
+        import mccode_antlr.reader.registry as rm
+        sr = rm.SerializableRegistry.from_registry(rm.LocalRegistry('mylib', str(tmp_path)))
+        decoded = msgspec.json.decode(msgspec.json.encode(sr), type=rm.SerializableRegistry)
+        assert decoded.to_registry() == rm.LocalRegistry('mylib', str(tmp_path))
+
+    def test_msgpack_typed_decode(self, tmp_path):
+        import msgspec
+        import mccode_antlr.reader.registry as rm
+        sr = rm.SerializableRegistry.from_registry(rm.LocalRegistry('mylib', str(tmp_path)))
+        decoded = msgspec.msgpack.decode(msgspec.msgpack.encode(sr), type=rm.SerializableRegistry)
+        assert decoded.to_registry() == rm.LocalRegistry('mylib', str(tmp_path))
+
+    def test_hash_survives_a_nested_mapping(self):
+        """tuple(sorted(items)) raised TypeError as soon as a value was a dict."""
+        import mccode_antlr.reader.registry as rm
+        sr = rm.SerializableRegistry('InMemoryRegistry', {'name': 'm', 'files': {'a.h': 'x'}})
+        assert isinstance(hash(sr), int)
+
+    def test_hash_is_independent_of_key_order(self):
+        import mccode_antlr.reader.registry as rm
+        assert hash(rm.SerializableRegistry('X', {'b': 1, 'a': 2})) == \
+               hash(rm.SerializableRegistry('X', {'a': 2, 'b': 1}))
+
+    def test_registry_type_is_the_bare_class_name(self, tmp_path):
+        import mccode_antlr.reader.registry as rm
+        sr = rm.SerializableRegistry.from_registry(rm.LocalRegistry('mylib', str(tmp_path)))
+        assert sr.registry_type == 'LocalRegistry'
+
+    def test_legacy_qualified_registry_type_still_loads(self, tmp_path):
+        """Artifacts written before the change spelled the type str(type(reg))."""
+        import mccode_antlr.reader.registry as rm
+        legacy = {'registry_type': "<class 'mccode_antlr.reader.registry.LocalRegistry'>",
+                  'registry_data': {'name': 'old', 'root': str(tmp_path), 'priority': 10}}
+        assert rm.SerializableRegistry.from_dict(legacy) == rm.LocalRegistry('old', str(tmp_path))
+
+    def test_unknown_registry_type_is_rejected(self):
+        import pytest
+        import mccode_antlr.reader.registry as rm
+        with pytest.raises(RuntimeError, match='Unknown registry type'):
+            rm.SerializableRegistry('NotARegistry', {}).to_registry()

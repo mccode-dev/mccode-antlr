@@ -545,31 +545,45 @@ class LocalRegistry(Registry):
         return True
 
 
+SERIALIZABLE_REGISTRY_TYPES = (GitHubRegistry, LocalRegistry, RemoteRegistry, ModuleRemoteRegistry)
+
+
+def _registry_type_map() -> dict[str, type]:
+    """Accepted spellings of a registry type in a serialized artifact.
+
+    Written as the bare class name or fully-qualified module path which are likely
+    to break if class definitions are moved within the module.
+    """
+    nt = {k.__name__: k for k in SERIALIZABLE_REGISTRY_TYPES}
+    nt.update({str(k): k for k in SERIALIZABLE_REGISTRY_TYPES})
+    return nt
+
 class SerializableRegistry(Struct):
     registry_type: str
-    registry_data: dict[str, str]
+    registry_data: dict[str, Any]
 
     def __hash__(self):
-        return hash((self.registry_type, tuple(sorted(self.registry_data.items()))))
+        from msgspec.json import encode
+        payload = encode(dict(sorted(self.registry_data.items())))
+        return hash((self.registry_type, payload))
 
     @classmethod
     def from_registry(cls, registry: Any):
-        return cls(str(type(registry)), registry.file_contents())
+        return cls(type(registry).__name__, registry.file_contents())
 
     def to_registry(self) -> Any:
-        nt = {str(k): k for k in
-              (GitHubRegistry, LocalRegistry, RemoteRegistry, ModuleRemoteRegistry)}
-        return nt[self.registry_type](**self.registry_data)
+        return self._construct(self.registry_type, self.registry_data)
 
     @classmethod
-    def from_dict(self, args: dict):
-        name = args['registry_type']
-        nt = {str(k): k for k in (GitHubRegistry, LocalRegistry, RemoteRegistry, ModuleRemoteRegistry)}
-        if isinstance(name, str) and name in nt:
-            return nt[name](**args['registry_data'])
-        if name in nt:
-            return nt[name](**args['registry_data'])
-        raise RuntimeError(f'Unknown registry type {name}')
+    def from_dict(cls, args: dict):
+        return cls._construct(args['registry_type'], args['registry_data'])
+
+    @staticmethod
+    def _construct(registry_type: str, registry_data: dict[str, Any]):
+        nt = _registry_type_map()
+        if registry_type not in nt:
+            raise RuntimeError(f'Unknown registry type {registry_type}')
+        return nt[registry_type](**registry_data)
 
 
 class InMemoryRegistry(Registry):
