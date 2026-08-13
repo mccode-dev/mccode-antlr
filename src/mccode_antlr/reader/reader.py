@@ -202,15 +202,15 @@ class Reader(Struct):
         return self._first_resolved(lambda reg: reg.fullname(name, ext), name, which, ext, strict)
 
     def known(self, name: str, which: str = None, strict: bool = False):
-        registries = self.registries if which is None else [x for x in self.registries if x.name in which]
+        registries = self._candidates(which)
         return any([reg.known(name, strict=strict) for reg in registries])
 
     def unique(self, name: str, which: str = None):
-        registries = self.registries if which is None else [x for x in self.registries if x.name in which]
+        registries = self._candidates(which)
         return sum([1 for reg in registries if reg.unique(name)]) == 1
 
     def contain(self, name: str, which: str = None, strict: bool = False):
-        registries = self.registries if which is None else [x for x in self.registries if x.name in which]
+        registries = self._candidates(which)
         return [reg.name for reg in registries if reg.known(name, strict=strict)]
 
     def stream(self, name: str, which: str = None, strict: bool = False):

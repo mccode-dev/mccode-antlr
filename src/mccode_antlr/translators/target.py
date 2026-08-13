@@ -139,14 +139,8 @@ class TargetVisitor:
 
     def file_text(self, name: str, which: str | None = None) -> str:
         """Text contents of a registry file, which may only exist in memory or on disk"""
-        regs = []
-        for reg in self._which(which):
-            if reg.known(name):
-                return reg.contents(name)
-            else:
-                regs.append(reg.name)
-        msg = "registry " + regs[0] if len(regs) == 1 else "registries: " + ','.join(regs)
-        raise RuntimeError(f'{name} not found in {msg}')
+        from ..reader.registry import resolve_from_registries
+        return resolve_from_registries(self._which(which), name, lambda reg: reg.contents(name))
 
     def configure_file(self, filename: str, flavor: str):
         """McStasMcXtrace/McCode makes use of CMake configure_file to define runtime-header macros.
