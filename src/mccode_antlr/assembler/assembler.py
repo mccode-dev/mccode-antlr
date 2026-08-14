@@ -17,6 +17,7 @@ class Assembler:
                  parent: Assembler | None = None):
         from ..reader.registry import ordered_registries, ensure_registries
         self.parent = parent
+        self._merged = False
         if parent is not None:
             if registries is not None or flavor is not None:
                 raise ValueError('A child Assembler shares its parent reader: do not provide registries or flavor')
@@ -44,11 +45,15 @@ class Assembler:
 
         The yielded object is a full Assembler sharing this one's reader, so
         every method (component, declare, parameter, nested included, ...) works.
-        If the body raises, nothing is merged.
+        If the body raises, nothing is merged and the child stays usable.
+        After a clean exit the child is invalidated: further mutating calls
+        on it raise, since changes could no longer reach the parent.
         """
+        self._assert_not_merged()
         sub = Assembler(name, parent=self)
         yield sub
         self.instrument.include(sub.instrument)
+        sub._merged = True
 
     def include(self, instr: Instr | str | Path) -> Instr:
         """Merge an instrument (an Instr, or a name/path resolvable by this
@@ -57,6 +62,7 @@ class Assembler:
         The passed Instr is absorbed and mutated: its instances are tagged and
         its REMOVABLE instances dropped, exactly as a TRACE %include would.
         """
+        self._assert_not_merged()
         if not isinstance(instr, Instr):
             instr = self.reader.get_instrument(instr)
         else:
@@ -68,6 +74,11 @@ class Assembler:
                     self.instrument.registries += (reg,)
         self.instrument.include(instr)
         return instr
+
+    def _assert_not_merged(self):
+        if self._merged:
+            raise RuntimeError(
+                f'Assembler {self.name!r} was already merged into its parent and can no longer be modified')
 
     def _lookup_component(self, name: str) -> Instance:
         scope = self
@@ -149,6 +160,7 @@ class Assembler:
         ----
         See `Assembler._handle_at` and `Assembler._handle_rotate` for details on the at and rotate arguments.
         """
+        self._assert_not_merged()
         comp_type = self.reader.get_component(type_name)
         if type_name != comp_type.name:
             raise RuntimeError(f"Component resolution failed for {type_name}, found {comp_type.name} instead")
@@ -169,6 +181,7 @@ class Assembler:
         The ignore_repeated keyword argument can be set to True in order to merely ensure that a parameter exists.
         Otherwise, repeatedly specifying the same parameter will raise a RuntimeError.
         """
+        self._assert_not_merged()
         if isinstance(par, str):
             par = InstrumentParameter.parse(par)
         if not isinstance(par, InstrumentParameter):
@@ -176,6 +189,7 @@ class Assembler:
         self.instrument.add_parameter(par, ignore_repeated=ignore_repeated)
 
     def parameters(self, *pars, **pairs):
+        self._assert_not_merged()
         for par in list(pars):
             if isinstance(par, str):
                 par = InstrumentParameter.parse(par)
@@ -195,12 +209,14 @@ class Assembler:
             self.instrument.add_parameter(value)
 
     def declare(self, string, source=None, line=-1):
+        self._assert_not_merged()
         return _rawc_call(self.instrument.DECLARE, string, source or f'{self.name}.instr', line)
 
     def declare_array(self, dtype: str, name: str, init: list, source=None, line=-1):
         return self.declare(f'{dtype} {name}[] = {{{",".join(str(x) for x in init)}}};', source=source, line=line)
 
     def user_vars(self, string, source=None, line=-1):
+        self._assert_not_merged()
         return _rawc_call(self.instrument.USERVARS, string, source or f'{self.name}.instr', line)
 
     def ensure_user_var(self, string, source=None, line=-1):
@@ -224,15 +240,19 @@ class Assembler:
         return self.user_vars(string, source=source, line=line)
 
     def initialize(self, string, source=None, line=-1):
+        self._assert_not_merged()
         return _rawc_call(self.instrument.INITIALIZE, string, source or f'{self.name}.instr', line)
 
     def save(self, string, source=None, line=-1):
+        self._assert_not_merged()
         return _rawc_call(self.instrument.SAVE, string, source or f'{self.name}.instr', line)
 
     def final(self, string, source=None, line=-1):
+        self._assert_not_merged()
         return _rawc_call(self.instrument.FINALLY, string, source or f'{self.name}.instr', line)
 
     def metadata(self, name: str, mimetype: str, value: str, source=None):
+        self._assert_not_merged()
         from mccode_antlr.common.metadata import MetaData
         self.instrument.add_metadata(MetaData.from_instrument_tokens(source, mimetype, name, value))
 

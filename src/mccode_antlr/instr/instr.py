@@ -573,9 +573,29 @@ class Instr(Struct):
         the same Instance objects with this instrument) and the child is
         stored in `self.included`. Registries are NOT merged here (see
         `Assembler.include`).
+
+        A child that was already absorbed elsewhere is refused (its instances
+        would be shared between two instruments); pass `child.detached()`
+        instead. Detection relies on instance tags, so an absorbed child with
+        no component instances is not caught -- sharing of bare code blocks is
+        accepted as low-risk.
         """
-        if child.name == self.name or any(x.name == child.name for x in self.included):
-            raise RuntimeError(f"Cannot include {child.name!r} into {self.name!r}: instrument name already in use")
+        if any(x.source == child.name for x in child.components):
+            raise RuntimeError(
+                f"{child.name!r} appears to have already been included into an instrument: its component "
+                f"instances carry its own name as their source tag, and including it again would share the "
+                f"same Instance objects between two instruments (mutations through one would silently affect "
+                f"the other, while serialization would still split them). Include a detached copy instead: "
+                f"parent.include(child.detached())"
+            )
+        overlap = set(self._included_tree_names()) & set(child._included_tree_names())
+        if overlap:
+            raise RuntimeError(
+                f"Cannot include {child.name!r} into {self.name!r}: instrument name(s) {sorted(overlap)} would "
+                f"appear more than once in the include tree. Including the same instrument multiple times is "
+                f"not representable, even in the McCode-legal case where all non-removable instances are COPY "
+                f"auto-named, because auto-generated instance names depend on their position."
+            )
         for instance in child.components:
             if not instance.removable and any(x.name == instance.name for x in self.components):
                 raise RuntimeError(f"Cannot include {child.name!r}: component instance {instance.name!r} already present")
@@ -754,6 +774,19 @@ class Instr(Struct):
         copy.registries = tuple(x for x in self.registries)
         _restore_included_components(copy)
         return copy
+
+    def detached(self) -> Instr:
+        """A copy safe to `include` into another instrument.
+
+        Instances are fresh objects (via `copy`) and this instrument's own
+        provenance tags are cleared so `include` will re-tag them; tags from
+        deeper nested includes are preserved.
+        """
+        dup = self.copy()
+        for instance in dup.components:
+            if instance.source == dup.name:
+                instance.source = None
+        return dup
 
     def split(self, at, remove_unused_parameters=False):
         """Produces two instruments, both containing the indicated component
