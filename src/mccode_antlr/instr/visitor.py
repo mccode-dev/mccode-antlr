@@ -82,28 +82,7 @@ class InstrVisitor(McInstrVisitor):
             logger.critical(f'including {quoted_filename} from {self.filename}, which is itself included from {self.destination.name}')
             logger.critical('Expect component referencing errors, as the implementation does not cover this use case.')
         instr = self.parent.get_instrument(quoted_filename.strip('"'), destination=self.state)
-        # TODO work out how/what to copy from the other instrument into this one
-        self.state.add_included(instr.name)
-        for par in instr.parameters:
-            self.state.add_parameter(par, ignore_repeated=True)
-        for meta in instr.metadata:
-            self.state.add_metadata(meta)
-        if len(instr.declare):
-            self.state.declare += instr.declare
-        if len(instr.user):
-            self.state.user += instr.user
-        if len(instr.initialize):
-            self.state.initialize += instr.initialize
-        if len(instr.save):
-            self.state.save += instr.save
-        if len(instr.final):
-            self.state.final += instr.final
-        # McCode3 parsed everything in one memory space, so used some trickery to include
-        # component instances from one instrument into another. Here we can be a bit more straightforward
-        for instance in instr.components:
-            if not instance.removable:
-                self.state.add_component(instance)
-        # Group membership is determined after all parsing, so nothing to do here
+        self.state.include(instr)
 
     def visitComponent_instance(self, ctx: McInstrParser.Component_instanceContext):
         from ..comp import Comp

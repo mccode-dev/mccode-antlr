@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
+from pathlib import Path
 from typing import Union
 from ..common import Expr, InstrumentParameter
 from ..instr import Instr, Instance
@@ -11,8 +13,17 @@ from mccode_antlr.instr.orientation import Vector, Angles
 class Assembler:
     """Interactive instrument assembly"""
 
-    def __init__(self, name: str, registries: list[Registry] = None, flavor: Flavor | None = None):
+    def __init__(self, name: str, registries: list[Registry] = None, flavor: Flavor | None = None,
+                 parent: Assembler | None = None):
         from ..reader.registry import ordered_registries, ensure_registries
+        self.parent = parent
+        if parent is not None:
+            if registries is not None or flavor is not None:
+                raise ValueError('A child Assembler shares its parent reader: do not provide registries or flavor')
+            self.reader = parent.reader
+            self.instrument = Instr(name, source='interactive')
+            self.instrument.registries = self.reader.registries
+            return
         if flavor is not None:
             if isinstance(flavor, str):
                 raise ValueError('flavor must be a Flavor Enum or None')
@@ -22,6 +33,61 @@ class Assembler:
         self.instrument = Instr(name, source='interactive')
         self.reader = Reader(registries=registries) if registries is not None else Reader()
         self.instrument.registries = self.reader.registries
+
+    @contextmanager
+    def included(self, name: str):
+        """Build a child instrument inline; on clean exit it is merged into this
+        instrument with provenance tags and stored in `instrument.included`.
+
+        >>> with assembler.included('guide_section') as sub:
+        ...     sub.component('g1', 'Arm', at=((0, 0, 1), 'origin'))
+
+        The yielded object is a full Assembler sharing this one's reader, so
+        every method (component, declare, parameter, nested included, ...) works.
+        If the body raises, nothing is merged.
+        """
+        sub = Assembler(name, parent=self)
+        yield sub
+        self.instrument.include(sub.instrument)
+
+    def include(self, instr: Instr | str | Path) -> Instr:
+        """Merge an instrument (an Instr, or a name/path resolvable by this
+        assembler's reader) into this one, with provenance tags.
+
+        The passed Instr is absorbed and mutated: its instances are tagged and
+        its REMOVABLE instances dropped, exactly as a TRACE %include would.
+        """
+        if not isinstance(instr, Instr):
+            instr = self.reader.get_instrument(instr)
+        else:
+            # registry merge lives here, not in Instr.include, because
+            # loader.parse_mccode_instr concatenates registries after parsing
+            # and would duplicate them if Instr.include also merged
+            for reg in instr.registries:
+                if all(r.name != reg.name for r in self.instrument.registries):
+                    self.instrument.registries += (reg,)
+        self.instrument.include(instr)
+        return instr
+
+    def _lookup_component(self, name: str) -> Instance:
+        scope = self
+        while scope is not None:
+            try:
+                return scope.instrument.get_component(name)
+            except (RuntimeError, IndexError):  # IndexError: 'PREVIOUS' on an empty child
+                scope = scope.parent
+        raise RuntimeError(f'No component instance named {name!r} in this assembler or its parent(s)')
+
+    def _check_expr(self, expr):
+        if not isinstance(expr, Expr):
+            expr = Expr.best(expr)
+        names = []
+        scope = self
+        while scope is not None:
+            names.extend(x.name for x in scope.instrument.parameters)
+            scope = scope.parent
+        expr.verify_parameters(names)
+        return expr
 
     @property
     def name(self):
@@ -39,13 +105,13 @@ class Assembler:
             if 'absolute' == ref.lower():
                 ref = None
             elif isinstance(ref, str):
-                # Get the component instance by name
-                ref = self.instrument.get_component(ref)
+                # Get the component instance by name, searching parent assemblers too
+                ref = self._lookup_component(ref)
             else:
                 raise RuntimeError(f'No logic pathway for instance reference {ref}')
         if not hasattr(v, '__len__') or len(v) != 3:
             raise RuntimeError('Position/orientation must have three elements')
-        v = tuple(self.instrument.check_expr(x) for x in v)
+        v = tuple(self._check_expr(x) for x in v)
         return (v[0], v[1], v[2]), ref
 
     def _handle_at(self, a=None) -> tuple[Vector, Union[Instance, None]]:
@@ -129,13 +195,13 @@ class Assembler:
             self.instrument.add_parameter(value)
 
     def declare(self, string, source=None, line=-1):
-        return _rawc_call(self.instrument.DECLARE, string, source, line)
+        return _rawc_call(self.instrument.DECLARE, string, source or f'{self.name}.instr', line)
 
     def declare_array(self, dtype: str, name: str, init: list, source=None, line=-1):
         return self.declare(f'{dtype} {name}[] = {{{",".join(str(x) for x in init)}}};', source=source, line=line)
 
     def user_vars(self, string, source=None, line=-1):
-        return _rawc_call(self.instrument.USERVARS, string, source, line)
+        return _rawc_call(self.instrument.USERVARS, string, source or f'{self.name}.instr', line)
 
     def ensure_user_var(self, string, source=None, line=-1):
         # tying the Assembler to work with C might not be great
@@ -158,13 +224,13 @@ class Assembler:
         return self.user_vars(string, source=source, line=line)
 
     def initialize(self, string, source=None, line=-1):
-        return _rawc_call(self.instrument.INITIALIZE, string, source, line)
+        return _rawc_call(self.instrument.INITIALIZE, string, source or f'{self.name}.instr', line)
 
     def save(self, string, source=None, line=-1):
-        return _rawc_call(self.instrument.SAVE, string, source, line)
+        return _rawc_call(self.instrument.SAVE, string, source or f'{self.name}.instr', line)
 
     def final(self, string, source=None, line=-1):
-        return _rawc_call(self.instrument.FINALLY, string, source, line)
+        return _rawc_call(self.instrument.FINALLY, string, source or f'{self.name}.instr', line)
 
     def metadata(self, name: str, mimetype: str, value: str, source=None):
         from mccode_antlr.common.metadata import MetaData

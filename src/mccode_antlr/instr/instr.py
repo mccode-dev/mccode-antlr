@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 from io import StringIO
+from pathlib import Path
 from msgspec import Struct, field
 from typing import Optional
 from ..common import InstrumentParameter, MetaData, parameter_name_present, RawC, blocks_to_raw_c, Expr
@@ -23,7 +24,7 @@ class Instr(Struct):
     parameters: tuple[InstrumentParameter, ...] = field(default_factory=tuple)  # runtime-set instrument parameters
     metadata: tuple[MetaData, ...] = field(default_factory=tuple)  # metadata for use by simulation consumers
     components: tuple[Instance, ...] = field(default_factory=tuple)  #
-    included: tuple[str, ...] = field(default_factory=tuple)  # names of included instr definition(s)
+    included: tuple[Instr, ...] = field(default_factory=tuple)  # Instr(s) %include-d into this one's TRACE
     user: tuple[RawC, ...] = field(default_factory=tuple)  # struct members for _particle
     declare: tuple[RawC, ...] = field(default_factory=tuple)  # global parameters used in component trace
     initialize: tuple[RawC, ...] = field(default_factory=tuple)  # initialization of global declare parameters
@@ -40,7 +41,7 @@ class Instr(Struct):
         from mccode_antlr.instr.instance import make_independent
         from mccode_antlr.instr.flow import FlowEdgeRecord
         popt = 'name', 'source'
-        tpreq = 'included', 'dependency',
+        tpreq = 'dependency',
         tmtype = {'parameters': InstrumentParameter, 'metadata': MetaData,
                  'instances': DepInstance, 'user': RawC, 'declare': RawC,
                   'initialize': RawC, 'save': RawC, 'final': RawC, 'registries': SR
@@ -64,7 +65,10 @@ class Instr(Struct):
         components = data.pop('components')
         data['components'] = make_independent(instances, components)
         data['flow_edges'] = tuple(FlowEdgeRecord.from_dict(a) for a in args.get('flow_edges', []))
-        return cls(**data)
+        data['included'] = tuple(cls.from_dict(a) for a in args.get('included', ()))
+        instr = cls(**data)
+        _restore_included_components(instr)
+        return instr
 
     def to_dict(self):
         from msgspec.structs import fields
@@ -78,7 +82,15 @@ class Instr(Struct):
                               for r in with_embedded_files(self.registries, self)]
         data['instances'] = instances
         data['components'] = components
+        data['included'] = tuple(child._to_included_dict() for child in self.included)
         return data
+
+    def _to_included_dict(self) -> dict:
+        """Serialized form of an included child: instances live only in the top-level dict."""
+        d = self.to_dict()  # recursion covers grandchildren
+        d['instances'] = ()
+        d['components'] = {}
+        return d
 
     def __eq__(self, other):
         if not isinstance(other, Instr):
@@ -96,48 +108,118 @@ class Instr(Struct):
             self.final, self.registries, self.dependency
         ))
 
-    def to_file(self, output=None, wrapper=None):
+    def to_file(self, output=None, wrapper=None, flat: bool = True):
         if output is None:
             output = StringIO()
         if wrapper is None:
             from mccode_antlr.common import TextWrapper
             wrapper = TextWrapper(width=120)
+        if flat or not self.included:
+            sections = {key: getattr(self, key)
+                        for key in ('parameters', 'metadata', 'declare', 'user',
+                                    'initialize', 'save', 'final', 'dependency')}
+            owners = {}
+        else:
+            sections, owners = self._hierarchical_view()
         print(wrapper.start_block_comment(f"Instrument {self.name or 'None'}"), file=output)
         print(wrapper.line('Instrument:', [self.name or 'None']), file=output)
         print(wrapper.line('Source:', [self.source or 'None']), file=output)
-        print(wrapper.line('Contains:', [f'"%include {include}"' for include in self.included]), file=output)
+        print(wrapper.line('Contains:', [f'"%include {include.name}"' for include in self.included]), file=output)
         print(wrapper.line('Registries:', [registry.name for registry in self.registries]), file=output)
         for registry in self.registries:
             registry.to_file(output=output, wrapper=wrapper)
         print(wrapper.end_block_comment(), file=output)
 
-        instr_parameters = wrapper.hide(', '.join(p.to_string(wrapper=wrapper) for p in self.parameters))
+        instr_parameters = wrapper.hide(', '.join(p.to_string(wrapper=wrapper) for p in sections['parameters']))
         first_line = wrapper.line('DEFINE INSTRUMENT', [f"{self.name or 'None'}({instr_parameters})"])
         print(first_line, file=output)
 
-        for metadata in self.metadata:
+        for metadata in sections['metadata']:
             metadata.to_file(output=output, wrapper=wrapper)
         # Print only the .instr-added DEPENDENCY line(s) here -- .comp DEPENDENCY excluded
-        if self.dependency:
-            print(wrapper.quoted_line('DEPENDENCY ', list(self.dependency)), file=output)
+        if sections['dependency']:
+            print(wrapper.quoted_line('DEPENDENCY ', list(sections['dependency'])), file=output)
 
-        if self.declare:
-            print(wrapper.block('DECLARE', _join_raw_tuple(self.declare)), file=output)
-        if self.user:
-            print(wrapper.block('USERVARS', _join_raw_tuple(self.user)), file=output)
-        if self.initialize:
-            print(wrapper.block('INITIALIZE', _join_raw_tuple(self.initialize)), file=output)
+        if sections['declare']:
+            print(wrapper.block('DECLARE', _join_raw_tuple(sections['declare'])), file=output)
+        if sections['user']:
+            print(wrapper.block('USERVARS', _join_raw_tuple(sections['user'])), file=output)
+        if sections['initialize']:
+            print(wrapper.block('INITIALIZE', _join_raw_tuple(sections['initialize'])), file=output)
 
         print(wrapper.start_list('TRACE'), file=output)
+        emitted = set()
+        previous_owner = None
         for instance in self.components:
+            owner = owners.get(instance.source)
+            if owner is not None:
+                if owner.name not in emitted:
+                    emitted.add(owner.name)
+                    print(wrapper.start_list_item(), file=output)
+                    print(wrapper.line('%include', [f'"{owner.name}.instr"']), file=output)
+                    print(wrapper.end_list_item(), file=output)
+                elif previous_owner is not owner:
+                    logger.warning(
+                        f'Instance {instance.name} from {owner.name} is not contiguous with its'
+                        f' %include group; it will appear at a shifted position when reparsed')
+                previous_owner = owner
+                continue
+            previous_owner = None
             print(wrapper.start_list_item(), file=output)
             instance.to_file(output, wrapper)
             print(wrapper.end_list_item(), file=output)
-        if self.save:
-            print(wrapper.block('SAVE', _join_raw_tuple(self.save)), file=output)
-        if self.final:
-            print(wrapper.block('FINALLY', _join_raw_tuple(self.final)), file=output)
+        if sections['save']:
+            print(wrapper.block('SAVE', _join_raw_tuple(sections['save'])), file=output)
+        if sections['final']:
+            print(wrapper.block('FINALLY', _join_raw_tuple(sections['final'])), file=output)
         print(wrapper.end_list('END'), file=output)
+
+    def _included_tree_names(self) -> list:
+        """This instrument's name plus every name in its included tree (with duplicates, for checking)."""
+        names = [self.name]
+        for child in self.included:
+            names += child._included_tree_names()
+        return names
+
+    def _hierarchical_view(self) -> tuple[dict, dict]:
+        """(sections, owners) for non-flat writing.
+
+        `sections` maps each merged-content field name to a tuple with all
+        included-child content subtracted by equality; `owners` maps every
+        source-tag name in the included tree to its TOP-LEVEL child Instr.
+        """
+        sections = {key: getattr(self, key)
+                    for key in ('parameters', 'metadata', 'declare', 'user',
+                                'initialize', 'save', 'final', 'dependency')}
+        warn = {'declare', 'user', 'initialize', 'save', 'final'}
+        for child in self.included:
+            for key in sections:
+                sections[key] = _subtract_tuple(sections[key], getattr(child, key), key in warn)
+        owners = {}
+        for child in self.included:
+            for name in child._included_tree_names():
+                owners[name] = child
+        return sections, owners
+
+    def to_files(self, directory, wrapper=None) -> Path:
+        """Write this instrument and its included tree as one .instr file each.
+
+        The parent file contains `%include "{child}.instr"` directives in place
+        of the merged content; each included Instr is written (recursively) to
+        `{child.name}.instr` in the same directory. Returns the parent's path.
+        """
+        directory = Path(directory)
+        directory.mkdir(parents=True, exist_ok=True)
+        names = self._included_tree_names()
+        duplicates = {n for n in names if names.count(n) > 1}
+        if duplicates:
+            raise RuntimeError(f'Cannot write instrument hierarchy with duplicated names {duplicates}')
+        for child in self.included:
+            child.to_files(directory, wrapper=wrapper)
+        path = directory / f'{self.name}.instr'
+        with path.open('w') as output:
+            self.to_file(output, wrapper, flat=False)
+        return path
 
     def to_string(self, wrapper):
         from io import StringIO
@@ -479,8 +561,52 @@ class Instr(Struct):
         """
         return [inst.name for inst in self.components if category in inst.type.category]
 
-    def add_included(self, name: str):
-        self.included += (name,)
+    def include(self, child: Instr) -> Instr:
+        """Merge an already-parsed Instr into this one, keeping provenance.
+
+        Implements TRACE `%include` semantics: parameters merge first-wins,
+        metadata merges by name (child replaces), C blocks concatenate,
+        DEPENDENCY flags merge de-duplicated, and non-removable child
+        component instances are appended, tagged with `source=child.name`
+        unless already tagged by a deeper include. The child is absorbed:
+        its `components` tuple is trimmed to the merged instances (sharing
+        the same Instance objects with this instrument) and the child is
+        stored in `self.included`. Registries are NOT merged here (see
+        `Assembler.include`).
+        """
+        if child.name == self.name or any(x.name == child.name for x in self.included):
+            raise RuntimeError(f"Cannot include {child.name!r} into {self.name!r}: instrument name already in use")
+        for instance in child.components:
+            if not instance.removable and any(x.name == instance.name for x in self.components):
+                raise RuntimeError(f"Cannot include {child.name!r}: component instance {instance.name!r} already present")
+        removable = sum(1 for x in child.components if x.removable)
+        if removable:
+            logger.info(f'Dropping {removable} REMOVABLE component instance(s) of included instrument {child.name}')
+            child.components = tuple(x for x in child.components if not x.removable)
+        # Tag BEFORE add_component so instance hashes are stable before anything caches them
+        for instance in child.components:
+            if instance.source is None:
+                instance.source = child.name
+        for par in child.parameters:
+            self.add_parameter(par, ignore_repeated=True)
+        for meta in child.metadata:
+            self.add_metadata(meta)
+        if len(child.declare):
+            self.declare += child.declare
+        if len(child.user):
+            self.user += child.user
+        if len(child.initialize):
+            self.initialize += child.initialize
+        if len(child.save):
+            self.save += child.save
+        if len(child.final):
+            self.final += child.final
+        # NOTE behavior change: the old visitor merge silently dropped the child's DEPENDENCY
+        self.dependency += tuple(d for d in child.dependency if d not in self.dependency)
+        for instance in child.components:
+            self.add_component(instance)
+        self.included += (child,)
+        return child
 
     def DEPENDENCY(self, *strings):
         self.dependency += strings
@@ -617,7 +743,7 @@ class Instr(Struct):
         if last < 0:
             last += 1 + len(self.components)
         copy.components = tuple(x.copy() for x in self.components[first:last])
-        copy.included = tuple(x for x in self.included)
+        copy.included = tuple(x.copy() for x in self.included)
         copy.user = tuple(x.copy() for x in self.user)
         copy.declare = tuple(x.copy() for x in self.declare)
         copy.initialize = tuple(x.copy() for x in self.initialize)
@@ -626,6 +752,7 @@ class Instr(Struct):
         # copy.groups = {k: v.copy() for k, v in self.groups.items()}
         copy.dependency = tuple(x for x in self.dependency)
         copy.registries = tuple(x for x in self.registries)
+        _restore_included_components(copy)
         return copy
 
     def split(self, at, remove_unused_parameters=False):
@@ -680,6 +807,12 @@ class Instr(Struct):
         if second.check_instrument_parameters(remove=remove_unused_parameters) and not remove_unused_parameters:
             logger.info(f'Instrument {second.name} has unused instrument parameters')
 
+        # A split instrument no longer corresponds to any file hierarchy
+        for part in (first, second):
+            part.included = ()
+            for instance in part.components:
+                instance.source = None
+
         return first, second
 
     def make_instance(self, name, component, at_relative=None, rotate_relative=None,
@@ -693,7 +826,7 @@ class Instr(Struct):
             reader = Reader(registries=list(self.registries))
             component = reader.get_component(component)
         self.components += (Instance(name, component, at_relative, rotate_relative,
-                                     parameters, group, removable),)
+                                     parameters=parameters, group=group, removable=removable),)
 
     def resolve_orientations(self) -> dict:
         """Resolve absolute orientations for every component in declaration order.
@@ -825,6 +958,44 @@ class Instr(Struct):
 
 def _join_raw_tuple(raw_tuple: tuple[RawC, ...]):
     return '\n'.join([str(rc) for rc in raw_tuple])
+
+
+def _restore_included_components(instr: Instr) -> None:
+    """Re-link each included child's components to the top-level instance pool.
+
+    Instances are (de)serialized once, in the top-level Instr; each tree node's
+    components are the pool instances whose `source` names something in that
+    node's subtree. Order follows the pool, so it is preserved even when
+    child-sourced instances are not contiguous.
+    """
+    pool = instr.components
+
+    def tree_names(node: Instr) -> set:
+        names = {node.name}
+        for child in node.included:
+            names |= tree_names(child)
+        return names
+
+    def assign(node: Instr) -> None:
+        names = tree_names(node)
+        node.components = tuple(x for x in pool if x.source in names)
+        for child in node.included:
+            assign(child)
+
+    for child in instr.included:
+        assign(child)
+
+
+def _subtract_tuple(parent: tuple, child: tuple, warn: bool) -> tuple:
+    """Remove, for each element of `child`, the first ==-equal element of `parent`."""
+    remaining = list(parent)
+    for item in child:
+        try:
+            remaining.remove(item)
+        except ValueError:
+            if warn:
+                logger.warning(f'Included content not found in parent during hierarchical write: {item!r}')
+    return tuple(remaining)
 
 
 @lru_cache
