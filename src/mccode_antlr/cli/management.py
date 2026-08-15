@@ -184,6 +184,7 @@ def mccode_management_parser():
     from argparse import ArgumentParser
     from mccode_antlr.cli.datafile import add_datafile_management_parser
     from mccode_antlr.cli.convert import add_convert_management_parser
+    from mccode_antlr.cli.extract import add_extract_management_parser
     parser = ArgumentParser(prog="mccode-antlr",
                             description='Manage mccode-antlr')
     modes = parser.add_subparsers(title='mode', help='Mode')
@@ -191,6 +192,7 @@ def mccode_management_parser():
     add_config_management_parser(modes)
     add_datafile_management_parser(modes)
     add_convert_management_parser(modes)
+    add_extract_management_parser(modes)
     return parser
 
 

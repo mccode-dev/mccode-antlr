@@ -156,7 +156,7 @@ class TestSerialization:
 
     def test_python_export_round_trips_including_binary(self):
         """The emitted expression previously referenced an undefined `name`."""
-        from mccode_antlr.export.python import _handle_registry
+        from mccode_antlr.io.python import _handle_registry
         from mccode_antlr.reader.registry import InMemoryRegistry
         reg = _registry()
         rep, _ = _handle_registry(reg)

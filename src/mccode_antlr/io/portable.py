@@ -33,8 +33,13 @@ def _config_flag(name: str, default):
     return key.get() if key.exists() else default
 
 
-def _resolve(registries, name: str):
-    """First registry that both claims and can deliver *name*, or None."""
+def resolve_registry_and_path(registries, name: str):
+    """First registry that both claims and can deliver *name*, or (None, None).
+
+    Shared by the embedding logic below and by `io/extract.py`, which needs the
+    same "which registry actually supplies this name" answer to classify a
+    dependency as local or remote at extraction time.
+    """
     for reg in registries:
         try:
             if not reg.known(name):
@@ -94,6 +99,43 @@ def deposit_embedded_data_files(instr, destination) -> list:
     return written
 
 
+def deposit_all_embedded_files(instr, destination) -> list:
+    """Write every embedded/stashed file to *destination*, flat (basename only).
+
+    Unlike `deposit_embedded_data_files`, which only writes files an instrument
+    parameter names (so the compiled binary can find them at runtime), this
+    writes the full contents of every InMemoryRegistry on the instrument --
+    headers and libraries as well as data files -- for `io/extract.py`, which
+    wants a complete, inspectable bundle rather than just what a compiled
+    binary needs.
+    """
+    from pathlib import Path
+    embedded = [reg for reg in (instr.registries or []) if isinstance(reg, InMemoryRegistry)]
+    if not embedded or destination is None:
+        return []
+    written = []
+    for reg in embedded:
+        for name in reg.filenames():
+            target = Path(destination) / Path(name).name
+            payload = reg.contents_bytes(name)
+            if target.exists():
+                if target.read_bytes() != payload:
+                    logger.warning(
+                        f'{instr.name}: not overwriting {target}, which differs from the copy '
+                        f'embedded in the instrument as {name!r}; the existing file will be used'
+                    )
+                continue
+            try:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(payload)
+            except OSError as error:
+                logger.warning(f'{instr.name}: could not write {target}: {error}')
+                continue
+            logger.info(f'{instr.name}: deposited embedded file {name!r} -> {target}')
+            written.append(target)
+    return written
+
+
 def _data_file_candidates(instr) -> list[str]:
     """String-valued component parameters that name a file.
 
@@ -127,27 +169,25 @@ def _getpath_candidates(instr) -> list[str]:
     return [n for n in dict.fromkeys(names) if n]
 
 
-def embedded_registry(instr, size_limit_mb: float | None = None) -> InMemoryRegistry | None:
-    """Pack the local files *instr* needs into an InMemoryRegistry, or None.
+def collect_dependency_payloads(instr, registries, accept, budget: int | None = None):
+    """BFS over the %include/data-file/GETPATH names *instr* depends on.
 
     Resolution runs against every registry so a remote header that includes a
-    local file is still found, but only files that land in a LocalRegistry are
-    embedded. Names are followed transitively, since share libraries include
-    further files.
+    local file is still found, but a name is only read (and, transitively,
+    followed into further %includes -- share libraries include further files)
+    when ``accept(registry)`` is true for whichever registry resolved it.
+    Everything else is left alone.
+
+    Shared by `embedded_registry` (accept=LocalRegistry only, budget-limited,
+    feeds the serialized-JSON embedding feature) and `io/extract.py`'s
+    dependency writer (accept configurable via --include-remote, unbounded).
+
+    Returns (payloads, unresolved_include_names). Names are tracked with their
+    provenance: only %include names are hard requirements -- the translator
+    fails outright on one it cannot resolve. Data file and GETPATH names are
+    heuristic guesses (filename="D0_Source.psd" names an *output*), so an
+    unresolved one means nothing and must not be reported.
     """
-    registries = [r for r in ordered_registries(list(instr.registries))
-                  if not isinstance(r, InMemoryRegistry)]
-    if not any(isinstance(r, LocalRegistry) for r in registries):
-        return None
-
-    if size_limit_mb is None:
-        size_limit_mb = _config_flag('embed_size_limit_mb', 32)
-    budget = int(float(size_limit_mb) * 1024 * 1024)
-
-    # Names are tracked with their provenance. Only %include names are hard
-    # requirements -- the translator fails outright on one it cannot resolve. Data
-    # file and GETPATH names are heuristic guesses (filename="D0_Source.psd" names
-    # an *output*), so an unresolved one means nothing and must not be reported.
     pending: list[tuple[str, str]] = []
 
     def queue_includes(text: str):
@@ -165,40 +205,56 @@ def embedded_registry(instr, size_limit_mb: float | None = None) -> InMemoryRegi
     pending.extend((name, 'optional') for name in _data_file_candidates(instr))
     pending.extend((name, 'optional') for name in _getpath_candidates(instr))
 
-    embedded, seen, total, unresolved = {}, set(), 0, []
+    payloads, seen, total, unresolved = {}, set(), 0, []
     while pending:
         name, kind = pending.pop(0)
         if name in seen:
             continue
         seen.add(name)
-        reg, path = _resolve(registries, name)
+        reg, path = resolve_registry_and_path(registries, name)
         if reg is None:
             if kind == 'include':
                 unresolved.append(name)
             continue
-        if not isinstance(reg, LocalRegistry):
-            # Supplied by a remote registry: reachable anywhere by name and
-            # content hash, so not ours to carry.
+        if not accept(reg):
             continue
         try:
             payload = path.read_bytes()
         except OSError as error:
-            logger.warning(f'Could not embed {name} from {reg.name!r}: {error}')
+            logger.warning(f'Could not read {name} from {reg.name!r}: {error}')
             continue
-        if total + len(payload) > budget:
+        if budget is not None and total + len(payload) > budget:
             logger.warning(
                 f'Not embedding {name} ({len(payload)} bytes): the serialized instrument '
-                f'would exceed serialization.embed_size_limit_mb ({size_limit_mb} MB). '
+                f'would exceed serialization.embed_size_limit_mb ({budget / 1024 / 1024:.0f} MB). '
                 'Raise the limit, or supply the directory with -I/--search-dir when loading.'
             )
             continue
-        embedded[name] = payload
+        payloads[name] = payload
         total += len(payload)
         # Followed transitively: a share library may %include further files.
         try:
             queue_includes(payload.decode('utf-8'))
         except UnicodeDecodeError:
             pass
+
+    return payloads, unresolved
+
+
+def embedded_registry(instr, size_limit_mb: float | None = None) -> InMemoryRegistry | None:
+    """Pack the local files *instr* needs into an InMemoryRegistry, or None."""
+    registries = [r for r in ordered_registries(list(instr.registries))
+                  if not isinstance(r, InMemoryRegistry)]
+    if not any(isinstance(r, LocalRegistry) for r in registries):
+        return None
+
+    if size_limit_mb is None:
+        size_limit_mb = _config_flag('embed_size_limit_mb', 32)
+    budget = int(float(size_limit_mb) * 1024 * 1024)
+
+    embedded, unresolved = collect_dependency_payloads(
+        instr, registries, accept=lambda reg: isinstance(reg, LocalRegistry), budget=budget,
+    )
 
     if unresolved:
         # Not an error: saving an instrument that does not yet translate is
@@ -220,6 +276,7 @@ def embedded_registry(instr, size_limit_mb: float | None = None) -> InMemoryRegi
     registry = InMemoryRegistry(EMBEDDED_REGISTRY_NAME, priority=REGISTRY_PRIORITY_MEDIUM)
     for name, payload in embedded.items():
         registry.add(name, payload)
+    total = sum(len(v) for v in embedded.values())
     logger.debug(f'Embedded {len(embedded)} local file(s) ({total} bytes) in {instr.name}')
     return registry
 

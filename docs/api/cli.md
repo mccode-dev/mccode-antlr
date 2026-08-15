@@ -31,7 +31,9 @@ Translate a McCode `.instr` file to C source code.
 | `--main` / `--no-main` | on | Emit a `main()` entry point (`--no-main` for external embedding) |
 | `--runtime` / `--no-runtime` | on | Embed McCode run-time libraries in the generated C |
 | `--verbose` / `--no-verbose` | off | Verbose output during translation |
-| `-L` / `--line-directives` / `--no-line-directives` | off | Emit `#line` directives in generated C (aids debugger source mapping) |
+| `-g`, `--debug` / `--no-debug` | off | Emit debugging information in the generated C: `#line` directives and absolute source paths in `SIG_MESSAGE`. Without it, source locations are named relative to the registry that supplied them, so the output does not depend on this machine |
+| `-L` / `--line-directives` / `--no-line-directives` | — | Deprecated alias for `-g`/`--debug` |
+| `--trust-local-registries` / `--no-trust-local-registries` | off | Trust local registries restored from a serialized (`.json`) instrument |
 | `-v`, `--version` | — | Print the McCode version and exit |
 
 
@@ -179,6 +181,7 @@ mccode-antlr SUBCOMMAND [OPTIONS]
 | `config` | Manage the mccode-antlr configuration |
 | `datafile` | Work with McCode data files (Bragg tables, SQW files, …) |
 | `convert` | Convert instrument descriptions between `.instr`, `.json`, and Python assembler scripts |
+| `extract` | Reconstitute a portable instrument (`.instr` or `.json`) into a directory |
 
 ---
 
@@ -254,3 +257,25 @@ mccode-antlr convert INPUT [-o OUTPUT] [--to {python,json,instr}] [--flavor {mcs
 | `--flavor` | Flavor used when reading `.instr` input (`mcstas` default) |
 | `-I`, `--search-dir` | Extra component search directory when reading `.instr` |
 | `--optimize` | Enable conservative loop-compaction for repeated component sequences (only with `--to python`) |
+| `--trust-local-registries` | Trust local registries restored from a serialized (`.json`) instrument |
+
+---
+
+#### `mccode-antlr extract`
+
+Reconstitute a portable instrument into a directory: the `.instr` file (and any `%include`-d instruments, per the include hierarchy), every stashed/embedded local file, and the component (`.comp`) definitions it needs. Everything is written flat into one directory — no subfolders — so the result can be translated or compiled from inside that directory with no `-I`/`--search-dir` needed.
+
+By default, only component definitions and dependency files not otherwise available from a remote registry are written (a component shipped with mcstas/mcxtrace, for example, is skipped since it's already fetchable by name elsewhere). Pass `--include-remote` for a fully self-contained bundle that also reconstructs those.
+
+```bash
+mccode-antlr extract INPUT [-o OUTPUT_DIR] [--flavor {mcstas,mcxtrace}] [-I DIR ...] [--include-remote]
+```
+
+| Flag | Description |
+|---|---|
+| `INPUT` | Input file (`.instr` or `.json`) |
+| `-o`, `--output` | Output directory (if omitted, inferred as `<stem>.extracted`) |
+| `--flavor` | Flavor used when reading `.instr` input (`mcstas` default) |
+| `-I`, `--search-dir` | Extra component search directory when reading `.instr` |
+| `--trust-local-registries` | Trust local registries restored from a serialized (`.json`) instrument |
+| `--include-remote` | Also extract component definitions and dependency files available from a remote registry, for a fully self-contained bundle |
