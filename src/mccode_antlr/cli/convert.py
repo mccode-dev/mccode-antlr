@@ -2,8 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from mccode_antlr import Flavor
-from mccode_antlr.instr import Instr
+from mccode_antlr.cli._common import load_instr
 
 
 _TARGET_EXTENSION = {
@@ -36,22 +35,6 @@ def _default_output_path(input_path: Path, target: str) -> Path:
     return input_path.with_suffix(suffix)
 
 
-def _load_instr(path: Path, flavor: str, search_dir: list[Path] | None):
-    if path.suffix.lower() == '.json':
-        from mccode_antlr.io.json import load_json
-        from mccode_antlr.reader.registry import with_local_registries
-        instr = with_local_registries(load_json(path), Flavor[flavor.upper()], search_dir)
-    elif path.suffix.lower() == '.instr':
-        from mccode_antlr.reader import Reader, collect_local_registries
-        registries = collect_local_registries(Flavor[flavor.upper()], search_dir)
-        instr = Reader(registries=registries).get_instrument(path)
-    else:
-        raise ValueError(f"Unsupported input file type {path.suffix!r}; expected .instr or .json")
-    if not isinstance(instr, Instr):
-        raise RuntimeError(f'Input {path} did not resolve to an Instr object')
-    return instr
-
-
 def convert(
         filename: str,
         output: str | None = None,
@@ -69,7 +52,7 @@ def convert(
 
     destination = Path(output).resolve() if output is not None else _default_output_path(source, target)
 
-    instr = _load_instr(source, flavor, search_dir)
+    instr = load_instr(source, flavor, search_dir)
 
     if target == 'python':
         from mccode_antlr.export import save_instr_as_python
