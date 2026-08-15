@@ -1091,6 +1091,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#mccode-antlr-extract" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        mccode-antlr extract
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1378,6 +1389,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#mccode-antlr-extract" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        mccode-antlr extract
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1480,9 +1502,19 @@
 <td>Verbose output during translation</td>
 </tr>
 <tr>
-<td><code>-L</code> / <code>--line-directives</code> / <code>--no-line-directives</code></td>
+<td><code>-g</code>, <code>--debug</code> / <code>--no-debug</code></td>
 <td>off</td>
-<td>Emit <code>#line</code> directives in generated C (aids debugger source mapping)</td>
+<td>Emit debugging information in the generated C: <code>#line</code> directives and absolute source paths in <code>SIG_MESSAGE</code>. Without it, source locations are named relative to the registry that supplied them, so the output does not depend on this machine</td>
+</tr>
+<tr>
+<td><code>-L</code> / <code>--line-directives</code> / <code>--no-line-directives</code></td>
+<td>—</td>
+<td>Deprecated alias for <code>-g</code>/<code>--debug</code></td>
+</tr>
+<tr>
+<td><code>--trust-local-registries</code> / <code>--no-trust-local-registries</code></td>
+<td>off</td>
+<td>Trust local registries restored from a serialized (<code>.json</code>) instrument</td>
 </tr>
 <tr>
 <td><code>-v</code>, <code>--version</code></td>
@@ -1800,6 +1832,10 @@ The value determines whether this parameter is held constant or scanned:</p>
 <td><code>convert</code></td>
 <td>Convert instrument descriptions between <code>.instr</code>, <code>.json</code>, and Python assembler scripts</td>
 </tr>
+<tr>
+<td><code>extract</code></td>
+<td>Reconstitute a portable instrument (<code>.instr</code> or <code>.json</code>) into a directory</td>
+</tr>
 </tbody>
 </table>
 <hr />
@@ -1989,6 +2025,50 @@ The value determines whether this parameter is held constant or scanned:</p>
 <tr>
 <td><code>--optimize</code></td>
 <td>Enable conservative loop-compaction for repeated component sequences (only with <code>--to python</code>)</td>
+</tr>
+<tr>
+<td><code>--trust-local-registries</code></td>
+<td>Trust local registries restored from a serialized (<code>.json</code>) instrument</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h4 id="mccode-antlr-extract"><code>mccode-antlr extract</code><a class="headerlink" href="#mccode-antlr-extract" title="Permanent link">&para;</a></h4>
+<p>Reconstitute a portable instrument into a directory: the <code>.instr</code> file (and any <code>%include</code>-d instruments, per the include hierarchy), every stashed/embedded local file, and the component (<code>.comp</code>) definitions it needs. Everything is written flat into one directory — no subfolders — so the result can be translated or compiled from inside that directory with no <code>-I</code>/<code>--search-dir</code> needed.</p>
+<p>By default, only component definitions and dependency files not otherwise available from a remote registry are written (a component shipped with mcstas/mcxtrace, for example, is skipped since it's already fetchable by name elsewhere). Pass <code>--include-remote</code> for a fully self-contained bundle that also reconstructs those.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>mccode-antlr<span class="w"> </span>extract<span class="w"> </span>INPUT<span class="w"> </span><span class="o">[</span>-o<span class="w"> </span>OUTPUT_DIR<span class="o">]</span><span class="w"> </span><span class="o">[</span>--flavor<span class="w"> </span><span class="o">{</span>mcstas,mcxtrace<span class="o">}]</span><span class="w"> </span><span class="o">[</span>-I<span class="w"> </span>DIR<span class="w"> </span>...<span class="o">]</span><span class="w"> </span><span class="o">[</span>--include-remote<span class="o">]</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>INPUT</code></td>
+<td>Input file (<code>.instr</code> or <code>.json</code>)</td>
+</tr>
+<tr>
+<td><code>-o</code>, <code>--output</code></td>
+<td>Output directory (if omitted, inferred as <code>&lt;stem&gt;.extracted</code>)</td>
+</tr>
+<tr>
+<td><code>--flavor</code></td>
+<td>Flavor used when reading <code>.instr</code> input (<code>mcstas</code> default)</td>
+</tr>
+<tr>
+<td><code>-I</code>, <code>--search-dir</code></td>
+<td>Extra component search directory when reading <code>.instr</code></td>
+</tr>
+<tr>
+<td><code>--trust-local-registries</code></td>
+<td>Trust local registries restored from a serialized (<code>.json</code>) instrument</td>
+</tr>
+<tr>
+<td><code>--include-remote</code></td>
+<td>Also extract component definitions and dependency files available from a remote registry, for a fully self-contained bundle</td>
 </tr>
 </tbody>
 </table>
