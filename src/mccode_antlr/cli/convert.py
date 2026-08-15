@@ -55,7 +55,7 @@ def convert(
     instr = load_instr(source, flavor, search_dir)
 
     if target == 'python':
-        from mccode_antlr.export import save_instr_as_python
+        from mccode_antlr.io import save_instr_as_python
         save_instr_as_python(instr, destination, optimize=optimize)
     elif target == 'json':
         if optimize:
