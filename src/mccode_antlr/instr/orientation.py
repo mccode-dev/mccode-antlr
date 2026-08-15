@@ -550,7 +550,7 @@ class Part(Struct):
 
     @property
     def is_identity(self):
-        return not self.is_translation and self._axes.trace() == Expr.float(3.)
+        return not self.is_translation and round(self._axes.trace(), 12) == Expr.float(3.)
 
     @property
     def rotation_axis_angle(self) -> tuple[Vector, Expr, str]:
@@ -736,6 +736,10 @@ class RotationPart(Part):
     @property
     def is_rotation(self):
         return not self.v.is_zero
+
+    @property
+    def is_identity(self):
+        return self.v.is_zero
 
     @property
     def rotation_axis(self) -> Vector:

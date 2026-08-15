@@ -338,6 +338,18 @@ class TestOrientation(TestCase):
                 self.assertAlmostEqual(ez.axes.trace(), Expr.float(3),
                                        msg=f'{rpz} * {rpz.inverse()} = {ez} is not identity for {tz=}')
 
+    def test_RotationParts_tiny_angle_is_not_identity(self):
+        # Regression test for #296: a nonzero angle small enough that cos(angle) rounds to
+        # exactly 1.0 in double precision must still be reported as a rotation, not an identity.
+        from mccode_antlr.common import Expr
+        from mccode_antlr.instr.orientation import RotationX, RotationY, RotationZ
+
+        tiny = Expr.float(1e-8)
+        for cls in (RotationX, RotationY, RotationZ):
+            rp = cls(v=tiny, degrees=True)
+            self.assertTrue(rp.is_rotation)
+            self.assertFalse(rp.is_identity)
+
     def test_RotationPart_subclass_post_init_is_called(self):
         from mccode_antlr.instr.orientation import Rotation, RotationX, RotationY, RotationZ
         tx, ty, tz = _random_angles_degrees()
