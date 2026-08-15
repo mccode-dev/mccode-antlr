@@ -21,7 +21,16 @@ class InstrVisitor(McInstrVisitor):
         self.state = Instr()
         self.current_comp = None
         self.current_instance_name = None
+        # The InstrVisitor of the *including* instrument when this file is parsed
+        # for a TRACE %include, or None at the top level; chains via its own destination
         self.destination = destination
+
+    def _enclosing_states(self):
+        """States of the enclosing (including) instruments, innermost first."""
+        scope = self.destination
+        while scope is not None:
+            yield scope.state
+            scope = scope.destination
 
     def visitProg(self, ctx: McInstrParser.ProgContext):
         self.state = Instr()
@@ -78,32 +87,8 @@ class InstrVisitor(McInstrVisitor):
 
     def visitInstrument_trace_include(self, ctx: McInstrParser.Instrument_trace_includeContext):
         quoted_filename = str(ctx.StringLiteral())
-        if self.destination is not None:
-            logger.critical(f'including {quoted_filename} from {self.filename}, which is itself included from {self.destination.name}')
-            logger.critical('Expect component referencing errors, as the implementation does not cover this use case.')
-        instr = self.parent.get_instrument(quoted_filename.strip('"'), destination=self.state)
-        # TODO work out how/what to copy from the other instrument into this one
-        self.state.add_included(instr.name)
-        for par in instr.parameters:
-            self.state.add_parameter(par, ignore_repeated=True)
-        for meta in instr.metadata:
-            self.state.add_metadata(meta)
-        if len(instr.declare):
-            self.state.declare += instr.declare
-        if len(instr.user):
-            self.state.user += instr.user
-        if len(instr.initialize):
-            self.state.initialize += instr.initialize
-        if len(instr.save):
-            self.state.save += instr.save
-        if len(instr.final):
-            self.state.final += instr.final
-        # McCode3 parsed everything in one memory space, so used some trickery to include
-        # component instances from one instrument into another. Here we can be a bit more straightforward
-        for instance in instr.components:
-            if not instance.removable:
-                self.state.add_component(instance)
-        # Group membership is determined after all parsing, so nothing to do here
+        instr = self.parent.get_instrument(quoted_filename.strip('"'), destination=self)
+        self.state.include(instr)
 
     def visitComponent_instance(self, ctx: McInstrParser.Component_instanceContext):
         from ..comp import Comp
@@ -254,20 +239,17 @@ class InstrVisitor(McInstrVisitor):
             count = 1 if ctx.IntegerLiteral() is None else int(str(ctx.IntegerLiteral()))
             # Any included component can be referred to -- REMOVABLE components in an included instrument
             # were _not_ included into the state. Include REMOVABLE components _are_ in the state.
-            instances = len(self.state.components)
-            if count <= instances:
-                return self.state.last_component(count, removable_ok=True)
-            elif self.destination is not None:
-                return self.destination.last_component(count - instances, removable_ok=True)
-            else:
-                logger.error(f'Too large PREVIOUS count {count} for instrument with {instances} component instances')
+            remaining = count
+            for state in (self.state, *self._enclosing_states()):
+                if remaining <= len(state.components):
+                    return state.last_component(remaining, removable_ok=True)
+                remaining -= len(state.components)
+            logger.error(f'Too large PREVIOUS count {count} for the reachable component instances')
         name = str(ctx.Identifier())
-        if any(inst.name == name for inst in self.state.components):
-            return self.state.get_component(name)
-        elif self.destination is not None:
-            return self.destination.get_component(name)
-        else:
-            logger.error(f'Unknown component reference for instance named {name}')
+        for state in (self.state, *self._enclosing_states()):
+            if any(inst.name == name for inst in state.components):
+                return state.get_component(name)
+        logger.error(f'Unknown component reference for instance named {name}')
 
     def visitCoords(self, ctx: McInstrParser.CoordsContext):
         # FIXME 2023-10-16 previously Coordinate parsing forced all returned Expression objects to be floats
@@ -346,10 +328,9 @@ class InstrVisitor(McInstrVisitor):
 
     def visitExpressionPrevious(self, ctx: McInstrParser.ExpressionPreviousContext):
         # The very-special no-good expression use of PREVIOUS where it is replaced by the last component's name
-        if len(self.state.components):
-            return Expr.string(self.state.components[-1].name)
-        elif self.destination is not None and len(self.destination.components):
-            return Expr.string(self.destination.components[-1].name)
+        for state in (self.state, *self._enclosing_states()):
+            if len(state.components):
+                return Expr.string(state.components[-1].name)
         raise RuntimeError('PREVIOUS keyword used in expression before any components defined')
 
     def visitExpressionMyself(self, ctx: McInstrParser.ExpressionMyselfContext):

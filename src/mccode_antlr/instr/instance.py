@@ -33,6 +33,10 @@ class Instance(Struct):
     extend: tuple[RawC, ...] = field(default_factory=tuple)
     jump: tuple[Jump, ...] = field(default_factory=tuple)
     metadata: tuple[MetaData, ...] = field(default_factory=tuple)
+    # Name of the Instr (within the owning instrument's `included` tree) whose file
+    # this instance came from; None when defined directly in the owning instrument.
+    # NB: this is an Instr NAME, not a file path (unlike Instr.source).
+    source: Optional[str] = None
 
     def __eq__(self, other: Instance) -> bool:
         if not isinstance(other, Instance):
@@ -51,7 +55,7 @@ class Instance(Struct):
             (self.at_relative[0], _ref_id(self.at_relative[1])),
             (self.rotate_relative[0], _ref_id(self.rotate_relative[1])),
             self.parameters, self.removable, self.cpu, self.split,
-            self.when, self.group, self.extend, self.jump, self.metadata
+            self.when, self.group, self.extend, self.jump, self.metadata, self.source
         ))
 
     def __repr__(self):
@@ -249,7 +253,8 @@ class Instance(Struct):
         return Instance(self.name, self.type, self.at_relative, self.rotate_relative,
                         parameters=self.parameters,
                         removable=self.removable, cpu=self.cpu, split=self.split, when=self.when,
-                        group=self.group, extend=self.extend, jump=self.jump, metadata=self.metadata)
+                        group=self.group, extend=self.extend, jump=self.jump, metadata=self.metadata,
+                        source=self.source)
 
     def parameter_used(self, name: str):
         if any([name in par.value for par in self.parameters]):
@@ -307,12 +312,12 @@ class DepInstance(Instance):
     @classmethod
     def from_dict(cls, args: dict):
         preq = 'name', 'type', 'removable', 'cpu',
-        popt = 'group',
+        popt = 'group', 'source'
         tmreq = {'parameters': ComponentParameter, 'extend': RawC, 'jump': Jump,
                  'metadata': MetaData}
         mopt = {'split': Expr, 'when': Expr}
         data = {k: args[k] for k in preq}
-        data.update({k: args[k] for k in popt})
+        data.update({k: args.get(k) for k in popt})
         data.update({k: t.from_dict(args[k]) for k, t in mopt.items() if k in args and args[k]})
         data.update({k: tuple(t.from_dict(a) for a in args[k]) for k, t in tmreq.items()})
 

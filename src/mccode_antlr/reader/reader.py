@@ -283,6 +283,9 @@ class Reader(Struct):
 
         In McCode3 fashion, the instrument file *should* be in the current working directory.
         In new-fashion, the registry/registries will be checked if it is not.
+
+        `destination` is the InstrVisitor of the *including* instrument when this file
+        is the target of a TRACE %include, or None at the top level.
         """
         from antlr4 import InputStream
         from ..grammar import McInstr_parse, McInstr_ErrorListener
@@ -310,6 +313,17 @@ class Reader(Struct):
             filename = name
         else:
             filename = path.resolve().as_posix()
+
+        chain = []
+        scope = destination
+        while scope is not None:
+            chain.append(scope.filename)
+            scope = scope.destination
+        if filename in chain:
+            raise RuntimeError(
+                f'%include cycle detected while parsing {filename!r}: '
+                f'include chain {" -> ".join(reversed(chain))} -> {filename}'
+            )
 
         stream = InputStream(source)
         error_listener = make_reader_error_listener(
