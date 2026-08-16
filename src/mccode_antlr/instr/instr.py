@@ -201,6 +201,25 @@ class Instr(Struct):
                 owners[name] = child
         return sections, owners
 
+    def to_strings(self, wrapper=None) -> dict[str, str]:
+        """{'{name}.instr': content} for this instrument and its included tree.
+
+        Same content `to_files` writes to disk, but held in memory -- lets a
+        caller (e.g. `io/extract.py`'s manifest builder) inspect the
+        instrument hierarchy without touching the filesystem.
+        """
+        names = self._included_tree_names()
+        duplicates = {n for n in names if names.count(n) > 1}
+        if duplicates:
+            raise RuntimeError(f'Cannot write instrument hierarchy with duplicated names {duplicates}')
+        result = {}
+        for child in self.included:
+            result.update(child.to_strings(wrapper=wrapper))
+        output = StringIO()
+        self.to_file(output, wrapper, flat=False)
+        result[f'{self.name}.instr'] = output.getvalue()
+        return result
+
     def to_files(self, directory, wrapper=None) -> Path:
         """Write this instrument and its included tree as one .instr file each.
 
@@ -210,16 +229,9 @@ class Instr(Struct):
         """
         directory = Path(directory)
         directory.mkdir(parents=True, exist_ok=True)
-        names = self._included_tree_names()
-        duplicates = {n for n in names if names.count(n) > 1}
-        if duplicates:
-            raise RuntimeError(f'Cannot write instrument hierarchy with duplicated names {duplicates}')
-        for child in self.included:
-            child.to_files(directory, wrapper=wrapper)
-        path = directory / f'{self.name}.instr'
-        with path.open('w') as output:
-            self.to_file(output, wrapper, flat=False)
-        return path
+        for name, content in self.to_strings(wrapper).items():
+            (directory / name).write_text(content)
+        return directory / f'{self.name}.instr'
 
     def to_string(self, wrapper):
         from io import StringIO

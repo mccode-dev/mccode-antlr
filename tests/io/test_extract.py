@@ -107,3 +107,81 @@ class TestExtractToDirectory:
         out = tmp_path / 'out'
         extract_to_directory(_read(lib, instr), out)
         assert not any('mccode-r' in p.name for p in out.iterdir())
+
+    def test_select_extracts_only_matching_members(self, local_tree, tmp_path):
+        from mccode_antlr.io.extract import extract_to_directory
+        _, lib, instr = local_tree
+        out = tmp_path / 'out'
+        extract_to_directory(_read(lib, instr), out, select=['mylib.h'])
+        assert {p.name for p in out.iterdir()} == {'mylib.h'}
+
+    def test_select_bypasses_remote_gate(self, local_tree, tmp_path):
+        """An explicitly named remote-sourced member is extracted even without include_remote."""
+        from mccode_antlr.io.extract import extract_to_directory
+        _, lib, instr = local_tree
+        out = tmp_path / 'out'
+        extract_to_directory(_read(lib, instr), out, select=['Progress_bar.comp'])
+        assert {p.name for p in out.iterdir()} == {'Progress_bar.comp'}
+
+    def test_exclude_omits_matches_from_default_sweep(self, local_tree, tmp_path):
+        from mccode_antlr.io.extract import extract_to_directory
+        _, lib, instr = local_tree
+        out = tmp_path / 'out'
+        extract_to_directory(_read(lib, instr), out, exclude=['*.h'])
+        names = {p.name for p in out.iterdir()}
+        assert 'mylib.h' not in names
+        assert 'mylib.c' in names
+        assert 'u.instr' in names
+
+
+class TestBuildManifest:
+    def test_categories_and_sources(self, local_tree):
+        from mccode_antlr.io.extract import build_manifest
+        _, lib, instr = local_tree
+        by_name = {m.name: m for m in build_manifest(_read(lib, instr))}
+
+        assert by_name['u.instr'].category == 'instr'
+        assert by_name['u.instr'].source == 'generated'
+        assert by_name['u.instr'].default_included is True
+
+        assert by_name['mylib.h'].category == 'dependency'
+        assert by_name['mylib.h'].source == 'local'
+        assert by_name['mylib.h'].default_included is True
+
+        assert by_name['UsesLib.comp'].category == 'component'
+        assert by_name['UsesLib.comp'].source == 'local'
+        assert by_name['UsesLib.comp'].default_included is True
+
+        assert by_name['Progress_bar.comp'].category == 'component'
+        assert by_name['Progress_bar.comp'].source == 'remote'
+        assert by_name['Progress_bar.comp'].default_included is False
+
+    def test_include_remote_marks_remote_members_default_included(self, local_tree):
+        from mccode_antlr.io.extract import build_manifest
+        _, lib, instr = local_tree
+        by_name = {m.name: m for m in build_manifest(_read(lib, instr), include_remote=True)}
+        assert by_name['Progress_bar.comp'].default_included is True
+
+
+class TestSelectMembers:
+    def test_no_select_returns_default_included_only(self, local_tree):
+        from mccode_antlr.io.extract import build_manifest, select_members
+        _, lib, instr = local_tree
+        manifest = build_manifest(_read(lib, instr))
+        chosen = {m.name for m in select_members(manifest)}
+        assert chosen == {m.name for m in manifest if m.default_included}
+        assert 'Progress_bar.comp' not in chosen
+
+    def test_select_bypasses_default_included_gate(self, local_tree):
+        from mccode_antlr.io.extract import build_manifest, select_members
+        _, lib, instr = local_tree
+        manifest = build_manifest(_read(lib, instr))
+        chosen = {m.name for m in select_members(manifest, select=['Progress_bar.comp'])}
+        assert chosen == {'Progress_bar.comp'}
+
+    def test_exclude_applies_after_select(self, local_tree):
+        from mccode_antlr.io.extract import build_manifest, select_members
+        _, lib, instr = local_tree
+        manifest = build_manifest(_read(lib, instr))
+        chosen = {m.name for m in select_members(manifest, select=['*.h', '*.c'], exclude=['*.c'])}
+        assert chosen == {'mylib.h'}
