@@ -4,6 +4,10 @@ on:
   workflow_dispatch:
   pull_request:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   # Pin the McCode version whose component and library files are used in tests.
   # Bump this when a new McCode release should be adopted.
@@ -18,7 +22,27 @@ jobs:
       matrix:
         platform: [windows-latest, macos-latest, ubuntu-latest]
         python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
-        strategy: [".", ".[test,hdf5,mcpl]"]
+        strategy: [".[test,hdf5,mcpl]"]
+        exclude:
+          # Python-version issues are platform-independent; the full version
+          # sweep runs on ubuntu, so Windows/macOS only test oldest + newest.
+          - platform: windows-latest
+            python-version: "3.11"
+          - platform: windows-latest
+            python-version: "3.12"
+          - platform: windows-latest
+            python-version: "3.13"
+          - platform: macos-latest
+            python-version: "3.11"
+          - platform: macos-latest
+            python-version: "3.12"
+          - platform: macos-latest
+            python-version: "3.13"
+        include:
+          # One bare install to verify the package works without optional extras.
+          - platform: ubuntu-latest
+            python-version: "3.13"
+            strategy: "."
 
     steps:
     - uses: actions/checkout@v7
