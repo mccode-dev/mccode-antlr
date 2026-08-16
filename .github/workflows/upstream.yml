@@ -14,9 +14,16 @@ jobs:
       fail-fast: false
       matrix:
         platform: [windows-latest, macos-latest, ubuntu-latest]
-        tag: ["v3.5.31", "latest"]
+        tag: ["latest"]
         python-version: ["3.13"]
-        strategy: [".", ".[test,hdf5,mcpl]"]
+        strategy: [".[test,hdf5,mcpl]"]
+        include:
+          # Pinned-tag control job: if this fails alongside the latest-tag jobs,
+          # the breakage is ours, not upstream's.
+          - platform: ubuntu-latest
+            tag: "v3.5.31"
+            python-version: "3.13"
+            strategy: ".[test,hdf5,mcpl]"
 
     steps:
     - uses: actions/checkout@v7
