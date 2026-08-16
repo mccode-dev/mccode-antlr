@@ -2036,7 +2036,8 @@ The value determines whether this parameter is held constant or scanned:</p>
 <h4 id="mccode-antlr-extract"><code>mccode-antlr extract</code><a class="headerlink" href="#mccode-antlr-extract" title="Permanent link">&para;</a></h4>
 <p>Reconstitute a portable instrument into a directory: the <code>.instr</code> file (and any <code>%include</code>-d instruments, per the include hierarchy), every stashed/embedded local file, and the component (<code>.comp</code>) definitions it needs. Everything is written flat into one directory — no subfolders — so the result can be translated or compiled from inside that directory with no <code>-I</code>/<code>--search-dir</code> needed.</p>
 <p>By default, only component definitions and dependency files not otherwise available from a remote registry are written (a component shipped with mcstas/mcxtrace, for example, is skipped since it's already fetchable by name elsewhere). Pass <code>--include-remote</code> for a fully self-contained bundle that also reconstructs those.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>mccode-antlr<span class="w"> </span>extract<span class="w"> </span>INPUT<span class="w"> </span><span class="o">[</span>-o<span class="w"> </span>OUTPUT_DIR<span class="o">]</span><span class="w"> </span><span class="o">[</span>--flavor<span class="w"> </span><span class="o">{</span>mcstas,mcxtrace<span class="o">}]</span><span class="w"> </span><span class="o">[</span>-I<span class="w"> </span>DIR<span class="w"> </span>...<span class="o">]</span><span class="w"> </span><span class="o">[</span>--include-remote<span class="o">]</span>
+<p><code>unzip</code>-like selection is also available: pass one or more <code>MEMBER</code> glob patterns to extract only matching files (naming a remote-sourced file this way extracts it even without <code>--include-remote</code>, since asking for it by name is unambiguous), <code>-x</code>/<code>--exclude</code> to omit matches from whatever set would otherwise be written, and <code>-l</code>/<code>--list</code> to preview — without writing anything — exactly what a given invocation (same <code>MEMBER</code>/<code>-x</code>/<code>--include-remote</code>) would produce.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>mccode-antlr<span class="w"> </span>extract<span class="w"> </span>INPUT<span class="w"> </span><span class="o">[</span>MEMBER<span class="w"> </span>...<span class="o">]</span><span class="w"> </span><span class="o">[</span>-o<span class="w"> </span>OUTPUT_DIR<span class="o">]</span><span class="w"> </span><span class="o">[</span>--flavor<span class="w"> </span><span class="o">{</span>mcstas,mcxtrace<span class="o">}]</span><span class="w"> </span><span class="o">[</span>-I<span class="w"> </span>DIR<span class="w"> </span>...<span class="o">]</span><span class="w"> </span><span class="o">[</span>--include-remote<span class="o">]</span><span class="w"> </span><span class="o">[</span>-x<span class="w"> </span>PATTERN<span class="w"> </span>...<span class="o">]</span><span class="w"> </span><span class="o">[</span>-l<span class="o">]</span>
 </code></pre></div>
 <table>
 <thead>
@@ -2051,8 +2052,12 @@ The value determines whether this parameter is held constant or scanned:</p>
 <td>Input file (<code>.instr</code> or <code>.json</code>)</td>
 </tr>
 <tr>
+<td><code>MEMBER ...</code></td>
+<td>Only extract files matching these glob patterns (repeatable positional; default: extract everything)</td>
+</tr>
+<tr>
 <td><code>-o</code>, <code>--output</code></td>
-<td>Output directory (if omitted, inferred as <code>&lt;stem&gt;.extracted</code>)</td>
+<td>Output directory (if omitted, inferred as <code>&lt;stem&gt;.extracted</code>); ignored with <code>-l</code>/<code>--list</code></td>
 </tr>
 <tr>
 <td><code>--flavor</code></td>
@@ -2070,8 +2075,26 @@ The value determines whether this parameter is held constant or scanned:</p>
 <td><code>--include-remote</code></td>
 <td>Also extract component definitions and dependency files available from a remote registry, for a fully self-contained bundle</td>
 </tr>
+<tr>
+<td><code>-x</code>, <code>--exclude PATTERN</code></td>
+<td>Glob pattern to omit from extraction (repeatable)</td>
+</tr>
+<tr>
+<td><code>-l</code>, <code>--list</code></td>
+<td>List the files this invocation would extract, with category and source, without writing anything</td>
+</tr>
 </tbody>
 </table>
+<p><strong>Examples:</strong></p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="c1"># See what a plain extract would produce, without writing anything</span>
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>mccode-antlr<span class="w"> </span>extract<span class="w"> </span>my.instr<span class="w"> </span>--list
+<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a>
+<a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="c1"># Pull just one component definition out of a bundle</span>
+<a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a>mccode-antlr<span class="w"> </span>extract<span class="w"> </span>my.instr<span class="w"> </span>Progress_bar.comp<span class="w"> </span>-o<span class="w"> </span>./just-progress-bar
+<a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a>
+<a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a><span class="c1"># Fully self-contained bundle, but skip the C source files</span>
+<a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a>mccode-antlr<span class="w"> </span>extract<span class="w"> </span>my.instr<span class="w"> </span>--include-remote<span class="w"> </span>-x<span class="w"> </span><span class="s1">&#39;*.c&#39;</span>
+</code></pre></div>
 
 
 
