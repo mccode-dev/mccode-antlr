@@ -14,9 +14,16 @@ fetchable elsewhere by name and content hash (mirroring the local-vs-remote
 split `io/portable.py` uses for the embedding feature). Pass
 include_remote=True for a fully self-contained bundle that also reconstructs
 everything a remote registry would otherwise supply.
+
+`build_manifest`/`select_members` split "what could be written" from "what a
+given call actually writes", so `mccode_antlr.cli.extract`'s --list can preview
+exactly what a real run (with the same include_remote/select/exclude) would
+produce, without a second, separately-maintained resolution path.
 """
 from __future__ import annotations
 
+from dataclasses import dataclass, replace
+from fnmatch import fnmatch
 from pathlib import Path
 
 from loguru import logger
@@ -25,7 +32,7 @@ from mccode_antlr.reader.registry import (
     InMemoryRegistry, RemoteRegistry, ordered_registries,
 )
 from mccode_antlr.io.portable import (
-    collect_dependency_payloads, deposit_all_embedded_files, resolve_registry_and_path,
+    collect_dependency_payloads, resolve_registry_and_path,
 )
 
 
@@ -56,65 +63,145 @@ def _non_embedded_registries(instr):
             if not isinstance(r, InMemoryRegistry)]
 
 
-def write_component_definitions(instr, directory: Path, include_remote: bool = False) -> list[Path]:
-    """Write one <name>.comp file per unique component type *instr* uses.
+@dataclass(frozen=True)
+class ExtractMember:
+    """One file `extract_to_directory` could write for an Instr.
+
+    `default_included` reflects membership in the *default* sweep (no
+    explicit --list/select) for whichever `include_remote` `build_manifest`
+    was called with -- `select_members` is what actually decides what a
+    given call writes; do not filter on this field directly.
+    """
+    name: str
+    category: str  # 'instr' | 'embedded' | 'dependency' | 'component'
+    source: str  # 'generated' | 'embedded' | 'local' | 'remote'
+    payload: bytes
+    default_included: bool
+
+
+def _instr_members(instr) -> list[ExtractMember]:
+    return [
+        ExtractMember(name, 'instr', 'generated', content.encode('utf-8'), True)
+        for name, content in instr.to_strings().items()
+    ]
+
+
+def _embedded_members(instr) -> list[ExtractMember]:
+    embedded = [reg for reg in (instr.registries or []) if isinstance(reg, InMemoryRegistry)]
+    members = []
+    for reg in embedded:
+        for name in reg.filenames():
+            members.append(
+                ExtractMember(Path(name).name, 'embedded', 'embedded', reg.contents_bytes(name), True)
+            )
+    return members
+
+
+def _dependency_members(instr, registries) -> list[ExtractMember]:
+    """Resolve %include headers/libraries, data files, and GETPATH targets.
+
+    Runs the same dependency traversal `embedded_registry` uses to decide what
+    to embed in a serialized JSON, accepting from every registry (local and
+    remote) so the manifest can show remote-only dependencies too --
+    `default_included` (not the accept filter) is what governs whether a
+    remote one is in the default extraction sweep.
+    """
+    if not registries:
+        return []
+    payloads, _unresolved = collect_dependency_payloads(
+        instr, registries, accept=lambda reg: True, budget=None,
+    )
+    members = []
+    for name, payload in payloads.items():
+        reg, _path = resolve_registry_and_path(registries, name)
+        source = 'remote' if reg is not None and _is_remote(reg) else 'local'
+        members.append(
+            ExtractMember(Path(name).name, 'dependency', source, payload, source == 'local')
+        )
+    return members
+
+
+def _component_members(instr, registries) -> list[ExtractMember]:
+    """One <name>.comp member per unique component type *instr* uses.
 
     Reconstructed from the parsed `Comp` (always fully present, regardless of
     where it came from) via `Comp.to_string()`. Classification of a component
     as local/held vs. remote is done by re-resolving its name against
-    `instr.registries`, since a `Comp` carries no provenance of its own.
+    *registries*, since a `Comp` carries no provenance of its own.
     """
-    registries = _non_embedded_registries(instr)
     seen: set[str] = set()
-    written = []
+    members = []
     for instance in instr.components:
         comp = instance.type
         if comp.name in seen:
             continue
         seen.add(comp.name)
         reg, _path = resolve_registry_and_path(registries, f'{comp.name}.comp')
-        if reg is not None and _is_remote(reg) and not include_remote:
-            continue
-        target = _write_flat(instr, directory, f'{comp.name}.comp', comp.to_string().encode('utf-8'))
-        if target is not None:
-            written.append(target)
-    return written
+        source = 'remote' if reg is not None and _is_remote(reg) else 'local'
+        members.append(
+            ExtractMember(f'{comp.name}.comp', 'component', source, comp.to_string().encode('utf-8'),
+                          source == 'local')
+        )
+    return members
 
 
-def write_dependency_files(instr, directory: Path, include_remote: bool = False) -> list[Path]:
-    """Resolve and write %include headers/libraries, data files, and GETPATH targets.
+def build_manifest(instr, include_remote: bool = False) -> list[ExtractMember]:
+    """Every file `extract_to_directory` could write for *instr*, local and remote.
 
-    Runs the same dependency traversal `embedded_registry` uses to decide what
-    to embed in a serialized JSON, but writes results straight to disk instead,
-    with no size budget, and (with include_remote=True) also accepting names
-    resolved from a remote registry.
+    With include_remote=False (default) only the .instr hierarchy, embedded
+    files, and local component definitions/dependency files are marked
+    `default_included`; remote-sourced entries are still present (so a caller
+    can discover and select them by name) but excluded from the default sweep.
+    With include_remote=True, remote-sourced entries are marked included too.
     """
     registries = _non_embedded_registries(instr)
-    if not registries:
-        return []
-    accept = (lambda reg: True) if include_remote else (lambda reg: not _is_remote(reg))
-    payloads, _unresolved = collect_dependency_payloads(instr, registries, accept=accept, budget=None)
-    written = []
-    for name, payload in payloads.items():
-        target = _write_flat(instr, directory, name, payload)
-        if target is not None:
-            written.append(target)
-    return written
+    members = (
+        _instr_members(instr) + _embedded_members(instr)
+        + _dependency_members(instr, registries) + _component_members(instr, registries)
+    )
+    if include_remote:
+        members = [replace(m, default_included=True) if m.source == 'remote' else m for m in members]
+    return members
 
 
-def extract_to_directory(instr, directory, include_remote: bool = False) -> Path:
+def select_members(
+    manifest: list[ExtractMember],
+    select: list[str] | None = None,
+    exclude: list[str] | None = None,
+) -> list[ExtractMember]:
+    """The subset of *manifest* a given extract/list invocation would produce.
+
+    With no `select`, this is the default sweep (`default_included` entries,
+    already reflecting whichever `include_remote` `build_manifest` was called
+    with). An explicit `select` glob bypasses that default sweep entirely --
+    naming a remote-only file extracts it even without `--include-remote`,
+    since asking for it by name is unambiguous. `exclude` globs are then
+    dropped from whichever set results, same as `unzip -x`.
+    """
+    if select:
+        chosen = [m for m in manifest if any(fnmatch(m.name, pattern) for pattern in select)]
+    else:
+        chosen = [m for m in manifest if m.default_included]
+    if exclude:
+        chosen = [m for m in chosen if not any(fnmatch(m.name, pattern) for pattern in exclude)]
+    return chosen
+
+
+def extract_to_directory(
+        instr, directory, include_remote: bool = False,
+        select: list[str] | None = None, exclude: list[str] | None = None,
+) -> Path:
     """Reconstitute *instr* into *directory*: .instr hierarchy, stashed files,
     and component definitions, all flat.
 
-    With include_remote=False (default) only files not otherwise available
-    from a remote registry are written -- what a consumer could not get any
-    other way. With include_remote=True, remote-sourced component definitions
-    and dependency files are written too, for a fully self-contained bundle.
+    With include_remote=False (default) and no select/exclude, only files not
+    otherwise available from a remote registry are written -- what a consumer
+    could not get any other way. See `select_members` for how include_remote,
+    select, and exclude interact.
     """
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
-    instr.to_files(directory)
-    deposit_all_embedded_files(instr, directory)
-    write_dependency_files(instr, directory, include_remote)
-    write_component_definitions(instr, directory, include_remote)
+    manifest = build_manifest(instr, include_remote)
+    for member in select_members(manifest, select, exclude):
+        _write_flat(instr, directory, member.name, member.payload)
     return directory

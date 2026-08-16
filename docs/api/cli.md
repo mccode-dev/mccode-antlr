@@ -267,15 +267,33 @@ Reconstitute a portable instrument into a directory: the `.instr` file (and any 
 
 By default, only component definitions and dependency files not otherwise available from a remote registry are written (a component shipped with mcstas/mcxtrace, for example, is skipped since it's already fetchable by name elsewhere). Pass `--include-remote` for a fully self-contained bundle that also reconstructs those.
 
+`unzip`-like selection is also available: pass one or more `MEMBER` glob patterns to extract only matching files (naming a remote-sourced file this way extracts it even without `--include-remote`, since asking for it by name is unambiguous), `-x`/`--exclude` to omit matches from whatever set would otherwise be written, and `-l`/`--list` to preview — without writing anything — exactly what a given invocation (same `MEMBER`/`-x`/`--include-remote`) would produce.
+
 ```bash
-mccode-antlr extract INPUT [-o OUTPUT_DIR] [--flavor {mcstas,mcxtrace}] [-I DIR ...] [--include-remote]
+mccode-antlr extract INPUT [MEMBER ...] [-o OUTPUT_DIR] [--flavor {mcstas,mcxtrace}] [-I DIR ...] [--include-remote] [-x PATTERN ...] [-l]
 ```
 
 | Flag | Description |
 |---|---|
 | `INPUT` | Input file (`.instr` or `.json`) |
-| `-o`, `--output` | Output directory (if omitted, inferred as `<stem>.extracted`) |
+| `MEMBER ...` | Only extract files matching these glob patterns (repeatable positional; default: extract everything) |
+| `-o`, `--output` | Output directory (if omitted, inferred as `<stem>.extracted`); ignored with `-l`/`--list` |
 | `--flavor` | Flavor used when reading `.instr` input (`mcstas` default) |
 | `-I`, `--search-dir` | Extra component search directory when reading `.instr` |
 | `--trust-local-registries` | Trust local registries restored from a serialized (`.json`) instrument |
 | `--include-remote` | Also extract component definitions and dependency files available from a remote registry, for a fully self-contained bundle |
+| `-x`, `--exclude PATTERN` | Glob pattern to omit from extraction (repeatable) |
+| `-l`, `--list` | List the files this invocation would extract, with category and source, without writing anything |
+
+**Examples:**
+
+```bash
+# See what a plain extract would produce, without writing anything
+mccode-antlr extract my.instr --list
+
+# Pull just one component definition out of a bundle
+mccode-antlr extract my.instr Progress_bar.comp -o ./just-progress-bar
+
+# Fully self-contained bundle, but skip the C source files
+mccode-antlr extract my.instr --include-remote -x '*.c'
+```
