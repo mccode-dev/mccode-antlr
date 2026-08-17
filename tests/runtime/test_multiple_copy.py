@@ -45,12 +45,31 @@ FAKE_COMPONENTS = dict(
     printf("Because we can!\\n"); 
     %}
     END"""),
+    boring=dedent("""DEFINE COMPONENT boring
+    SETTING PARAMETERS (int n)
+    DECLARE %{
+    char buffer[10];
+    %}
+    INITIALIZE %{
+    strcpy(buffer, "boring");
+    %}
+    TRACE %{
+    printf("I'm the %s component with n=%d\\n", buffer, n);
+    %}
+    END
+    """),
+    exciting=dedent("""DEFINE COMPONENT exciting INHERIT boring
+    INITIALIZE %{
+    strcpy(buffer, "exciting");
+    %}
+    END
+    """),
 )
 
 
 in_memory = InMemoryRegistry("test_components")
-for comp, repr in FAKE_COMPONENTS.items():
-    in_memory.add_comp(comp, repr)
+for comp, representation in FAKE_COMPONENTS.items():
+    in_memory.add_comp(comp, representation)
 
 
 @compiled_test
@@ -106,4 +125,21 @@ def test_crazy_parts():
     output, files = compile_and_run(instr, '-n 1 dummy=2')
     lines = output.decode('utf-8').splitlines()
     for line, expected in zip(lines, ("We can do anything", "n=0", "n=1", "n=2", "Why!?", "m=0", "m=1", "Because we can!")):
+        assert line.strip() == expected.strip()
+
+
+@compiled_test
+def test_inherit_component_definition():
+    instr = parse_mcstas_instr(
+        dedent("""define instrument test_inherit_component_definition(dummy=0.)
+        trace
+        component first = boring(n=10) at (0, 0, 0) absolute
+        component second = exciting(n=121) at (0, 0, 0) absolute
+        end
+        """), registries=[in_memory])
+    output, files = compile_and_run(instr, '-n 1 dummy=2')
+    lines = output.decode('utf-8').splitlines()
+    boring_says = "I'm the boring component with n=10"
+    exciting_says = "I'm the exciting component with n=121"
+    for line, expected in zip(lines, (boring_says, exciting_says)):
         assert line.strip() == expected.strip()
