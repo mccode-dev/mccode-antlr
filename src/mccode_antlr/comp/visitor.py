@@ -28,6 +28,15 @@ class CompVisitor(McCompVisitor):
 
     def visitComponentDefineCopy(self, ctx: Parser.ComponentDefineCopyContext):
         from copy import deepcopy
+        from packaging.version import Version
+        from mccode_antlr.reader.registry import mccode_registry_version
+        used_copy = ctx.Copy() is not None and ctx.Inherit() is None
+        copy_before = Version('3.5.31')
+        if (version := mccode_registry_version()) < copy_before and not used_copy:
+            logger.info(f"You have used the McCode grammar keyword INHERIT, first introduced in {copy_before}, but have requested the {version} runtime")
+        elif version >= copy_before and used_copy:
+            logger.info(f"You have used the McCode grammar keyword COPY in a component definition, which has been invalid since {copy_before}, but have requested the {version} runtime")
+
         new_name, copy_from = [str(x) for x in ctx.Identifier()]
         if self.parent is None:
             raise RuntimeError("Can not copy a component definition without a parent reader/registry")
