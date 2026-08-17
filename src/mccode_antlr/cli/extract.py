@@ -7,6 +7,31 @@ def _default_output_directory(input_path: Path) -> Path:
     return input_path.parent / f'{input_path.stem}.extracted'
 
 
+_SOURCE_STYLE = {
+    'local': 'green',
+    'remote': 'cyan',
+    'embedded': 'yellow',
+    'generated': 'magenta',
+}
+
+
+def _print_manifest(members):
+    from rich.console import Console
+    from rich.table import Table
+
+    table = Table(box=None, pad_edge=False)
+    table.add_column('CATEGORY')
+    table.add_column('NAME')
+    table.add_column('SOURCE')
+    table.add_column('REPOSITORY')
+    table.add_column('LOCATION')
+    for member in members:
+        style = _SOURCE_STYLE.get(member.source, '')
+        table.add_row(member.category, member.name, member.source, member.repository,
+                      member.repository_match, style=style)
+    Console().print(table)
+
+
 def extract(
         filename: str,
         output: str | None = None,
@@ -16,6 +41,7 @@ def extract(
         include_remote: bool = False,
         members: list[str] | None = None,
         exclude: list[str] | None = None,
+        repository: list[str] | None = None,
         list_only: bool = False,
 ):
     from types import SimpleNamespace
@@ -29,13 +55,13 @@ def extract(
 
     if list_only:
         manifest = build_manifest(instr, include_remote=include_remote)
-        for member in select_members(manifest, members or None, exclude):
-            print(f'{member.category:<10} {member.name:<30} ({member.source})')
+        _print_manifest(select_members(manifest, members or None, exclude, repository=repository))
         return
 
     destination = Path(output).resolve() if output is not None else _default_output_directory(source)
     extract_to_directory(
         instr, destination, include_remote=include_remote, select=members or None, exclude=exclude,
+        repository=repository,
     )
 
     print(destination)
@@ -96,11 +122,21 @@ def add_extract_management_parser(modes):
         help='Glob pattern to omit from extraction (repeatable)',
     )
     parser.add_argument(
+        '-r', '--repository',
+        action='append',
+        default=None,
+        help="Glob pattern to filter by source repository (repeatable). Matches a "
+             "remote registry's URL (e.g. '*/mcdotstar/*' matches "
+             "https://github.com/mcdotstar/...), a local registry's root path, or "
+             "an embedded registry's name. Naming a repository extracts/lists its "
+             "files even without --include-remote, like positional members.",
+    )
+    parser.add_argument(
         '-l', '--list',
         dest='list_only',
         action='store_true',
-        help='List the files this invocation would extract, with their category and source, '
-             'without writing anything; -o/--output is ignored',
+        help='List the files this invocation would extract, with their category, source, and '
+             'repository, without writing anything; -o/--output is ignored',
     )
     parser.set_defaults(action=extract)
     return parser

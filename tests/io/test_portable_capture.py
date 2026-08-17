@@ -87,6 +87,18 @@ class TestCapture:
         captured = embedded_registry(_read(lib, instr))
         assert captured.priority < REGISTRY_PRIORITY_HIGHEST
 
+    def test_captured_files_are_attributed_to_their_local_registry(self, local_tree):
+        """Provenance for debugging a user-provided serialized instrument: each
+        embedded file records which LocalRegistry supplied it, by name only --
+        never the registry's filesystem root, so nothing about the saving
+        machine's directory layout leaks into the artifact."""
+        from mccode_antlr.io.portable import embedded_registry
+        _, lib, instr = local_tree
+        captured = embedded_registry(_read(lib, instr))
+        assert captured.origins['mylib.h'] == f'local:{lib.stem}'
+        assert captured.origins['mylib.c'] == f'local:{lib.stem}'
+        assert str(lib) not in captured.origins['mylib.h']
+
 
 class TestUnresolvableIncludes:
     """An %include that resolves nowhere is a translate-time error, but saving an
@@ -184,6 +196,29 @@ class TestSerializedInstrument:
                     if isinstance(r, InMemoryRegistry) and r.name == EMBEDDED_REGISTRY_NAME]
         assert len(embedded) == 1
         assert 'MYLIB SENTINEL' in embedded[0].contents('mylib.h')
+
+    def test_captured_origin_survives_the_json_round_trip(self, local_tree):
+        from mccode_antlr.io import to_json, from_json
+        from mccode_antlr.reader.registry import InMemoryRegistry
+        from mccode_antlr.io.portable import EMBEDDED_REGISTRY_NAME
+        _, lib, instr = local_tree
+        back = from_json(to_json(_read(lib, instr)))
+        embedded = next(r for r in back.registries
+                         if isinstance(r, InMemoryRegistry) and r.name == EMBEDDED_REGISTRY_NAME)
+        assert embedded.origins['mylib.h'] == f'local:{lib.stem}'
+
+    def test_origin_survives_repeated_saves(self, local_tree):
+        """Carrying an embedded registry forward across saves (with_embedded_files)
+        must not drop the origin recorded on the first save."""
+        from mccode_antlr.io import to_json, from_json
+        from mccode_antlr.reader.registry import InMemoryRegistry
+        from mccode_antlr.io.portable import EMBEDDED_REGISTRY_NAME
+        _, lib, instr = local_tree
+        once = from_json(to_json(_read(lib, instr)))
+        twice = from_json(to_json(once))
+        embedded = next(r for r in twice.registries
+                         if isinstance(r, InMemoryRegistry) and r.name == EMBEDDED_REGISTRY_NAME)
+        assert embedded.origins['mylib.h'] == f'local:{lib.stem}'
 
     def test_disabled_by_configuration(self, local_tree, monkeypatch):
         from mccode_antlr.config import config
@@ -362,6 +397,36 @@ class TestRuntimeDataFiles:
         lib, instr = self._with_data(tmp_path)
         loaded = from_json(to_json(_read(lib, instr)))
         assert deposit_embedded_data_files(loaded, None) == []
+
+
+class TestResolveRegistryAndPathStrictness:
+    """A registry must not be credited with a name it only *contains* as a
+    substring: 'ESS_butterfly.comp' is a literal substring of a real file,
+    'Masked_ESS_butterfly.comp', in an unrelated registry. Trusting that match
+    misattributes the genuinely-upstream ESS_butterfly component to whichever
+    registry happens to hold a longer, colliding filename."""
+
+    def _fake_remote(self, name, files):
+        from types import SimpleNamespace
+        from mccode_antlr.reader.registry import RemoteRegistry
+        reg = RemoteRegistry(name, url='https://example.invalid/x', version='v1',
+                              filename=f'{name}-registry.txt')
+        reg._pooch = SimpleNamespace(registry_files=files, fetch=lambda n: n)
+        return reg
+
+    def test_a_substring_only_match_is_not_resolved(self):
+        from mccode_antlr.io.portable import resolve_registry_and_path
+        colliding = self._fake_remote('mcstas-chopper-lib', ['Masked_ESS_butterfly.comp'])
+        reg, path = resolve_registry_and_path([colliding], 'ESS_butterfly.comp')
+        assert reg is None
+        assert path is None
+
+    def test_an_exact_match_elsewhere_is_still_resolved(self):
+        from mccode_antlr.io.portable import resolve_registry_and_path
+        colliding = self._fake_remote('mcstas-chopper-lib', ['Masked_ESS_butterfly.comp'])
+        exact = self._fake_remote('mcstas', ['ESS_butterfly.comp'])
+        reg, _ = resolve_registry_and_path([colliding, exact], 'ESS_butterfly.comp')
+        assert reg is exact
 
 
 class TestIncludeResolutionWithoutDisk:

@@ -20,6 +20,8 @@ class Comp(Struct):
     output: tuple[ComponentParameter, ...] = field(default_factory=tuple)   # 'output' parameters
     metadata: tuple[MetaData, ...] = field(default_factory=tuple)           # metadata for use by simulation consumers
     dependency: Optional[str] = None     # compile-time dependency
+    origin: Optional[str] = None         # which registry resolved this .comp, e.g. 'local:mylib' or
+                                          # 'remote:mcstas' -- provenance only, never written into .comp text
     acc: bool = True           # False if this component *can not* work under OpenACC
     # literal strings writen into C source files
     share: tuple[RawC, ...] = field(default_factory=tuple)       # function(s) for all instances of this class
@@ -34,7 +36,7 @@ class Comp(Struct):
     @classmethod
     def from_dict(cls, args: dict):
         preq = 'acc',
-        popt = 'name', 'category', 'dependency'
+        popt = 'name', 'category', 'dependency', 'origin'
         tmreq = {'define': ComponentParameter, 'setting': ComponentParameter,
                   'output': ComponentParameter, 'metadata': MetaData,
                   'share': RawC, 'user': RawC, 'declare': RawC, 'initialize': RawC,

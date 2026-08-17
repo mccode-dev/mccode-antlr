@@ -645,13 +645,14 @@ class SerializableRegistry(Struct):
 
 
 class InMemoryRegistry(Registry):
-    def __init__(self, name, priority: int = 100, files=None, **components):
+    def __init__(self, name, priority: int = 100, files=None, origins=None, **components):
         self.name = name
         self.version = mccode_antlr_version()
         self.priority = priority
         self.files: dict[str, bytes] = {}
         for key, value in (files or {}).items():
             self.files[key] = _decode_stored_bytes(value)
+        self.origins: dict[str, str] = dict(origins or {})
         for key, value in components.items():
             self.add_comp(key, value)
         self._materialized: set[str] = set()
@@ -666,29 +667,32 @@ class InMemoryRegistry(Registry):
                 continue
         return out
 
-    def add(self, name: str, definition):
+    def add(self, name: str, definition, origin: str | None = None):
         self.files[name] = definition.encode('utf-8') if isinstance(definition, str) else bytes(definition)
+        if origin is not None:
+            self.origins[name] = origin
 
-    def add_comp(self, name: str, definition):
+    def add_comp(self, name: str, definition, origin: str | None = None):
         if not name.lower().endswith('.comp'):
             name += '.comp'
-        self.add(name, definition)
+        self.add(name, definition, origin=origin)
 
-    def add_instr(self, name: str, definition):
+    def add_instr(self, name: str, definition, origin: str | None = None):
         if not name.lower().endswith('.instr'):
             name += '.instr'
-        self.add(name, definition)
+        self.add(name, definition, origin=origin)
 
     @classmethod
     def file_keys(cls) -> tuple[str, ...]:
-        return 'name', 'priority', 'files'
+        return 'name', 'priority', 'files', 'origins'
 
     def file_contents(self) -> dict:
         from base64 import b64encode
         return {
             'name': self.name,
             'priority': self.priority,
-            'files': {k: b64encode(v).decode('ascii') for k, v in self.files.items()}
+            'files': {k: b64encode(v).decode('ascii') for k, v in self.files.items()},
+            'origins': dict(self.origins),
         }
 
     def filenames(self) -> list[str]:
@@ -792,6 +796,19 @@ class InMemoryRegistry(Registry):
 def ordered_registries(registries: list[Registry]):
     """Sort the registries by their priority"""
     return sorted(registries, key=lambda x: x.priority, reverse=True)
+
+
+def origin_label(reg) -> str:
+    """Short, path-free label for which registry resolved a name.
+
+    'local:<name>' for a LocalRegistry -- reg.name is a user/CLI-chosen
+    identifier (e.g. a '-I' directory stem), never a filesystem path, so this
+    can safely travel inside a serialized artifact without leaking where on
+    disk a file lives. Anything else (remote registries) is labeled
+    'remote:<name>'. Shared by io.portable's dependency-file embedding and
+    Reader.add_component's per-Comp provenance.
+    """
+    return f'{"local" if isinstance(reg, LocalRegistry) else "remote"}:{reg.name}'
 
 
 def resolve_from_registries(registries, name: str, action, ext: str = None, strict: bool = False):

@@ -20,7 +20,7 @@ from loguru import logger
 
 from mccode_antlr.reader.registry import (
     InMemoryRegistry, LocalRegistry, Registry,
-    REGISTRY_PRIORITY_MEDIUM, ordered_registries
+    REGISTRY_PRIORITY_MEDIUM, ordered_registries, origin_label,
 )
 from mccode_antlr.translators.includes import included_names, source_blocks
 
@@ -38,11 +38,15 @@ def resolve_registry_and_path(registries, name: str):
 
     Shared by the embedding logic below and by `io/extract.py`, which needs the
     same "which registry actually supplies this name" answer to classify a
-    dependency as local or remote at extraction time.
+    dependency as local or remote at extraction time. *name* is always a fully
+    qualified filename (extension included), so `known` is checked with
+    strict=True: without it, a registry's unanchored substring fallback (e.g.
+    matching 'ESS_butterfly.comp' inside an unrelated 'Masked_ESS_butterfly.comp')
+    can claim a name it doesn't actually have an exact file for.
     """
     for reg in registries:
         try:
-            if not reg.known(name):
+            if not reg.known(name, strict=True):
                 continue
             return reg, reg.path(name)
         except Exception:
@@ -182,11 +186,13 @@ def collect_dependency_payloads(instr, registries, accept, budget: int | None = 
     feeds the serialized-JSON embedding feature) and `io/extract.py`'s
     dependency writer (accept configurable via --include-remote, unbounded).
 
-    Returns (payloads, unresolved_include_names). Names are tracked with their
-    provenance: only %include names are hard requirements -- the translator
-    fails outright on one it cannot resolve. Data file and GETPATH names are
-    heuristic guesses (filename="D0_Source.psd" names an *output*), so an
-    unresolved one means nothing and must not be reported.
+    Returns (payloads, origins, unresolved_include_names). `origins` maps each
+    accepted name to `origin_label(reg)` for the registry that supplied it.
+    Names are tracked with their provenance: only %include names are hard
+    requirements -- the translator fails outright on one it cannot resolve.
+    Data file and GETPATH names are heuristic guesses (filename="D0_Source.psd"
+    names an *output*), so an unresolved one means nothing and must not be
+    reported.
     """
     pending: list[tuple[str, str]] = []
 
@@ -205,7 +211,7 @@ def collect_dependency_payloads(instr, registries, accept, budget: int | None = 
     pending.extend((name, 'optional') for name in _data_file_candidates(instr))
     pending.extend((name, 'optional') for name in _getpath_candidates(instr))
 
-    payloads, seen, total, unresolved = {}, set(), 0, []
+    payloads, origins, seen, total, unresolved = {}, {}, set(), 0, []
     while pending:
         name, kind = pending.pop(0)
         if name in seen:
@@ -231,6 +237,7 @@ def collect_dependency_payloads(instr, registries, accept, budget: int | None = 
             )
             continue
         payloads[name] = payload
+        origins[name] = origin_label(reg)
         total += len(payload)
         # Followed transitively: a share library may %include further files.
         try:
@@ -238,7 +245,7 @@ def collect_dependency_payloads(instr, registries, accept, budget: int | None = 
         except UnicodeDecodeError:
             pass
 
-    return payloads, unresolved
+    return payloads, origins, unresolved
 
 
 def embedded_registry(instr, size_limit_mb: float | None = None) -> InMemoryRegistry | None:
@@ -252,7 +259,7 @@ def embedded_registry(instr, size_limit_mb: float | None = None) -> InMemoryRegi
         size_limit_mb = _config_flag('embed_size_limit_mb', 32)
     budget = int(float(size_limit_mb) * 1024 * 1024)
 
-    embedded, unresolved = collect_dependency_payloads(
+    embedded, origins, unresolved = collect_dependency_payloads(
         instr, registries, accept=lambda reg: isinstance(reg, LocalRegistry), budget=budget,
     )
 
@@ -275,7 +282,7 @@ def embedded_registry(instr, size_limit_mb: float | None = None) -> InMemoryRegi
     # user's own search directory still wins, above the remote registries (-10).
     registry = InMemoryRegistry(EMBEDDED_REGISTRY_NAME, priority=REGISTRY_PRIORITY_MEDIUM)
     for name, payload in embedded.items():
-        registry.add(name, payload)
+        registry.add(name, payload, origin=origins.get(name))
     total = sum(len(v) for v in embedded.values())
     logger.debug(f'Embedded {len(embedded)} local file(s) ({total} bytes) in {instr.name}')
     return registry
@@ -308,10 +315,10 @@ def with_embedded_files(registries, instr) -> tuple[Registry, ...]:
     merged = InMemoryRegistry(EMBEDDED_REGISTRY_NAME, priority=REGISTRY_PRIORITY_MEDIUM)
     for previous in carried:
         for name, payload in previous.files.items():
-            merged.add(name, payload)
+            merged.add(name, payload, origin=previous.origins.get(name))
     if captured is not None:
         # A file still reachable locally is re-read, so an edited local copy wins
         # over the stale one an earlier save carried.
         for name, payload in captured.files.items():
-            merged.add(name, payload)
+            merged.add(name, payload, origin=captured.origins.get(name))
     return others + (merged,)

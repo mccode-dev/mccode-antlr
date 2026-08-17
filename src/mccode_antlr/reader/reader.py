@@ -4,7 +4,7 @@ from loguru import logger
 from msgspec import Struct, field
 
 from .registry import (Registry, registries_match, registry_from_specification,
-                       resolve_from_registries)
+                       resolve_from_registries, origin_label)
 from ..comp import Comp
 
 from mccode_antlr import Flavor
@@ -222,7 +222,11 @@ class Reader(Struct):
             raise RuntimeError("The named component is already known.")
         from ..grammar import McComp_ErrorListener
 
-        filename = str(self.locate(name, ext='.comp', strict=True))
+        ext = '.comp'
+        path, reg = resolve_from_registries(
+            self._candidates(), name, lambda r: (r.path(name, ext), r), ext, True,
+        )
+        filename = str(path)
         abs_path = Path(filename).resolve()
 
         # Check the process-level cache before running the ANTLR parser.
@@ -238,6 +242,10 @@ class Reader(Struct):
                 self, error_listener, source, filename, fullname
             )
             component_cache.put(abs_path, res)
+        # Reflect *this* resolution's registry even on a cache hit -- the cache
+        # is keyed by filesystem path, not by registry, so in principle a
+        # different registry could resolve the same abs_path for another Reader.
+        res.origin = origin_label(reg)
 
         self.components[name] = res
 

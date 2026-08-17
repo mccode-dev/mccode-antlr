@@ -133,6 +133,14 @@ class TestExtractToDirectory:
         assert 'mylib.c' in names
         assert 'u.instr' in names
 
+    def test_repository_filters_extraction(self, local_tree, tmp_path):
+        """Repository filter extracts only that repository's files, remote-gate bypassed."""
+        from mccode_antlr.io.extract import extract_to_directory
+        _, lib, instr = local_tree
+        out = tmp_path / 'out'
+        extract_to_directory(_read(lib, instr), out, repository=['*/mccode-dev/*'])
+        assert {p.name for p in out.iterdir()} == {'Progress_bar.comp'}
+
 
 class TestBuildManifest:
     def test_categories_and_sources(self, local_tree):
@@ -143,24 +151,84 @@ class TestBuildManifest:
         assert by_name['u.instr'].category == 'instr'
         assert by_name['u.instr'].source == 'generated'
         assert by_name['u.instr'].default_included is True
+        assert by_name['u.instr'].repository == 'generated'
+        assert by_name['u.instr'].repository_match == 'generated'
 
         assert by_name['mylib.h'].category == 'dependency'
         assert by_name['mylib.h'].source == 'local'
         assert by_name['mylib.h'].default_included is True
+        assert by_name['mylib.h'].repository == lib.stem
+        assert by_name['mylib.h'].repository_match == str(lib.resolve())
 
         assert by_name['UsesLib.comp'].category == 'component'
         assert by_name['UsesLib.comp'].source == 'local'
         assert by_name['UsesLib.comp'].default_included is True
+        assert by_name['UsesLib.comp'].repository == lib.stem
+        assert by_name['UsesLib.comp'].repository_match == str(lib.resolve())
 
         assert by_name['Progress_bar.comp'].category == 'component'
         assert by_name['Progress_bar.comp'].source == 'remote'
         assert by_name['Progress_bar.comp'].default_included is False
+        assert by_name['Progress_bar.comp'].repository == 'mcstas'
+        assert by_name['Progress_bar.comp'].repository_match.startswith('https://github.com/')
+
+    def test_embedded_files_are_attributed_to_their_recorded_origin(self, local_tree):
+        """Debugging payoff of provenance tracking: even when a user submits a
+        serialized instrument with no trusted LocalRegistry, `-l`/build_manifest
+        can still say which of the user's local directories a file came from --
+        by name only, never the filesystem path (see io.portable._origin_label)."""
+        from mccode_antlr.io import to_json, from_json
+        from mccode_antlr.io.extract import build_manifest
+        _, lib, instr = local_tree
+        loaded = from_json(to_json(_read(lib, instr)))
+        by_name = {m.name: m for m in build_manifest(loaded)}
+        assert by_name['mylib.h'].source == 'embedded'
+        assert by_name['mylib.h'].repository == f'local:{lib.stem}'
+        assert by_name['mylib.h'].repository_match == f'local:{lib.stem}'
+
+    def test_component_falls_back_to_recorded_origin_when_unresolvable(self, local_tree):
+        """Without --trust-local-registries, the LocalRegistry that originally
+        resolved UsesLib is dropped on reload, so live re-resolution against
+        `registries` fails (reg is None). _component_members must still show
+        the origin Reader.add_component recorded on the Comp at parse time."""
+        from mccode_antlr.io import to_json, from_json
+        from mccode_antlr.io.extract import build_manifest
+        _, lib, instr = local_tree
+        loaded = from_json(to_json(_read(lib, instr)))
+        by_name = {m.name: m for m in build_manifest(loaded)}
+        assert by_name['UsesLib.comp'].source == 'local'
+        assert by_name['UsesLib.comp'].repository == f'local:{lib.stem}'
+        assert by_name['UsesLib.comp'].repository_match == f'local:{lib.stem}'
 
     def test_include_remote_marks_remote_members_default_included(self, local_tree):
         from mccode_antlr.io.extract import build_manifest
         _, lib, instr = local_tree
         by_name = {m.name: m for m in build_manifest(_read(lib, instr), include_remote=True)}
         assert by_name['Progress_bar.comp'].default_included is True
+
+    def test_embedded_duplicate_is_dropped_once_trust_restores_the_registry(self, local_tree):
+        """A file embedded at save time (portable without its LocalRegistry) can
+        become resolvable again once --trust-local-registries restores that
+        registry -- it must appear once, attributed to the live registry, not
+        twice (once 'embedded', once 'local')."""
+        from mccode_antlr.config import config
+        from mccode_antlr.io import to_json, from_json
+        from mccode_antlr.io.extract import build_manifest
+        _, lib, instr = local_tree
+        blob = to_json(_read(lib, instr))
+
+        config['serialization']['trust_local_registries'] = True
+        try:
+            loaded = from_json(blob)
+        finally:
+            config['serialization']['trust_local_registries'] = False
+
+        manifest = build_manifest(loaded)
+        entries = [m for m in manifest if m.name == 'mylib.h']
+        assert len(entries) == 1
+        assert entries[0].source == 'local'
+        assert entries[0].repository == lib.stem
+        assert entries[0].repository_match == str(lib.resolve())
 
 
 class TestSelectMembers:
@@ -185,3 +253,34 @@ class TestSelectMembers:
         manifest = build_manifest(_read(lib, instr))
         chosen = {m.name for m in select_members(manifest, select=['*.h', '*.c'], exclude=['*.c'])}
         assert chosen == {'mylib.h'}
+
+    def test_repository_filter_matches_by_url_glob(self, local_tree):
+        from mccode_antlr.io.extract import build_manifest, select_members
+        _, lib, instr = local_tree
+        manifest = build_manifest(_read(lib, instr))
+        chosen = {m.name for m in select_members(manifest, repository=['*/mccode-dev/*'])}
+        assert chosen == {'Progress_bar.comp'}
+
+    def test_repository_filter_bypasses_default_included_gate(self, local_tree):
+        from mccode_antlr.io.extract import build_manifest, select_members
+        _, lib, instr = local_tree
+        manifest = build_manifest(_read(lib, instr))
+        chosen = {m.name for m in select_members(manifest, repository=['*/mccode-dev/*'])}
+        assert 'Progress_bar.comp' in chosen
+
+    def test_repository_and_select_combine_as_and(self, local_tree):
+        from mccode_antlr.io.extract import build_manifest, select_members
+        _, lib, instr = local_tree
+        manifest = build_manifest(_read(lib, instr))
+        # Progress_bar.comp matches the name glob but not the repository glob
+        chosen = {m.name for m in select_members(
+            manifest, select=['*.comp'], repository=[str(lib.resolve())],
+        )}
+        assert chosen == {'UsesLib.comp'}
+
+    def test_repository_filter_no_match_returns_empty(self, local_tree):
+        from mccode_antlr.io.extract import build_manifest, select_members
+        _, lib, instr = local_tree
+        manifest = build_manifest(_read(lib, instr))
+        chosen = select_members(manifest, repository=['*/no-such-org/*'])
+        assert chosen == []

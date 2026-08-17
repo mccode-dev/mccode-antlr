@@ -306,8 +306,9 @@ def _handle_registry(reg) -> tuple[str|None, list[str]]:
     if isinstance(reg, (LocalRegistry, GitHubRegistry, ModuleRemoteRegistry, RemoteRegistry)):
         rep = f'registry_from_specification("{reg.specification_string()}")'
     elif isinstance(reg, InMemoryRegistry):
+        contents = reg.file_contents()
         rep = (f'InMemoryRegistry({reg.name!r}, priority={reg.priority!r}, '
-               f'files={reg.file_contents()["files"]!r})')
+               f'files={contents["files"]!r}, origins={contents["origins"]!r})')
     else:
         lines = [f'    # Unsupported registry type preserved as comment: {type(reg).__name__}({reg!r})',]
     return rep, lines
