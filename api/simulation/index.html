@@ -1652,7 +1652,7 @@ never have to import <code>Flavor</code> yourself:</p>
 <span class="normal"><a href="#__codelineno-0-374">374</a></span>
 <span class="normal"><a href="#__codelineno-0-375">375</a></span>
 <span class="normal"><a href="#__codelineno-0-376">376</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-372" name="__codelineno-0-372"></a><span class="k">class</span><span class="w"> </span><span class="nc">McStas</span><span class="p">(</span><span class="n">Simulation</span><span class="p">):</span>
-<a id="__codelineno-0-373" name="__codelineno-0-373"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;A :class:`Simulation` pre-configured for McStas (neutron) instruments.&quot;&quot;&quot;</span>
+<a id="__codelineno-0-373" name="__codelineno-0-373"></a><span class="w">    </span><span class="sd">"""A :class:`Simulation` pre-configured for McStas (neutron) instruments."""</span>
 <a id="__codelineno-0-374" name="__codelineno-0-374"></a>
 <a id="__codelineno-0-375" name="__codelineno-0-375"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">instr</span><span class="p">:</span> <span class="n">Instr</span><span class="p">):</span>
 <a id="__codelineno-0-376" name="__codelineno-0-376"></a>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">instr</span><span class="p">,</span> <span class="n">Flavor</span><span class="o">.</span><span class="n">MCSTAS</span><span class="p">)</span>
@@ -1736,7 +1736,7 @@ never have to import <code>Flavor</code> yourself:</p>
 <span class="normal"><a href="#__codelineno-0-381">381</a></span>
 <span class="normal"><a href="#__codelineno-0-382">382</a></span>
 <span class="normal"><a href="#__codelineno-0-383">383</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-379" name="__codelineno-0-379"></a><span class="k">class</span><span class="w"> </span><span class="nc">McXtrace</span><span class="p">(</span><span class="n">Simulation</span><span class="p">):</span>
-<a id="__codelineno-0-380" name="__codelineno-0-380"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;A :class:`Simulation` pre-configured for McXtrace (X-ray) instruments.&quot;&quot;&quot;</span>
+<a id="__codelineno-0-380" name="__codelineno-0-380"></a><span class="w">    </span><span class="sd">"""A :class:`Simulation` pre-configured for McXtrace (X-ray) instruments."""</span>
 <a id="__codelineno-0-381" name="__codelineno-0-381"></a>
 <a id="__codelineno-0-382" name="__codelineno-0-382"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">instr</span><span class="p">:</span> <span class="n">Instr</span><span class="p">):</span>
 <a id="__codelineno-0-383" name="__codelineno-0-383"></a>        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">instr</span><span class="p">,</span> <span class="n">Flavor</span><span class="o">.</span><span class="n">MCXTRACE</span><span class="p">)</span>
@@ -1810,16 +1810,16 @@ simulations or parameter scans without using the CLI.</p>
 <p>Usage::</p>
 <div class="highlight"><pre><span></span><code>from mccode_antlr.run import McStas
 
-sim = McStas(instr).compile(&#39;/tmp/build&#39;)
+sim = McStas(instr).compile('/tmp/build')
 
 # Single point
-result, dats = sim.run({&#39;x&#39;: 1.5, &#39;y&#39;: 2}, ncount=1000)
+result, dats = sim.run({'x': 1.5, 'y': 2}, ncount=1000)
 
 # Linear parameter scan
-results = sim.scan({&#39;x&#39;: &#39;1:0.5:5&#39;, &#39;y&#39;: 2}, ncount=1000)
+results = sim.scan({'x': '1:0.5:5', 'y': 2}, ncount=1000)
 
 # Grid (Cartesian product) scan
-results = sim.scan({&#39;x&#39;: &#39;1:1:3&#39;, &#39;y&#39;: &#39;10:1:12&#39;}, grid=True, ncount=1000)
+results = sim.scan({'x': '1:1:3', 'y': '10:1:12'}, grid=True, ncount=1000)
 </code></pre></div>
 
 
@@ -2191,7 +2191,7 @@ results = sim.scan({&#39;x&#39;: &#39;1:1:3&#39;, &#39;y&#39;: &#39;10:1:12&#39;
 <span class="normal"><a href="#__codelineno-0-367">367</a></span>
 <span class="normal"><a href="#__codelineno-0-368">368</a></span>
 <span class="normal"><a href="#__codelineno-0-369">369</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-10" name="__codelineno-0-10"></a><span class="k">class</span><span class="w"> </span><span class="nc">Simulation</span><span class="p">:</span>
-<a id="__codelineno-0-11" name="__codelineno-0-11"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;A compiled McCode instrument simulation.</span>
+<a id="__codelineno-0-11" name="__codelineno-0-11"></a><span class="w">    </span><span class="sd">"""A compiled McCode instrument simulation.</span>
 <a id="__codelineno-0-12" name="__codelineno-0-12"></a>
 <a id="__codelineno-0-13" name="__codelineno-0-13"></a><span class="sd">    Provides a convenient Python API for compiling an instrument and running single-point</span>
 <a id="__codelineno-0-14" name="__codelineno-0-14"></a><span class="sd">    simulations or parameter scans without using the CLI.</span>
@@ -2200,17 +2200,17 @@ results = sim.scan({&#39;x&#39;: &#39;1:1:3&#39;, &#39;y&#39;: &#39;10:1:12&#39;
 <a id="__codelineno-0-17" name="__codelineno-0-17"></a>
 <a id="__codelineno-0-18" name="__codelineno-0-18"></a><span class="sd">        from mccode_antlr.run import McStas</span>
 <a id="__codelineno-0-19" name="__codelineno-0-19"></a>
-<a id="__codelineno-0-20" name="__codelineno-0-20"></a><span class="sd">        sim = McStas(instr).compile(&#39;/tmp/build&#39;)</span>
+<a id="__codelineno-0-20" name="__codelineno-0-20"></a><span class="sd">        sim = McStas(instr).compile('/tmp/build')</span>
 <a id="__codelineno-0-21" name="__codelineno-0-21"></a>
 <a id="__codelineno-0-22" name="__codelineno-0-22"></a><span class="sd">        # Single point</span>
-<a id="__codelineno-0-23" name="__codelineno-0-23"></a><span class="sd">        result, dats = sim.run({&#39;x&#39;: 1.5, &#39;y&#39;: 2}, ncount=1000)</span>
+<a id="__codelineno-0-23" name="__codelineno-0-23"></a><span class="sd">        result, dats = sim.run({'x': 1.5, 'y': 2}, ncount=1000)</span>
 <a id="__codelineno-0-24" name="__codelineno-0-24"></a>
 <a id="__codelineno-0-25" name="__codelineno-0-25"></a><span class="sd">        # Linear parameter scan</span>
-<a id="__codelineno-0-26" name="__codelineno-0-26"></a><span class="sd">        results = sim.scan({&#39;x&#39;: &#39;1:0.5:5&#39;, &#39;y&#39;: 2}, ncount=1000)</span>
+<a id="__codelineno-0-26" name="__codelineno-0-26"></a><span class="sd">        results = sim.scan({'x': '1:0.5:5', 'y': 2}, ncount=1000)</span>
 <a id="__codelineno-0-27" name="__codelineno-0-27"></a>
 <a id="__codelineno-0-28" name="__codelineno-0-28"></a><span class="sd">        # Grid (Cartesian product) scan</span>
-<a id="__codelineno-0-29" name="__codelineno-0-29"></a><span class="sd">        results = sim.scan({&#39;x&#39;: &#39;1:1:3&#39;, &#39;y&#39;: &#39;10:1:12&#39;}, grid=True, ncount=1000)</span>
-<a id="__codelineno-0-30" name="__codelineno-0-30"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-29" name="__codelineno-0-29"></a><span class="sd">        results = sim.scan({'x': '1:1:3', 'y': '10:1:12'}, grid=True, ncount=1000)</span>
+<a id="__codelineno-0-30" name="__codelineno-0-30"></a><span class="sd">    """</span>
 <a id="__codelineno-0-31" name="__codelineno-0-31"></a>
 <a id="__codelineno-0-32" name="__codelineno-0-32"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">instr</span><span class="p">:</span> <span class="n">Instr</span><span class="p">,</span> <span class="n">flavor</span><span class="p">:</span> <span class="n">Flavor</span><span class="p">):</span>
 <a id="__codelineno-0-33" name="__codelineno-0-33"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">instr</span> <span class="o">=</span> <span class="n">instr</span>
@@ -2233,24 +2233,24 @@ results = sim.scan({&#39;x&#39;: &#39;1:1:3&#39;, &#39;y&#39;: &#39;10:1:12&#39;
 <a id="__codelineno-0-50" name="__codelineno-0-50"></a>        <span class="n">debug</span> <span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
 <a id="__codelineno-0-51" name="__codelineno-0-51"></a>        <span class="n">line_directives</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <a id="__codelineno-0-52" name="__codelineno-0-52"></a>    <span class="p">):</span>
-<a id="__codelineno-0-53" name="__codelineno-0-53"></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<a id="__codelineno-0-53" name="__codelineno-0-53"></a><span class="w">        </span><span class="sd">"""</span>
 <a id="__codelineno-0-54" name="__codelineno-0-54"></a><span class="sd">        Output the C source code of the instrument to a specified directory or CWD.</span>
 <a id="__codelineno-0-55" name="__codelineno-0-55"></a>
-<a id="__codelineno-0-56" name="__codelineno-0-56"></a><span class="sd">        &quot;&quot;&quot;</span>
+<a id="__codelineno-0-56" name="__codelineno-0-56"></a><span class="sd">        """</span>
 <a id="__codelineno-0-57" name="__codelineno-0-57"></a>        <span class="kn">from</span><span class="w"> </span><span class="nn">mccode_antlr.translators.c</span><span class="w"> </span><span class="kn">import</span> <span class="n">CTargetVisitor</span>
 <a id="__codelineno-0-58" name="__codelineno-0-58"></a>        <span class="n">directory</span> <span class="o">=</span> <span class="n">directory</span> <span class="ow">or</span> <span class="n">Path</span><span class="p">()</span>
 <a id="__codelineno-0-59" name="__codelineno-0-59"></a>        <span class="n">config</span> <span class="o">=</span> <span class="p">{</span>
-<a id="__codelineno-0-60" name="__codelineno-0-60"></a>            <span class="s1">&#39;default_main&#39;</span><span class="p">:</span> <span class="n">main</span><span class="p">,</span>
-<a id="__codelineno-0-61" name="__codelineno-0-61"></a>            <span class="s1">&#39;enable_trace&#39;</span><span class="p">:</span> <span class="n">trace</span><span class="p">,</span>
-<a id="__codelineno-0-62" name="__codelineno-0-62"></a>            <span class="s1">&#39;portable&#39;</span><span class="p">:</span> <span class="n">portable</span><span class="p">,</span>
-<a id="__codelineno-0-63" name="__codelineno-0-63"></a>            <span class="s1">&#39;include_runtime&#39;</span><span class="p">:</span> <span class="n">runtime</span><span class="p">,</span>
-<a id="__codelineno-0-64" name="__codelineno-0-64"></a>            <span class="s1">&#39;embed_instrument_file&#39;</span><span class="p">:</span> <span class="n">embed</span><span class="p">,</span>
-<a id="__codelineno-0-65" name="__codelineno-0-65"></a>            <span class="s1">&#39;verbose&#39;</span><span class="p">:</span> <span class="n">verbose</span><span class="p">,</span>
-<a id="__codelineno-0-66" name="__codelineno-0-66"></a>            <span class="s1">&#39;output&#39;</span><span class="p">:</span> <span class="n">directory</span> <span class="o">/</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">instr</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s1">.c&#39;</span><span class="p">,</span>
+<a id="__codelineno-0-60" name="__codelineno-0-60"></a>            <span class="s1">'default_main'</span><span class="p">:</span> <span class="n">main</span><span class="p">,</span>
+<a id="__codelineno-0-61" name="__codelineno-0-61"></a>            <span class="s1">'enable_trace'</span><span class="p">:</span> <span class="n">trace</span><span class="p">,</span>
+<a id="__codelineno-0-62" name="__codelineno-0-62"></a>            <span class="s1">'portable'</span><span class="p">:</span> <span class="n">portable</span><span class="p">,</span>
+<a id="__codelineno-0-63" name="__codelineno-0-63"></a>            <span class="s1">'include_runtime'</span><span class="p">:</span> <span class="n">runtime</span><span class="p">,</span>
+<a id="__codelineno-0-64" name="__codelineno-0-64"></a>            <span class="s1">'embed_instrument_file'</span><span class="p">:</span> <span class="n">embed</span><span class="p">,</span>
+<a id="__codelineno-0-65" name="__codelineno-0-65"></a>            <span class="s1">'verbose'</span><span class="p">:</span> <span class="n">verbose</span><span class="p">,</span>
+<a id="__codelineno-0-66" name="__codelineno-0-66"></a>            <span class="s1">'output'</span><span class="p">:</span> <span class="n">directory</span> <span class="o">/</span> <span class="sa">f</span><span class="s1">'</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">instr</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s1">.c'</span><span class="p">,</span>
 <a id="__codelineno-0-67" name="__codelineno-0-67"></a>        <span class="p">}</span>
 <a id="__codelineno-0-68" name="__codelineno-0-68"></a>        <span class="n">visitor</span> <span class="o">=</span> <span class="n">CTargetVisitor</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">instr</span><span class="p">,</span> <span class="n">flavor</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">flavor</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">,</span>
 <a id="__codelineno-0-69" name="__codelineno-0-69"></a>                                 <span class="n">verbose</span><span class="o">=</span><span class="n">verbose</span><span class="p">,</span> <span class="n">debug</span><span class="o">=</span><span class="n">debug</span><span class="p">,</span> <span class="n">line_directives</span><span class="o">=</span><span class="n">line_directives</span><span class="p">)</span>
-<a id="__codelineno-0-70" name="__codelineno-0-70"></a>        <span class="n">visitor</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">filename</span><span class="o">=</span><span class="n">config</span><span class="p">[</span><span class="s1">&#39;output&#39;</span><span class="p">])</span>
+<a id="__codelineno-0-70" name="__codelineno-0-70"></a>        <span class="n">visitor</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">filename</span><span class="o">=</span><span class="n">config</span><span class="p">[</span><span class="s1">'output'</span><span class="p">])</span>
 <a id="__codelineno-0-71" name="__codelineno-0-71"></a>
 <a id="__codelineno-0-72" name="__codelineno-0-72"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">compile</span><span class="p">(</span>
 <a id="__codelineno-0-73" name="__codelineno-0-73"></a>        <span class="bp">self</span><span class="p">,</span>
@@ -2264,8 +2264,8 @@ results = sim.scan({&#39;x&#39;: &#39;1:1:3&#39;, &#39;y&#39;: &#39;10:1:12&#39;
 <a id="__codelineno-0-81" name="__codelineno-0-81"></a>        <span class="n">process_count</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
 <a id="__codelineno-0-82" name="__codelineno-0-82"></a>        <span class="n">force</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
 <a id="__codelineno-0-83" name="__codelineno-0-83"></a>        <span class="n">create_directory</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
-<a id="__codelineno-0-84" name="__codelineno-0-84"></a>    <span class="p">)</span> <span class="o">-&gt;</span> <span class="s1">&#39;Simulation&#39;</span><span class="p">:</span>
-<a id="__codelineno-0-85" name="__codelineno-0-85"></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;Compile the instrument to a binary.</span>
+<a id="__codelineno-0-84" name="__codelineno-0-84"></a>    <span class="p">)</span> <span class="o">-&gt;</span> <span class="s1">'Simulation'</span><span class="p">:</span>
+<a id="__codelineno-0-85" name="__codelineno-0-85"></a><span class="w">        </span><span class="sd">"""Compile the instrument to a binary.</span>
 <a id="__codelineno-0-86" name="__codelineno-0-86"></a>
 <a id="__codelineno-0-87" name="__codelineno-0-87"></a><span class="sd">        :param directory: Directory in which to place the compiled binary and C source.</span>
 <a id="__codelineno-0-88" name="__codelineno-0-88"></a><span class="sd">            When *None* a temporary directory is created automatically and its</span>
@@ -2278,15 +2278,15 @@ results = sim.scan({&#39;x&#39;: &#39;1:1:3&#39;, &#39;y&#39;: &#39;10:1:12&#39;
 <a id="__codelineno-0-95" name="__codelineno-0-95"></a><span class="sd">        :param gpu: Compile with OpenACC GPU support.</span>
 <a id="__codelineno-0-96" name="__codelineno-0-96"></a><span class="sd">        :param process_count: MPI process count (0 = system default).</span>
 <a id="__codelineno-0-97" name="__codelineno-0-97"></a><span class="sd">        :param force: Re-compile even if the binary already exists.</span>
-<a id="__codelineno-0-98" name="__codelineno-0-98"></a><span class="sd">        :param create_directory: Create the directory if it doesn&#39;t exist.</span>
+<a id="__codelineno-0-98" name="__codelineno-0-98"></a><span class="sd">        :param create_directory: Create the directory if it doesn't exist.</span>
 <a id="__codelineno-0-99" name="__codelineno-0-99"></a><span class="sd">        :returns: self, to allow method chaining.</span>
-<a id="__codelineno-0-100" name="__codelineno-0-100"></a><span class="sd">        &quot;&quot;&quot;</span>
+<a id="__codelineno-0-100" name="__codelineno-0-100"></a><span class="sd">        """</span>
 <a id="__codelineno-0-101" name="__codelineno-0-101"></a>        <span class="kn">from</span><span class="w"> </span><span class="nn">os</span><span class="w"> </span><span class="kn">import</span> <span class="n">access</span><span class="p">,</span> <span class="n">X_OK</span>
 <a id="__codelineno-0-102" name="__codelineno-0-102"></a>        <span class="kn">from</span><span class="w"> </span><span class="nn">mccode_antlr.run.runner</span><span class="w"> </span><span class="kn">import</span> <span class="n">mccode_compile</span>
 <a id="__codelineno-0-103" name="__codelineno-0-103"></a>
 <a id="__codelineno-0-104" name="__codelineno-0-104"></a>        <span class="k">if</span> <span class="n">directory</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
 <a id="__codelineno-0-105" name="__codelineno-0-105"></a>            <span class="kn">import</span><span class="w"> </span><span class="nn">tempfile</span>
-<a id="__codelineno-0-106" name="__codelineno-0-106"></a>            <span class="bp">self</span><span class="o">.</span><span class="n">_tmpdir</span> <span class="o">=</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">TemporaryDirectory</span><span class="p">(</span><span class="n">prefix</span><span class="o">=</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">instr</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s1">_mccode_&#39;</span><span class="p">)</span>
+<a id="__codelineno-0-106" name="__codelineno-0-106"></a>            <span class="bp">self</span><span class="o">.</span><span class="n">_tmpdir</span> <span class="o">=</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">TemporaryDirectory</span><span class="p">(</span><span class="n">prefix</span><span class="o">=</span><span class="sa">f</span><span class="s1">'</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">instr</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s1">_mccode_'</span><span class="p">)</span>
 <a id="__codelineno-0-107" name="__codelineno-0-107"></a>            <span class="n">directory</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_tmpdir</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
 <a id="__codelineno-0-108" name="__codelineno-0-108"></a>        <span class="k">else</span><span class="p">:</span>
 <a id="__codelineno-0-109" name="__codelineno-0-109"></a>            <span class="bp">self</span><span class="o">.</span><span class="n">_tmpdir</span> <span class="o">=</span> <span class="kc">None</span>
@@ -2296,9 +2296,9 @@ results = sim.scan({&#39;x&#39;: &#39;1:1:3&#39;, &#39;y&#39;: &#39;10:1:12&#39;
 <a id="__codelineno-0-113" name="__codelineno-0-113"></a>        <span class="k">if</span> <span class="ow">not</span> <span class="n">directory</span><span class="o">.</span><span class="n">exists</span><span class="p">()</span> <span class="ow">and</span> <span class="n">create_directory</span><span class="p">:</span>
 <a id="__codelineno-0-114" name="__codelineno-0-114"></a>            <span class="n">directory</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">parents</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <a id="__codelineno-0-115" name="__codelineno-0-115"></a>        <span class="k">if</span> <span class="ow">not</span> <span class="n">directory</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
-<a id="__codelineno-0-116" name="__codelineno-0-116"></a>            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;The directory </span><span class="si">{</span><span class="n">directory</span><span class="si">}</span><span class="s2"> does not exist, create it or pass `create_directory=True`.&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-116" name="__codelineno-0-116"></a>            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"The directory </span><span class="si">{</span><span class="n">directory</span><span class="si">}</span><span class="s2"> does not exist, create it or pass `create_directory=True`."</span><span class="p">)</span>
 <a id="__codelineno-0-117" name="__codelineno-0-117"></a>        <span class="k">if</span> <span class="ow">not</span> <span class="n">directory</span><span class="o">.</span><span class="n">is_dir</span><span class="p">():</span>
-<a id="__codelineno-0-118" name="__codelineno-0-118"></a>            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">directory</span><span class="si">}</span><span class="s2"> is not a directory.&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-118" name="__codelineno-0-118"></a>            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">directory</span><span class="si">}</span><span class="s2"> is not a directory."</span><span class="p">)</span>
 <a id="__codelineno-0-119" name="__codelineno-0-119"></a>
 <a id="__codelineno-0-120" name="__codelineno-0-120"></a>        <span class="n">binary_path</span> <span class="o">=</span> <span class="n">directory</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">instr</span><span class="o">.</span><span class="n">name</span>
 <a id="__codelineno-0-121" name="__codelineno-0-121"></a>        <span class="k">if</span> <span class="n">binary_path</span><span class="o">.</span><span class="n">exists</span><span class="p">()</span> <span class="ow">and</span> <span class="n">access</span><span class="p">(</span><span class="n">binary_path</span><span class="p">,</span> <span class="n">X_OK</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">force</span><span class="p">:</span>
@@ -2306,10 +2306,10 @@ results = sim.scan({&#39;x&#39;: &#39;1:1:3&#39;, &#39;y&#39;: &#39;10:1:12&#39;
 <a id="__codelineno-0-123" name="__codelineno-0-123"></a>            <span class="c1"># Reconstruct a default target so run/scan work without knowing the original settings.</span>
 <a id="__codelineno-0-124" name="__codelineno-0-124"></a>            <span class="bp">self</span><span class="o">.</span><span class="n">_target</span> <span class="o">=</span> <span class="n">CBinaryTarget</span><span class="p">(</span><span class="n">mpi</span><span class="o">=</span><span class="n">parallel</span><span class="p">,</span> <span class="n">acc</span><span class="o">=</span><span class="n">gpu</span><span class="p">,</span> <span class="n">count</span><span class="o">=</span><span class="n">process_count</span><span class="p">,</span> <span class="n">nexus</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 <a id="__codelineno-0-125" name="__codelineno-0-125"></a>        <span class="k">elif</span> <span class="n">binary_path</span><span class="o">.</span><span class="n">exists</span><span class="p">()</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">access</span><span class="p">(</span><span class="n">binary_path</span><span class="p">,</span> <span class="n">X_OK</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">force</span><span class="p">:</span>
-<a id="__codelineno-0-126" name="__codelineno-0-126"></a>            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">binary_path</span><span class="si">}</span><span class="s2"> exists but is not an executable, overwrite by passing `force=True`.&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-126" name="__codelineno-0-126"></a>            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">binary_path</span><span class="si">}</span><span class="s2"> exists but is not an executable, overwrite by passing `force=True`."</span><span class="p">)</span>
 <a id="__codelineno-0-127" name="__codelineno-0-127"></a>        <span class="k">else</span><span class="p">:</span>
-<a id="__codelineno-0-128" name="__codelineno-0-128"></a>            <span class="n">target</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;mpi&#39;</span><span class="p">:</span> <span class="n">parallel</span><span class="p">,</span> <span class="s1">&#39;acc&#39;</span><span class="p">:</span> <span class="n">gpu</span><span class="p">,</span> <span class="s1">&#39;count&#39;</span><span class="p">:</span> <span class="n">process_count</span><span class="p">,</span> <span class="s1">&#39;nexus&#39;</span><span class="p">:</span> <span class="kc">False</span><span class="p">}</span>
-<a id="__codelineno-0-129" name="__codelineno-0-129"></a>            <span class="n">config</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;enable_trace&#39;</span><span class="p">:</span> <span class="n">trace</span><span class="p">,</span> <span class="s1">&#39;embed_instrument_file&#39;</span><span class="p">:</span> <span class="n">source</span><span class="p">,</span> <span class="s1">&#39;verbose&#39;</span><span class="p">:</span> <span class="n">verbose</span><span class="p">}</span>
+<a id="__codelineno-0-128" name="__codelineno-0-128"></a>            <span class="n">target</span> <span class="o">=</span> <span class="p">{</span><span class="s1">'mpi'</span><span class="p">:</span> <span class="n">parallel</span><span class="p">,</span> <span class="s1">'acc'</span><span class="p">:</span> <span class="n">gpu</span><span class="p">,</span> <span class="s1">'count'</span><span class="p">:</span> <span class="n">process_count</span><span class="p">,</span> <span class="s1">'nexus'</span><span class="p">:</span> <span class="kc">False</span><span class="p">}</span>
+<a id="__codelineno-0-129" name="__codelineno-0-129"></a>            <span class="n">config</span> <span class="o">=</span> <span class="p">{</span><span class="s1">'enable_trace'</span><span class="p">:</span> <span class="n">trace</span><span class="p">,</span> <span class="s1">'embed_instrument_file'</span><span class="p">:</span> <span class="n">source</span><span class="p">,</span> <span class="s1">'verbose'</span><span class="p">:</span> <span class="n">verbose</span><span class="p">}</span>
 <a id="__codelineno-0-130" name="__codelineno-0-130"></a>            <span class="bp">self</span><span class="o">.</span><span class="n">_binary</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_target</span> <span class="o">=</span> <span class="n">mccode_compile</span><span class="p">(</span>
 <a id="__codelineno-0-131" name="__codelineno-0-131"></a>                <span class="bp">self</span><span class="o">.</span><span class="n">instr</span><span class="p">,</span> <span class="n">binary_path</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">flavor</span><span class="p">,</span> <span class="n">target</span><span class="o">=</span><span class="n">target</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">,</span> <span class="n">replace</span><span class="o">=</span><span class="kc">True</span>
 <a id="__codelineno-0-132" name="__codelineno-0-132"></a>            <span class="p">)</span>
@@ -2320,14 +2320,14 @@ results = sim.scan({&#39;x&#39;: &#39;1:1:3&#39;, &#39;y&#39;: &#39;10:1:12&#39;
 <a id="__codelineno-0-137" name="__codelineno-0-137"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">_check_compiled</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
 <a id="__codelineno-0-138" name="__codelineno-0-138"></a>        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_binary</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_target</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
 <a id="__codelineno-0-139" name="__codelineno-0-139"></a>            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
-<a id="__codelineno-0-140" name="__codelineno-0-140"></a>                <span class="s2">&quot;Instrument has not been compiled. Call compile() before run() or scan().&quot;</span>
+<a id="__codelineno-0-140" name="__codelineno-0-140"></a>                <span class="s2">"Instrument has not been compiled. Call compile() before run() or scan()."</span>
 <a id="__codelineno-0-141" name="__codelineno-0-141"></a>            <span class="p">)</span>
 <a id="__codelineno-0-142" name="__codelineno-0-142"></a>
-<a id="__codelineno-0-143" name="__codelineno-0-143"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">_default_output_dir</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">suffix</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s1">&#39;&#39;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span><span class="p">:</span>
+<a id="__codelineno-0-143" name="__codelineno-0-143"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">_default_output_dir</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">suffix</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s1">''</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span><span class="p">:</span>
 <a id="__codelineno-0-144" name="__codelineno-0-144"></a>        <span class="kn">from</span><span class="w"> </span><span class="nn">datetime</span><span class="w"> </span><span class="kn">import</span> <span class="n">datetime</span>
-<a id="__codelineno-0-145" name="__codelineno-0-145"></a>        <span class="n">base</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">directory</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">directory</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">Path</span><span class="p">(</span><span class="s1">&#39;.&#39;</span><span class="p">)</span>
-<a id="__codelineno-0-146" name="__codelineno-0-146"></a>        <span class="n">timestamp</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">()</span><span class="o">.</span><span class="n">strftime</span><span class="p">(</span><span class="s1">&#39;%Y%m</span><span class="si">%d</span><span class="s1">_%H%M%S&#39;</span><span class="p">)</span>
-<a id="__codelineno-0-147" name="__codelineno-0-147"></a>        <span class="k">return</span> <span class="n">base</span> <span class="o">/</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">instr</span><span class="o">.</span><span class="n">name</span><span class="si">}{</span><span class="n">timestamp</span><span class="si">}{</span><span class="n">suffix</span><span class="si">}</span><span class="s1">&#39;</span>
+<a id="__codelineno-0-145" name="__codelineno-0-145"></a>        <span class="n">base</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">directory</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">directory</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">Path</span><span class="p">(</span><span class="s1">'.'</span><span class="p">)</span>
+<a id="__codelineno-0-146" name="__codelineno-0-146"></a>        <span class="n">timestamp</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">()</span><span class="o">.</span><span class="n">strftime</span><span class="p">(</span><span class="s1">'%Y%m</span><span class="si">%d</span><span class="s1">_%H%M%S'</span><span class="p">)</span>
+<a id="__codelineno-0-147" name="__codelineno-0-147"></a>        <span class="k">return</span> <span class="n">base</span> <span class="o">/</span> <span class="sa">f</span><span class="s1">'</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">instr</span><span class="o">.</span><span class="n">name</span><span class="si">}{</span><span class="n">timestamp</span><span class="si">}{</span><span class="n">suffix</span><span class="si">}</span><span class="s1">'</span>
 <a id="__codelineno-0-148" name="__codelineno-0-148"></a>
 <a id="__codelineno-0-149" name="__codelineno-0-149"></a>    <span class="nd">@staticmethod</span>
 <a id="__codelineno-0-150" name="__codelineno-0-150"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">_build_runtime_kwargs</span><span class="p">(</span>
@@ -2361,7 +2361,7 @@ results = sim.scan({&#39;x&#39;: &#39;1:1:3&#39;, &#39;y&#39;: &#39;10:1:12&#39;
 <a id="__codelineno-0-178" name="__codelineno-0-178"></a>        <span class="n">dry_run</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
 <a id="__codelineno-0-179" name="__codelineno-0-179"></a>        <span class="n">capture</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
 <a id="__codelineno-0-180" name="__codelineno-0-180"></a>    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">:</span>
-<a id="__codelineno-0-181" name="__codelineno-0-181"></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;Run a single simulation point.</span>
+<a id="__codelineno-0-181" name="__codelineno-0-181"></a><span class="w">        </span><span class="sd">"""Run a single simulation point.</span>
 <a id="__codelineno-0-182" name="__codelineno-0-182"></a>
 <a id="__codelineno-0-183" name="__codelineno-0-183"></a><span class="sd">        :param parameters: Dict mapping instrument parameter names to scalar values</span>
 <a id="__codelineno-0-184" name="__codelineno-0-184"></a><span class="sd">            (int, float, or str).  Range specifications are not accepted here; use</span>
@@ -2381,7 +2381,7 @@ results = sim.scan({&#39;x&#39;: &#39;1:1:3&#39;, &#39;y&#39;: &#39;10:1:12&#39;
 <a id="__codelineno-0-198" name="__codelineno-0-198"></a><span class="sd">            *dats* is a dict mapping monitor stem names to loaded data objects.</span>
 <a id="__codelineno-0-199" name="__codelineno-0-199"></a><span class="sd">        :raises ValueError: If any parameter value resolves to more than one point.</span>
 <a id="__codelineno-0-200" name="__codelineno-0-200"></a><span class="sd">        :raises RuntimeError: If :meth:`compile` has not been called first.</span>
-<a id="__codelineno-0-201" name="__codelineno-0-201"></a><span class="sd">        &quot;&quot;&quot;</span>
+<a id="__codelineno-0-201" name="__codelineno-0-201"></a><span class="sd">        """</span>
 <a id="__codelineno-0-202" name="__codelineno-0-202"></a>        <span class="kn">from</span><span class="w"> </span><span class="nn">mccode_antlr.run.runner</span><span class="w"> </span><span class="kn">import</span> <span class="n">mccode_run_compiled</span><span class="p">,</span> <span class="n">mccode_runtime_parameters</span><span class="p">,</span> <span class="n">regular_mccode_runtime_dict</span>
 <a id="__codelineno-0-203" name="__codelineno-0-203"></a>        <span class="kn">from</span><span class="w"> </span><span class="nn">mccode_antlr.run.range</span><span class="w"> </span><span class="kn">import</span> <span class="n">_make_scanned_parameter</span><span class="p">,</span> <span class="n">Singular</span>
 <a id="__codelineno-0-204" name="__codelineno-0-204"></a>
@@ -2396,12 +2396,12 @@ results = sim.scan({&#39;x&#39;: &#39;1:1:3&#39;, &#39;y&#39;: &#39;10:1:12&#39;
 <a id="__codelineno-0-213" name="__codelineno-0-213"></a>
 <a id="__codelineno-0-214" name="__codelineno-0-214"></a>        <span class="n">concrete</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
 <a id="__codelineno-0-215" name="__codelineno-0-215"></a>        <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">parameters</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-<a id="__codelineno-0-216" name="__codelineno-0-216"></a>            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">any</span><span class="p">(</span><span class="n">c</span> <span class="ow">in</span> <span class="n">v</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="p">(</span><span class="s1">&#39;:&#39;</span><span class="p">,</span> <span class="s1">&#39;,&#39;</span><span class="p">)):</span>
+<a id="__codelineno-0-216" name="__codelineno-0-216"></a>            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">any</span><span class="p">(</span><span class="n">c</span> <span class="ow">in</span> <span class="n">v</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="p">(</span><span class="s1">':'</span><span class="p">,</span> <span class="s1">','</span><span class="p">)):</span>
 <a id="__codelineno-0-217" name="__codelineno-0-217"></a>                <span class="n">parsed</span> <span class="o">=</span> <span class="n">_make_scanned_parameter</span><span class="p">(</span><span class="n">v</span><span class="p">)</span>
 <a id="__codelineno-0-218" name="__codelineno-0-218"></a>                <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">parsed</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
 <a id="__codelineno-0-219" name="__codelineno-0-219"></a>                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-<a id="__codelineno-0-220" name="__codelineno-0-220"></a>                        <span class="sa">f</span><span class="s2">&quot;Parameter &#39;</span><span class="si">{</span><span class="n">k</span><span class="si">}</span><span class="s2">=</span><span class="si">{</span><span class="n">v</span><span class="si">}</span><span class="s2">&#39; resolves to </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">parsed</span><span class="p">)</span><span class="si">}</span><span class="s2"> points. &quot;</span>
-<a id="__codelineno-0-221" name="__codelineno-0-221"></a>                        <span class="s2">&quot;Use scan() for multi-point runs.&quot;</span>
+<a id="__codelineno-0-220" name="__codelineno-0-220"></a>                        <span class="sa">f</span><span class="s2">"Parameter '</span><span class="si">{</span><span class="n">k</span><span class="si">}</span><span class="s2">=</span><span class="si">{</span><span class="n">v</span><span class="si">}</span><span class="s2">' resolves to </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">parsed</span><span class="p">)</span><span class="si">}</span><span class="s2"> points. "</span>
+<a id="__codelineno-0-221" name="__codelineno-0-221"></a>                        <span class="s2">"Use scan() for multi-point runs."</span>
 <a id="__codelineno-0-222" name="__codelineno-0-222"></a>                    <span class="p">)</span>
 <a id="__codelineno-0-223" name="__codelineno-0-223"></a>                <span class="n">concrete</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">parsed</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
 <a id="__codelineno-0-224" name="__codelineno-0-224"></a>            <span class="k">else</span><span class="p">:</span>
@@ -2437,14 +2437,14 @@ results = sim.scan({&#39;x&#39;: &#39;1:1:3&#39;, &#39;y&#39;: &#39;10:1:12&#39;
 <a id="__codelineno-0-254" name="__codelineno-0-254"></a>        <span class="n">fmt</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <a id="__codelineno-0-255" name="__codelineno-0-255"></a>        <span class="n">dry_run</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
 <a id="__codelineno-0-256" name="__codelineno-0-256"></a>        <span class="n">capture</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
-<a id="__codelineno-0-257" name="__codelineno-0-257"></a>    <span class="p">)</span> <span class="o">-&gt;</span> <span class="s1">&#39;ScanOutput&#39;</span><span class="p">:</span>
-<a id="__codelineno-0-258" name="__codelineno-0-258"></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;Run a parameter scan.</span>
+<a id="__codelineno-0-257" name="__codelineno-0-257"></a>    <span class="p">)</span> <span class="o">-&gt;</span> <span class="s1">'ScanOutput'</span><span class="p">:</span>
+<a id="__codelineno-0-258" name="__codelineno-0-258"></a><span class="w">        </span><span class="sd">"""Run a parameter scan.</span>
 <a id="__codelineno-0-259" name="__codelineno-0-259"></a>
 <a id="__codelineno-0-260" name="__codelineno-0-260"></a><span class="sd">        :param parameters: Dict mapping instrument parameter names to range specifications.</span>
 <a id="__codelineno-0-261" name="__codelineno-0-261"></a><span class="sd">            Accepted value types:</span>
 <a id="__codelineno-0-262" name="__codelineno-0-262"></a>
-<a id="__codelineno-0-263" name="__codelineno-0-263"></a><span class="sd">            * **str** — MATLAB-style range ``&#39;start:step:stop&#39;``, explicit list</span>
-<a id="__codelineno-0-264" name="__codelineno-0-264"></a><span class="sd">              ``&#39;v1,v2,v3&#39;``, or single value ``&#39;1.5&#39;``.</span>
+<a id="__codelineno-0-263" name="__codelineno-0-263"></a><span class="sd">            * **str** — MATLAB-style range ``'start:step:stop'``, explicit list</span>
+<a id="__codelineno-0-264" name="__codelineno-0-264"></a><span class="sd">              ``'v1,v2,v3'``, or single value ``'1.5'``.</span>
 <a id="__codelineno-0-265" name="__codelineno-0-265"></a><span class="sd">            * **list / tuple** — explicit sequence of values.</span>
 <a id="__codelineno-0-266" name="__codelineno-0-266"></a><span class="sd">            * :class:`~mccode_antlr.run.range.MRange`, :class:`~mccode_antlr.run.range.EList`,</span>
 <a id="__codelineno-0-267" name="__codelineno-0-267"></a><span class="sd">              :class:`~mccode_antlr.run.range.Singular` — pre-constructed range objects.</span>
@@ -2470,7 +2470,7 @@ results = sim.scan({&#39;x&#39;: &#39;1:1:3&#39;, &#39;y&#39;: &#39;10:1:12&#39;
 <a id="__codelineno-0-287" name="__codelineno-0-287"></a><span class="sd">            :attr:`~mccode_antlr.run.output.ScanOutput.axes` mapping of the</span>
 <a id="__codelineno-0-288" name="__codelineno-0-288"></a><span class="sd">            normalised parameter ranges.</span>
 <a id="__codelineno-0-289" name="__codelineno-0-289"></a><span class="sd">        :raises RuntimeError: If :meth:`compile` has not been called first.</span>
-<a id="__codelineno-0-290" name="__codelineno-0-290"></a><span class="sd">        &quot;&quot;&quot;</span>
+<a id="__codelineno-0-290" name="__codelineno-0-290"></a><span class="sd">        """</span>
 <a id="__codelineno-0-291" name="__codelineno-0-291"></a>        <span class="kn">from</span><span class="w"> </span><span class="nn">mccode_antlr.run.runner</span><span class="w"> </span><span class="kn">import</span> <span class="n">mccode_run_scan</span>
 <a id="__codelineno-0-292" name="__codelineno-0-292"></a>        <span class="kn">from</span><span class="w"> </span><span class="nn">mccode_antlr.run.output</span><span class="w"> </span><span class="kn">import</span> <span class="n">ScanOutput</span>
 <a id="__codelineno-0-293" name="__codelineno-0-293"></a>
@@ -2526,7 +2526,7 @@ results = sim.scan({&#39;x&#39;: &#39;1:1:3&#39;, &#39;y&#39;: &#39;10:1:12&#39;
 <a id="__codelineno-0-343" name="__codelineno-0-343"></a>
 <a id="__codelineno-0-344" name="__codelineno-0-344"></a>    <span class="nd">@staticmethod</span>
 <a id="__codelineno-0-345" name="__codelineno-0-345"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">_normalize_scan_parameters</span><span class="p">(</span><span class="n">parameters</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
-<a id="__codelineno-0-346" name="__codelineno-0-346"></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;Convert heterogeneous parameter values to range objects understood by the runner.&quot;&quot;&quot;</span>
+<a id="__codelineno-0-346" name="__codelineno-0-346"></a><span class="w">        </span><span class="sd">"""Convert heterogeneous parameter values to range objects understood by the runner."""</span>
 <a id="__codelineno-0-347" name="__codelineno-0-347"></a>        <span class="kn">from</span><span class="w"> </span><span class="nn">mccode_antlr.run.range</span><span class="w"> </span><span class="kn">import</span> <span class="n">MRange</span><span class="p">,</span> <span class="n">EList</span><span class="p">,</span> <span class="n">Singular</span><span class="p">,</span> <span class="n">_make_scanned_parameter</span><span class="p">,</span> <span class="n">has_len</span>
 <a id="__codelineno-0-348" name="__codelineno-0-348"></a>
 <a id="__codelineno-0-349" name="__codelineno-0-349"></a>        <span class="n">normalized</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="p">{}</span>
@@ -2703,8 +2703,8 @@ results = sim.scan({&#39;x&#39;: &#39;1:1:3&#39;, &#39;y&#39;: &#39;10:1:12&#39;
 <a id="__codelineno-0-81" name="__codelineno-0-81"></a>    <span class="n">process_count</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
 <a id="__codelineno-0-82" name="__codelineno-0-82"></a>    <span class="n">force</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
 <a id="__codelineno-0-83" name="__codelineno-0-83"></a>    <span class="n">create_directory</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
-<a id="__codelineno-0-84" name="__codelineno-0-84"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="s1">&#39;Simulation&#39;</span><span class="p">:</span>
-<a id="__codelineno-0-85" name="__codelineno-0-85"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Compile the instrument to a binary.</span>
+<a id="__codelineno-0-84" name="__codelineno-0-84"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="s1">'Simulation'</span><span class="p">:</span>
+<a id="__codelineno-0-85" name="__codelineno-0-85"></a><span class="w">    </span><span class="sd">"""Compile the instrument to a binary.</span>
 <a id="__codelineno-0-86" name="__codelineno-0-86"></a>
 <a id="__codelineno-0-87" name="__codelineno-0-87"></a><span class="sd">    :param directory: Directory in which to place the compiled binary and C source.</span>
 <a id="__codelineno-0-88" name="__codelineno-0-88"></a><span class="sd">        When *None* a temporary directory is created automatically and its</span>
@@ -2717,15 +2717,15 @@ results = sim.scan({&#39;x&#39;: &#39;1:1:3&#39;, &#39;y&#39;: &#39;10:1:12&#39;
 <a id="__codelineno-0-95" name="__codelineno-0-95"></a><span class="sd">    :param gpu: Compile with OpenACC GPU support.</span>
 <a id="__codelineno-0-96" name="__codelineno-0-96"></a><span class="sd">    :param process_count: MPI process count (0 = system default).</span>
 <a id="__codelineno-0-97" name="__codelineno-0-97"></a><span class="sd">    :param force: Re-compile even if the binary already exists.</span>
-<a id="__codelineno-0-98" name="__codelineno-0-98"></a><span class="sd">    :param create_directory: Create the directory if it doesn&#39;t exist.</span>
+<a id="__codelineno-0-98" name="__codelineno-0-98"></a><span class="sd">    :param create_directory: Create the directory if it doesn't exist.</span>
 <a id="__codelineno-0-99" name="__codelineno-0-99"></a><span class="sd">    :returns: self, to allow method chaining.</span>
-<a id="__codelineno-0-100" name="__codelineno-0-100"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-100" name="__codelineno-0-100"></a><span class="sd">    """</span>
 <a id="__codelineno-0-101" name="__codelineno-0-101"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">os</span><span class="w"> </span><span class="kn">import</span> <span class="n">access</span><span class="p">,</span> <span class="n">X_OK</span>
 <a id="__codelineno-0-102" name="__codelineno-0-102"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">mccode_antlr.run.runner</span><span class="w"> </span><span class="kn">import</span> <span class="n">mccode_compile</span>
 <a id="__codelineno-0-103" name="__codelineno-0-103"></a>
 <a id="__codelineno-0-104" name="__codelineno-0-104"></a>    <span class="k">if</span> <span class="n">directory</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
 <a id="__codelineno-0-105" name="__codelineno-0-105"></a>        <span class="kn">import</span><span class="w"> </span><span class="nn">tempfile</span>
-<a id="__codelineno-0-106" name="__codelineno-0-106"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">_tmpdir</span> <span class="o">=</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">TemporaryDirectory</span><span class="p">(</span><span class="n">prefix</span><span class="o">=</span><span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">instr</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s1">_mccode_&#39;</span><span class="p">)</span>
+<a id="__codelineno-0-106" name="__codelineno-0-106"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">_tmpdir</span> <span class="o">=</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">TemporaryDirectory</span><span class="p">(</span><span class="n">prefix</span><span class="o">=</span><span class="sa">f</span><span class="s1">'</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">instr</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s1">_mccode_'</span><span class="p">)</span>
 <a id="__codelineno-0-107" name="__codelineno-0-107"></a>        <span class="n">directory</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_tmpdir</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
 <a id="__codelineno-0-108" name="__codelineno-0-108"></a>    <span class="k">else</span><span class="p">:</span>
 <a id="__codelineno-0-109" name="__codelineno-0-109"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">_tmpdir</span> <span class="o">=</span> <span class="kc">None</span>
@@ -2735,9 +2735,9 @@ results = sim.scan({&#39;x&#39;: &#39;1:1:3&#39;, &#39;y&#39;: &#39;10:1:12&#39;
 <a id="__codelineno-0-113" name="__codelineno-0-113"></a>    <span class="k">if</span> <span class="ow">not</span> <span class="n">directory</span><span class="o">.</span><span class="n">exists</span><span class="p">()</span> <span class="ow">and</span> <span class="n">create_directory</span><span class="p">:</span>
 <a id="__codelineno-0-114" name="__codelineno-0-114"></a>        <span class="n">directory</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">parents</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <a id="__codelineno-0-115" name="__codelineno-0-115"></a>    <span class="k">if</span> <span class="ow">not</span> <span class="n">directory</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
-<a id="__codelineno-0-116" name="__codelineno-0-116"></a>        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;The directory </span><span class="si">{</span><span class="n">directory</span><span class="si">}</span><span class="s2"> does not exist, create it or pass `create_directory=True`.&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-116" name="__codelineno-0-116"></a>        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"The directory </span><span class="si">{</span><span class="n">directory</span><span class="si">}</span><span class="s2"> does not exist, create it or pass `create_directory=True`."</span><span class="p">)</span>
 <a id="__codelineno-0-117" name="__codelineno-0-117"></a>    <span class="k">if</span> <span class="ow">not</span> <span class="n">directory</span><span class="o">.</span><span class="n">is_dir</span><span class="p">():</span>
-<a id="__codelineno-0-118" name="__codelineno-0-118"></a>        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">directory</span><span class="si">}</span><span class="s2"> is not a directory.&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-118" name="__codelineno-0-118"></a>        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">directory</span><span class="si">}</span><span class="s2"> is not a directory."</span><span class="p">)</span>
 <a id="__codelineno-0-119" name="__codelineno-0-119"></a>
 <a id="__codelineno-0-120" name="__codelineno-0-120"></a>    <span class="n">binary_path</span> <span class="o">=</span> <span class="n">directory</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">instr</span><span class="o">.</span><span class="n">name</span>
 <a id="__codelineno-0-121" name="__codelineno-0-121"></a>    <span class="k">if</span> <span class="n">binary_path</span><span class="o">.</span><span class="n">exists</span><span class="p">()</span> <span class="ow">and</span> <span class="n">access</span><span class="p">(</span><span class="n">binary_path</span><span class="p">,</span> <span class="n">X_OK</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">force</span><span class="p">:</span>
@@ -2745,10 +2745,10 @@ results = sim.scan({&#39;x&#39;: &#39;1:1:3&#39;, &#39;y&#39;: &#39;10:1:12&#39;
 <a id="__codelineno-0-123" name="__codelineno-0-123"></a>        <span class="c1"># Reconstruct a default target so run/scan work without knowing the original settings.</span>
 <a id="__codelineno-0-124" name="__codelineno-0-124"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">_target</span> <span class="o">=</span> <span class="n">CBinaryTarget</span><span class="p">(</span><span class="n">mpi</span><span class="o">=</span><span class="n">parallel</span><span class="p">,</span> <span class="n">acc</span><span class="o">=</span><span class="n">gpu</span><span class="p">,</span> <span class="n">count</span><span class="o">=</span><span class="n">process_count</span><span class="p">,</span> <span class="n">nexus</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 <a id="__codelineno-0-125" name="__codelineno-0-125"></a>    <span class="k">elif</span> <span class="n">binary_path</span><span class="o">.</span><span class="n">exists</span><span class="p">()</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">access</span><span class="p">(</span><span class="n">binary_path</span><span class="p">,</span> <span class="n">X_OK</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">force</span><span class="p">:</span>
-<a id="__codelineno-0-126" name="__codelineno-0-126"></a>        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">binary_path</span><span class="si">}</span><span class="s2"> exists but is not an executable, overwrite by passing `force=True`.&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-126" name="__codelineno-0-126"></a>        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">binary_path</span><span class="si">}</span><span class="s2"> exists but is not an executable, overwrite by passing `force=True`."</span><span class="p">)</span>
 <a id="__codelineno-0-127" name="__codelineno-0-127"></a>    <span class="k">else</span><span class="p">:</span>
-<a id="__codelineno-0-128" name="__codelineno-0-128"></a>        <span class="n">target</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;mpi&#39;</span><span class="p">:</span> <span class="n">parallel</span><span class="p">,</span> <span class="s1">&#39;acc&#39;</span><span class="p">:</span> <span class="n">gpu</span><span class="p">,</span> <span class="s1">&#39;count&#39;</span><span class="p">:</span> <span class="n">process_count</span><span class="p">,</span> <span class="s1">&#39;nexus&#39;</span><span class="p">:</span> <span class="kc">False</span><span class="p">}</span>
-<a id="__codelineno-0-129" name="__codelineno-0-129"></a>        <span class="n">config</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;enable_trace&#39;</span><span class="p">:</span> <span class="n">trace</span><span class="p">,</span> <span class="s1">&#39;embed_instrument_file&#39;</span><span class="p">:</span> <span class="n">source</span><span class="p">,</span> <span class="s1">&#39;verbose&#39;</span><span class="p">:</span> <span class="n">verbose</span><span class="p">}</span>
+<a id="__codelineno-0-128" name="__codelineno-0-128"></a>        <span class="n">target</span> <span class="o">=</span> <span class="p">{</span><span class="s1">'mpi'</span><span class="p">:</span> <span class="n">parallel</span><span class="p">,</span> <span class="s1">'acc'</span><span class="p">:</span> <span class="n">gpu</span><span class="p">,</span> <span class="s1">'count'</span><span class="p">:</span> <span class="n">process_count</span><span class="p">,</span> <span class="s1">'nexus'</span><span class="p">:</span> <span class="kc">False</span><span class="p">}</span>
+<a id="__codelineno-0-129" name="__codelineno-0-129"></a>        <span class="n">config</span> <span class="o">=</span> <span class="p">{</span><span class="s1">'enable_trace'</span><span class="p">:</span> <span class="n">trace</span><span class="p">,</span> <span class="s1">'embed_instrument_file'</span><span class="p">:</span> <span class="n">source</span><span class="p">,</span> <span class="s1">'verbose'</span><span class="p">:</span> <span class="n">verbose</span><span class="p">}</span>
 <a id="__codelineno-0-130" name="__codelineno-0-130"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">_binary</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_target</span> <span class="o">=</span> <span class="n">mccode_compile</span><span class="p">(</span>
 <a id="__codelineno-0-131" name="__codelineno-0-131"></a>            <span class="bp">self</span><span class="o">.</span><span class="n">instr</span><span class="p">,</span> <span class="n">binary_path</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">flavor</span><span class="p">,</span> <span class="n">target</span><span class="o">=</span><span class="n">target</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">,</span> <span class="n">replace</span><span class="o">=</span><span class="kc">True</span>
 <a id="__codelineno-0-132" name="__codelineno-0-132"></a>        <span class="p">)</span>
@@ -2882,7 +2882,7 @@ results = sim.scan({&#39;x&#39;: &#39;1:1:3&#39;, &#39;y&#39;: &#39;10:1:12&#39;
 <a id="__codelineno-0-178" name="__codelineno-0-178"></a>    <span class="n">dry_run</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
 <a id="__codelineno-0-179" name="__codelineno-0-179"></a>    <span class="n">capture</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
 <a id="__codelineno-0-180" name="__codelineno-0-180"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">:</span>
-<a id="__codelineno-0-181" name="__codelineno-0-181"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Run a single simulation point.</span>
+<a id="__codelineno-0-181" name="__codelineno-0-181"></a><span class="w">    </span><span class="sd">"""Run a single simulation point.</span>
 <a id="__codelineno-0-182" name="__codelineno-0-182"></a>
 <a id="__codelineno-0-183" name="__codelineno-0-183"></a><span class="sd">    :param parameters: Dict mapping instrument parameter names to scalar values</span>
 <a id="__codelineno-0-184" name="__codelineno-0-184"></a><span class="sd">        (int, float, or str).  Range specifications are not accepted here; use</span>
@@ -2902,7 +2902,7 @@ results = sim.scan({&#39;x&#39;: &#39;1:1:3&#39;, &#39;y&#39;: &#39;10:1:12&#39;
 <a id="__codelineno-0-198" name="__codelineno-0-198"></a><span class="sd">        *dats* is a dict mapping monitor stem names to loaded data objects.</span>
 <a id="__codelineno-0-199" name="__codelineno-0-199"></a><span class="sd">    :raises ValueError: If any parameter value resolves to more than one point.</span>
 <a id="__codelineno-0-200" name="__codelineno-0-200"></a><span class="sd">    :raises RuntimeError: If :meth:`compile` has not been called first.</span>
-<a id="__codelineno-0-201" name="__codelineno-0-201"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-201" name="__codelineno-0-201"></a><span class="sd">    """</span>
 <a id="__codelineno-0-202" name="__codelineno-0-202"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">mccode_antlr.run.runner</span><span class="w"> </span><span class="kn">import</span> <span class="n">mccode_run_compiled</span><span class="p">,</span> <span class="n">mccode_runtime_parameters</span><span class="p">,</span> <span class="n">regular_mccode_runtime_dict</span>
 <a id="__codelineno-0-203" name="__codelineno-0-203"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">mccode_antlr.run.range</span><span class="w"> </span><span class="kn">import</span> <span class="n">_make_scanned_parameter</span><span class="p">,</span> <span class="n">Singular</span>
 <a id="__codelineno-0-204" name="__codelineno-0-204"></a>
@@ -2917,12 +2917,12 @@ results = sim.scan({&#39;x&#39;: &#39;1:1:3&#39;, &#39;y&#39;: &#39;10:1:12&#39;
 <a id="__codelineno-0-213" name="__codelineno-0-213"></a>
 <a id="__codelineno-0-214" name="__codelineno-0-214"></a>    <span class="n">concrete</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
 <a id="__codelineno-0-215" name="__codelineno-0-215"></a>    <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">parameters</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-<a id="__codelineno-0-216" name="__codelineno-0-216"></a>        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">any</span><span class="p">(</span><span class="n">c</span> <span class="ow">in</span> <span class="n">v</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="p">(</span><span class="s1">&#39;:&#39;</span><span class="p">,</span> <span class="s1">&#39;,&#39;</span><span class="p">)):</span>
+<a id="__codelineno-0-216" name="__codelineno-0-216"></a>        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">any</span><span class="p">(</span><span class="n">c</span> <span class="ow">in</span> <span class="n">v</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="p">(</span><span class="s1">':'</span><span class="p">,</span> <span class="s1">','</span><span class="p">)):</span>
 <a id="__codelineno-0-217" name="__codelineno-0-217"></a>            <span class="n">parsed</span> <span class="o">=</span> <span class="n">_make_scanned_parameter</span><span class="p">(</span><span class="n">v</span><span class="p">)</span>
 <a id="__codelineno-0-218" name="__codelineno-0-218"></a>            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">parsed</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
 <a id="__codelineno-0-219" name="__codelineno-0-219"></a>                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-<a id="__codelineno-0-220" name="__codelineno-0-220"></a>                    <span class="sa">f</span><span class="s2">&quot;Parameter &#39;</span><span class="si">{</span><span class="n">k</span><span class="si">}</span><span class="s2">=</span><span class="si">{</span><span class="n">v</span><span class="si">}</span><span class="s2">&#39; resolves to </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">parsed</span><span class="p">)</span><span class="si">}</span><span class="s2"> points. &quot;</span>
-<a id="__codelineno-0-221" name="__codelineno-0-221"></a>                    <span class="s2">&quot;Use scan() for multi-point runs.&quot;</span>
+<a id="__codelineno-0-220" name="__codelineno-0-220"></a>                    <span class="sa">f</span><span class="s2">"Parameter '</span><span class="si">{</span><span class="n">k</span><span class="si">}</span><span class="s2">=</span><span class="si">{</span><span class="n">v</span><span class="si">}</span><span class="s2">' resolves to </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">parsed</span><span class="p">)</span><span class="si">}</span><span class="s2"> points. "</span>
+<a id="__codelineno-0-221" name="__codelineno-0-221"></a>                    <span class="s2">"Use scan() for multi-point runs."</span>
 <a id="__codelineno-0-222" name="__codelineno-0-222"></a>                <span class="p">)</span>
 <a id="__codelineno-0-223" name="__codelineno-0-223"></a>            <span class="n">concrete</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">parsed</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
 <a id="__codelineno-0-224" name="__codelineno-0-224"></a>        <span class="k">else</span><span class="p">:</span>
@@ -2962,8 +2962,8 @@ results = sim.scan({&#39;x&#39;: &#39;1:1:3&#39;, &#39;y&#39;: &#39;10:1:12&#39;
         <p>Run a parameter scan.</p>
 <p>:param parameters: Dict mapping instrument parameter names to range specifications.
     Accepted value types:</p>
-<div class="highlight"><pre><span></span><code>* **str** — MATLAB-style range ``&#39;start:step:stop&#39;``, explicit list
-  ``&#39;v1,v2,v3&#39;``, or single value ``&#39;1.5&#39;``.
+<div class="highlight"><pre><span></span><code>* **str** — MATLAB-style range ``'start:step:stop'``, explicit list
+  ``'v1,v2,v3'``, or single value ``'1.5'``.
 * **list / tuple** — explicit sequence of values.
 * :class:`~mccode_antlr.run.range.MRange`, :class:`~mccode_antlr.run.range.EList`,
   :class:`~mccode_antlr.run.range.Singular` — pre-constructed range objects.
@@ -3107,14 +3107,14 @@ parameter values (equivalent to ``mcrun -y``).
 <a id="__codelineno-0-254" name="__codelineno-0-254"></a>    <span class="n">fmt</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <a id="__codelineno-0-255" name="__codelineno-0-255"></a>    <span class="n">dry_run</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
 <a id="__codelineno-0-256" name="__codelineno-0-256"></a>    <span class="n">capture</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
-<a id="__codelineno-0-257" name="__codelineno-0-257"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="s1">&#39;ScanOutput&#39;</span><span class="p">:</span>
-<a id="__codelineno-0-258" name="__codelineno-0-258"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Run a parameter scan.</span>
+<a id="__codelineno-0-257" name="__codelineno-0-257"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="s1">'ScanOutput'</span><span class="p">:</span>
+<a id="__codelineno-0-258" name="__codelineno-0-258"></a><span class="w">    </span><span class="sd">"""Run a parameter scan.</span>
 <a id="__codelineno-0-259" name="__codelineno-0-259"></a>
 <a id="__codelineno-0-260" name="__codelineno-0-260"></a><span class="sd">    :param parameters: Dict mapping instrument parameter names to range specifications.</span>
 <a id="__codelineno-0-261" name="__codelineno-0-261"></a><span class="sd">        Accepted value types:</span>
 <a id="__codelineno-0-262" name="__codelineno-0-262"></a>
-<a id="__codelineno-0-263" name="__codelineno-0-263"></a><span class="sd">        * **str** — MATLAB-style range ``&#39;start:step:stop&#39;``, explicit list</span>
-<a id="__codelineno-0-264" name="__codelineno-0-264"></a><span class="sd">          ``&#39;v1,v2,v3&#39;``, or single value ``&#39;1.5&#39;``.</span>
+<a id="__codelineno-0-263" name="__codelineno-0-263"></a><span class="sd">        * **str** — MATLAB-style range ``'start:step:stop'``, explicit list</span>
+<a id="__codelineno-0-264" name="__codelineno-0-264"></a><span class="sd">          ``'v1,v2,v3'``, or single value ``'1.5'``.</span>
 <a id="__codelineno-0-265" name="__codelineno-0-265"></a><span class="sd">        * **list / tuple** — explicit sequence of values.</span>
 <a id="__codelineno-0-266" name="__codelineno-0-266"></a><span class="sd">        * :class:`~mccode_antlr.run.range.MRange`, :class:`~mccode_antlr.run.range.EList`,</span>
 <a id="__codelineno-0-267" name="__codelineno-0-267"></a><span class="sd">          :class:`~mccode_antlr.run.range.Singular` — pre-constructed range objects.</span>
@@ -3140,7 +3140,7 @@ parameter values (equivalent to ``mcrun -y``).
 <a id="__codelineno-0-287" name="__codelineno-0-287"></a><span class="sd">        :attr:`~mccode_antlr.run.output.ScanOutput.axes` mapping of the</span>
 <a id="__codelineno-0-288" name="__codelineno-0-288"></a><span class="sd">        normalised parameter ranges.</span>
 <a id="__codelineno-0-289" name="__codelineno-0-289"></a><span class="sd">    :raises RuntimeError: If :meth:`compile` has not been called first.</span>
-<a id="__codelineno-0-290" name="__codelineno-0-290"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-290" name="__codelineno-0-290"></a><span class="sd">    """</span>
 <a id="__codelineno-0-291" name="__codelineno-0-291"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">mccode_antlr.run.runner</span><span class="w"> </span><span class="kn">import</span> <span class="n">mccode_run_scan</span>
 <a id="__codelineno-0-292" name="__codelineno-0-292"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">mccode_antlr.run.output</span><span class="w"> </span><span class="kn">import</span> <span class="n">ScanOutput</span>
 <a id="__codelineno-0-293" name="__codelineno-0-293"></a>
@@ -3230,9 +3230,9 @@ parameter values (equivalent to ``mcrun -y``).
 <p>:class:<code>SimulationOutput</code> implements :class:<code>~collections.abc.Mapping</code> so
 that existing code written against the old <code>dict[str, DatFile]</code> return
 value continues to work without modification::</p>
-<div class="highlight"><pre><span></span><code>result, out = sim.run({&#39;x&#39;: 1.5}, ncount=1000)
+<div class="highlight"><pre><span></span><code>result, out = sim.run({'x': 1.5}, ncount=1000)
 # Old-style access still works:
-print(out[&#39;m0&#39;][&#39;I&#39;])
+print(out['m0']['I'])
 print(len(out))
 </code></pre></div>
 <p>Additional properties expose the full picture of what was written:</p>
@@ -3350,15 +3350,15 @@ print(len(out))
 <span class="normal"><a href="#__codelineno-0-210">210</a></span>
 <span class="normal"><a href="#__codelineno-0-211">211</a></span>
 <span class="normal"><a href="#__codelineno-0-212">212</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-118" name="__codelineno-0-118"></a><span class="k">class</span><span class="w"> </span><span class="nc">SimulationOutput</span><span class="p">(</span><span class="n">Mapping</span><span class="p">):</span>
-<a id="__codelineno-0-119" name="__codelineno-0-119"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;All files written to disk by a single simulation run.</span>
+<a id="__codelineno-0-119" name="__codelineno-0-119"></a><span class="w">    </span><span class="sd">"""All files written to disk by a single simulation run.</span>
 <a id="__codelineno-0-120" name="__codelineno-0-120"></a>
 <a id="__codelineno-0-121" name="__codelineno-0-121"></a><span class="sd">    :class:`SimulationOutput` implements :class:`~collections.abc.Mapping` so</span>
 <a id="__codelineno-0-122" name="__codelineno-0-122"></a><span class="sd">    that existing code written against the old ``dict[str, DatFile]`` return</span>
 <a id="__codelineno-0-123" name="__codelineno-0-123"></a><span class="sd">    value continues to work without modification::</span>
 <a id="__codelineno-0-124" name="__codelineno-0-124"></a>
-<a id="__codelineno-0-125" name="__codelineno-0-125"></a><span class="sd">        result, out = sim.run({&#39;x&#39;: 1.5}, ncount=1000)</span>
+<a id="__codelineno-0-125" name="__codelineno-0-125"></a><span class="sd">        result, out = sim.run({'x': 1.5}, ncount=1000)</span>
 <a id="__codelineno-0-126" name="__codelineno-0-126"></a><span class="sd">        # Old-style access still works:</span>
-<a id="__codelineno-0-127" name="__codelineno-0-127"></a><span class="sd">        print(out[&#39;m0&#39;][&#39;I&#39;])</span>
+<a id="__codelineno-0-127" name="__codelineno-0-127"></a><span class="sd">        print(out['m0']['I'])</span>
 <a id="__codelineno-0-128" name="__codelineno-0-128"></a><span class="sd">        print(len(out))</span>
 <a id="__codelineno-0-129" name="__codelineno-0-129"></a>
 <a id="__codelineno-0-130" name="__codelineno-0-130"></a><span class="sd">    Additional properties expose the full picture of what was written:</span>
@@ -3370,7 +3370,7 @@ print(len(out))
 <a id="__codelineno-0-136" name="__codelineno-0-136"></a><span class="sd">    * :attr: binary_files  — MCPL/GZip files which an instrument might produce</span>
 <a id="__codelineno-0-137" name="__codelineno-0-137"></a><span class="sd">    * :attr:`sim_file`     — Parsed ``mccode.sim`` metadata (or ``None``)</span>
 <a id="__codelineno-0-138" name="__codelineno-0-138"></a><span class="sd">    * :attr:`directory`    — Output directory :class:`~pathlib.Path`</span>
-<a id="__codelineno-0-139" name="__codelineno-0-139"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-139" name="__codelineno-0-139"></a><span class="sd">    """</span>
 <a id="__codelineno-0-140" name="__codelineno-0-140"></a>
 <a id="__codelineno-0-141" name="__codelineno-0-141"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
 <a id="__codelineno-0-142" name="__codelineno-0-142"></a>        <span class="bp">self</span><span class="p">,</span>
@@ -3409,41 +3409,41 @@ print(len(out))
 <a id="__codelineno-0-175" name="__codelineno-0-175"></a>
 <a id="__codelineno-0-176" name="__codelineno-0-176"></a>    <span class="nd">@property</span>
 <a id="__codelineno-0-177" name="__codelineno-0-177"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">dats</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
-<a id="__codelineno-0-178" name="__codelineno-0-178"></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;Files loaded as McCode dat format, keyed by file stem.&quot;&quot;&quot;</span>
+<a id="__codelineno-0-178" name="__codelineno-0-178"></a><span class="w">        </span><span class="sd">"""Files loaded as McCode dat format, keyed by file stem."""</span>
 <a id="__codelineno-0-179" name="__codelineno-0-179"></a>        <span class="k">return</span> <span class="nb">dict</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_dats</span><span class="p">)</span>
 <a id="__codelineno-0-180" name="__codelineno-0-180"></a>
 <a id="__codelineno-0-181" name="__codelineno-0-181"></a>    <span class="nd">@property</span>
 <a id="__codelineno-0-182" name="__codelineno-0-182"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">other</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
-<a id="__codelineno-0-183" name="__codelineno-0-183"></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;Files loaded by registered custom filters, keyed by file stem.&quot;&quot;&quot;</span>
+<a id="__codelineno-0-183" name="__codelineno-0-183"></a><span class="w">        </span><span class="sd">"""Files loaded by registered custom filters, keyed by file stem."""</span>
 <a id="__codelineno-0-184" name="__codelineno-0-184"></a>        <span class="k">return</span> <span class="nb">dict</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_other</span><span class="p">)</span>
 <a id="__codelineno-0-185" name="__codelineno-0-185"></a>
 <a id="__codelineno-0-186" name="__codelineno-0-186"></a>    <span class="nd">@property</span>
 <a id="__codelineno-0-187" name="__codelineno-0-187"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">loaded</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
-<a id="__codelineno-0-188" name="__codelineno-0-188"></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;All successfully loaded files (dats + other), keyed by stem.&quot;&quot;&quot;</span>
+<a id="__codelineno-0-188" name="__codelineno-0-188"></a><span class="w">        </span><span class="sd">"""All successfully loaded files (dats + other), keyed by stem."""</span>
 <a id="__codelineno-0-189" name="__codelineno-0-189"></a>        <span class="k">return</span> <span class="p">{</span><span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_dats</span><span class="p">,</span> <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">_other</span><span class="p">}</span>
 <a id="__codelineno-0-190" name="__codelineno-0-190"></a>
 <a id="__codelineno-0-191" name="__codelineno-0-191"></a>    <span class="nd">@property</span>
 <a id="__codelineno-0-192" name="__codelineno-0-192"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">unrecognized</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">Path</span><span class="p">]:</span>
-<a id="__codelineno-0-193" name="__codelineno-0-193"></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;Paths of files that could not be loaded by any filter.&quot;&quot;&quot;</span>
+<a id="__codelineno-0-193" name="__codelineno-0-193"></a><span class="w">        </span><span class="sd">"""Paths of files that could not be loaded by any filter."""</span>
 <a id="__codelineno-0-194" name="__codelineno-0-194"></a>        <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_unrecognized</span><span class="p">)</span>
 <a id="__codelineno-0-195" name="__codelineno-0-195"></a>
 <a id="__codelineno-0-196" name="__codelineno-0-196"></a>    <span class="nd">@property</span>
 <a id="__codelineno-0-197" name="__codelineno-0-197"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">binary_files</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">Path</span><span class="p">]:</span>
-<a id="__codelineno-0-198" name="__codelineno-0-198"></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;Paths of binary files that were skipped.&quot;&quot;&quot;</span>
+<a id="__codelineno-0-198" name="__codelineno-0-198"></a><span class="w">        </span><span class="sd">"""Paths of binary files that were skipped."""</span>
 <a id="__codelineno-0-199" name="__codelineno-0-199"></a>        <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_binaries</span><span class="p">)</span>
 <a id="__codelineno-0-200" name="__codelineno-0-200"></a>
 <a id="__codelineno-0-201" name="__codelineno-0-201"></a>    <span class="nd">@property</span>
 <a id="__codelineno-0-202" name="__codelineno-0-202"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">sim_file</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
-<a id="__codelineno-0-203" name="__codelineno-0-203"></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;Parsed McCode ``.sim`` metadata file, or ``None`` if not found.&quot;&quot;&quot;</span>
+<a id="__codelineno-0-203" name="__codelineno-0-203"></a><span class="w">        </span><span class="sd">"""Parsed McCode ``.sim`` metadata file, or ``None`` if not found."""</span>
 <a id="__codelineno-0-204" name="__codelineno-0-204"></a>        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sim_file</span>
 <a id="__codelineno-0-205" name="__codelineno-0-205"></a>
 <a id="__codelineno-0-206" name="__codelineno-0-206"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-<a id="__codelineno-0-207" name="__codelineno-0-207"></a>        <span class="n">parts</span> <span class="o">=</span> <span class="p">[</span><span class="sa">f</span><span class="s2">&quot;directory=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">directory</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;dats=</span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_dats</span><span class="p">)</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">]</span>
+<a id="__codelineno-0-207" name="__codelineno-0-207"></a>        <span class="n">parts</span> <span class="o">=</span> <span class="p">[</span><span class="sa">f</span><span class="s2">"directory=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">directory</span><span class="si">!r}</span><span class="s2">"</span><span class="p">,</span> <span class="sa">f</span><span class="s2">"dats=</span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_dats</span><span class="p">)</span><span class="si">!r}</span><span class="s2">"</span><span class="p">]</span>
 <a id="__codelineno-0-208" name="__codelineno-0-208"></a>        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_other</span><span class="p">:</span>
-<a id="__codelineno-0-209" name="__codelineno-0-209"></a>            <span class="n">parts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;other=</span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_other</span><span class="p">)</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-209" name="__codelineno-0-209"></a>            <span class="n">parts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">"other=</span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_other</span><span class="p">)</span><span class="si">!r}</span><span class="s2">"</span><span class="p">)</span>
 <a id="__codelineno-0-210" name="__codelineno-0-210"></a>        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_unrecognized</span><span class="p">:</span>
-<a id="__codelineno-0-211" name="__codelineno-0-211"></a>            <span class="n">parts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;unrecognized=</span><span class="si">{</span><span class="p">[</span><span class="n">p</span><span class="o">.</span><span class="n">name</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">p</span><span class="w"> </span><span class="ow">in</span><span class="w"> </span><span class="bp">self</span><span class="o">.</span><span class="n">_unrecognized</span><span class="p">]</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">)</span>
-<a id="__codelineno-0-212" name="__codelineno-0-212"></a>        <span class="k">return</span> <span class="sa">f</span><span class="s2">&quot;SimulationOutput(</span><span class="si">{</span><span class="s1">&#39;, &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">parts</span><span class="p">)</span><span class="si">}</span><span class="s2">)&quot;</span>
+<a id="__codelineno-0-211" name="__codelineno-0-211"></a>            <span class="n">parts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">"unrecognized=</span><span class="si">{</span><span class="p">[</span><span class="n">p</span><span class="o">.</span><span class="n">name</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">p</span><span class="w"> </span><span class="ow">in</span><span class="w"> </span><span class="bp">self</span><span class="o">.</span><span class="n">_unrecognized</span><span class="p">]</span><span class="si">!r}</span><span class="s2">"</span><span class="p">)</span>
+<a id="__codelineno-0-212" name="__codelineno-0-212"></a>        <span class="k">return</span> <span class="sa">f</span><span class="s2">"SimulationOutput(</span><span class="si">{</span><span class="s1">', '</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">parts</span><span class="p">)</span><span class="si">}</span><span class="s2">)"</span>
 </code></pre></div></td></tr></table></div>
               </details>
 
@@ -3622,7 +3622,7 @@ loader if needed.</p>
 <p>Example::</p>
 <div class="highlight"><pre><span></span><code>import h5py
 from mccode_antlr.run import register_output_filter
-register_output_filter(&#39;.h5&#39;, h5py.File)
+register_output_filter('.h5', h5py.File)
 </code></pre></div>
 
 
@@ -3647,23 +3647,23 @@ register_output_filter(&#39;.h5&#39;, h5py.File)
 <span class="normal"><a href="#__codelineno-0-36">36</a></span>
 <span class="normal"><a href="#__codelineno-0-37">37</a></span>
 <span class="normal"><a href="#__codelineno-0-38">38</a></span></pre></div></td><td class="code"><div><pre><span></span><code><a id="__codelineno-0-20" name="__codelineno-0-20"></a><span class="k">def</span><span class="w"> </span><span class="nf">register_output_filter</span><span class="p">(</span><span class="n">extension</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">loader</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Path</span><span class="p">],</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<a id="__codelineno-0-21" name="__codelineno-0-21"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Register a custom output-file loader for files with the given *extension*.</span>
+<a id="__codelineno-0-21" name="__codelineno-0-21"></a><span class="w">    </span><span class="sd">"""Register a custom output-file loader for files with the given *extension*.</span>
 <a id="__codelineno-0-22" name="__codelineno-0-22"></a>
-<a id="__codelineno-0-23" name="__codelineno-0-23"></a><span class="sd">    The *extension* must include the leading dot (e.g. ``&#39;.h5&#39;``).  The *loader*</span>
+<a id="__codelineno-0-23" name="__codelineno-0-23"></a><span class="sd">    The *extension* must include the leading dot (e.g. ``'.h5'``).  The *loader*</span>
 <a id="__codelineno-0-24" name="__codelineno-0-24"></a><span class="sd">    receives the :class:`~pathlib.Path` of the file and must return the loaded</span>
 <a id="__codelineno-0-25" name="__codelineno-0-25"></a><span class="sd">    object, raising any exception if loading fails (the file will then appear in</span>
 <a id="__codelineno-0-26" name="__codelineno-0-26"></a><span class="sd">    :attr:`SimulationOutput.unrecognized`).</span>
 <a id="__codelineno-0-27" name="__codelineno-0-27"></a>
 <a id="__codelineno-0-28" name="__codelineno-0-28"></a><span class="sd">    Registering a loader for an extension that already has one replaces the</span>
-<a id="__codelineno-0-29" name="__codelineno-0-29"></a><span class="sd">    existing entry.  This allows user code to override the built-in ``&#39;.dat&#39;``</span>
+<a id="__codelineno-0-29" name="__codelineno-0-29"></a><span class="sd">    existing entry.  This allows user code to override the built-in ``'.dat'``</span>
 <a id="__codelineno-0-30" name="__codelineno-0-30"></a><span class="sd">    loader if needed.</span>
 <a id="__codelineno-0-31" name="__codelineno-0-31"></a>
 <a id="__codelineno-0-32" name="__codelineno-0-32"></a><span class="sd">    Example::</span>
 <a id="__codelineno-0-33" name="__codelineno-0-33"></a>
 <a id="__codelineno-0-34" name="__codelineno-0-34"></a><span class="sd">        import h5py</span>
 <a id="__codelineno-0-35" name="__codelineno-0-35"></a><span class="sd">        from mccode_antlr.run import register_output_filter</span>
-<a id="__codelineno-0-36" name="__codelineno-0-36"></a><span class="sd">        register_output_filter(&#39;.h5&#39;, h5py.File)</span>
-<a id="__codelineno-0-37" name="__codelineno-0-37"></a><span class="sd">    &quot;&quot;&quot;</span>
+<a id="__codelineno-0-36" name="__codelineno-0-36"></a><span class="sd">        register_output_filter('.h5', h5py.File)</span>
+<a id="__codelineno-0-37" name="__codelineno-0-37"></a><span class="sd">    """</span>
 <a id="__codelineno-0-38" name="__codelineno-0-38"></a>    <span class="n">_LOAD_FILTERS</span><span class="p">[</span><span class="n">extension</span><span class="o">.</span><span class="n">lower</span><span class="p">()]</span> <span class="o">=</span> <span class="n">loader</span>
 </code></pre></div></td></tr></table></div>
             </details>
