@@ -171,3 +171,67 @@ class TestSerialization:
         c = InMemoryRegistry('inmem')
         c.add('x.h', 'different')
         assert a != c
+
+
+class TestOrigins:
+    """Per-file provenance -- which registry a file was captured from, e.g. for
+    debugging a user-provided serialized instrument. See io.portable's
+    collect_dependency_payloads/_origin_label for how these get populated."""
+
+    def test_add_without_origin_leaves_it_unrecorded(self):
+        reg = _registry()
+        assert reg.origins.get('MyComp.comp') is None
+
+    def test_add_records_the_given_origin(self):
+        from mccode_antlr.reader.registry import InMemoryRegistry
+        reg = InMemoryRegistry('inmem')
+        reg.add('x.h', 'content', origin='local:readout')
+        assert reg.origins['x.h'] == 'local:readout'
+
+    def test_add_comp_and_add_instr_also_accept_origin(self):
+        from mccode_antlr.reader.registry import InMemoryRegistry
+        reg = InMemoryRegistry('inmem')
+        reg.add_comp('MyComp', 'DEFINE COMPONENT MyComp\nEND\n', origin='local:lib')
+        reg.add_instr('u', 'DEFINE INSTRUMENT u()\nEND\n', origin='local:lib')
+        assert reg.origins['MyComp.comp'] == 'local:lib'
+        assert reg.origins['u.instr'] == 'local:lib'
+
+    def test_file_contents_includes_origins(self):
+        from mccode_antlr.reader.registry import InMemoryRegistry
+        reg = InMemoryRegistry('inmem')
+        reg.add('x.h', 'content', origin='local:readout')
+        assert reg.file_contents()['origins'] == {'x.h': 'local:readout'}
+
+    def test_construction_from_origins_kwarg(self):
+        from mccode_antlr.reader.registry import InMemoryRegistry
+        reg = InMemoryRegistry('inmem', origins={'x.h': 'local:readout'})
+        reg.add('x.h', 'content')
+        assert reg.origins['x.h'] == 'local:readout'
+
+    def test_json_round_trip_preserves_origins(self):
+        import msgspec
+        from mccode_antlr.reader.registry import InMemoryRegistry, SerializableRegistry
+        reg = InMemoryRegistry('inmem')
+        reg.add('x.h', 'content', origin='local:readout')
+        sr = SerializableRegistry.from_registry(reg)
+        back = msgspec.json.decode(msgspec.json.encode(sr), type=SerializableRegistry).to_registry()
+        assert back.origins == {'x.h': 'local:readout'}
+
+    def test_python_export_round_trips_origins(self):
+        from mccode_antlr.io.python import _handle_registry
+        from mccode_antlr.reader.registry import InMemoryRegistry
+        reg = InMemoryRegistry('inmem')
+        reg.add('x.h', 'content', origin='local:readout')
+        rep, _ = _handle_registry(reg)
+        back = eval(rep, {'InMemoryRegistry': InMemoryRegistry})
+        assert back.origins == {'x.h': 'local:readout'}
+
+    def test_origin_is_not_part_of_equality_or_hash(self):
+        """Origin is metadata about provenance, not content -- two registries with
+        identical file content but different recorded origins are still the same
+        registry for dedup/caching purposes."""
+        from mccode_antlr.reader.registry import InMemoryRegistry
+        a, b = InMemoryRegistry('inmem'), InMemoryRegistry('inmem')
+        a.add('x.h', 'same', origin='local:lib')
+        b.add('x.h', 'same', origin='local:other')
+        assert a == b and hash(a) == hash(b)

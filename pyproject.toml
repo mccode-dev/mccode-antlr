@@ -15,6 +15,7 @@ dependencies = [
     'pooch>=1.7.0',
     'confuse==2.2.1',
     'loguru>=0.7.2',
+    'rich>=13',
     'gitpython>=3.1.43',
     'msgspec>=0.19.0',
     'sympy>=1.12',
