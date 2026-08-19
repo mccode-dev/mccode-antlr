@@ -17,3 +17,9 @@
 site/
 *.ipynb_checkpoints*
 uv.lock
+
+# Rendered from the example notebooks by docs/examples/build.py; regenerate rather
+# than edit, so they cannot drift from the notebooks they come from
+docs/examples/*.md
+docs/examples/*_files/
+/site

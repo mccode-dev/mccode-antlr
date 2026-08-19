@@ -1,28 +1,57 @@
-name: Publish documentation
+name: Documentation
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
+  pull_request:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  deploy:
+  build:
+    name: Build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0   # needed for mkdocs git-revision-date plugin if added later
-
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
+      - uses: actions/configure-pages@v6
 
-      - name: Install package and docs dependencies
+      - name: Install package and documentation dependencies
         run: pip install -e ".[docs]"
 
-      - name: Build and deploy to GitHub Pages
-        run: mkdocs gh-deploy --force
+      # The notebooks are the source; their Markdown is a build artefact, so it is
+      # rendered here rather than committed and cannot drift from them.
+      - name: Render the example notebooks
+        run: python docs/examples/build.py
+
+      # --strict turns unresolved references and broken links into a non-zero exit
+      - name: Build the site
+        run: zensical build --clean --strict
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    # Pull requests and feature branches build only; publishing happens from main.
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/deploy-pages@v5
+        id: deployment
