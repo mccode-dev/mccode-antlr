@@ -22,3 +22,10 @@ instr = a.instrument
 ## Reference
 
 ::: mccode_antlr.assembler.Assembler
+
+## Flavor
+
+Every `Assembler` targets one runtime, selected with `Flavor`. It is also what
+`mccode_antlr.reader` uses to decide which component registries to search.
+
+::: mccode_antlr.Flavor
