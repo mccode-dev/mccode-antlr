@@ -51,7 +51,7 @@ brep = ["build123d"]
 scipp = ["scipp"]
 docs = [
     # Zensical is pre-1.0 and ships weekly; pin exactly and bump deliberately.
-    "zensical==0.0.56",
+    "zensical==0.0.57",
     "mkdocstrings-python>=2.0",
     # Renders the example notebooks to Markdown; see docs/examples/build.py
     "nbconvert>=7.0",
