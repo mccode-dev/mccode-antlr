@@ -419,6 +419,7 @@ def instrument_to_assembly(
     ``bd.Compound``
     """
     import build123d as bd
+    from loguru import logger
     from ..instrument_display import _eval_expr
 
     p = params or {}
@@ -476,8 +477,14 @@ def instrument_to_assembly(
                 loc = bd.Location(bd.Plane(origin=tuple(t.tolist()),
                                            x_dir=x_dir, z_dir=z_dir))
                 shape = shape.locate(loc)
-            except Exception:
-                pass
+            except Exception as error:
+                # An unplaced shape is exported at the origin, which looks like a
+                # modelling mistake rather than a failure -- and a whole instrument of
+                # them looks like a heap of parts at one point. Say so.
+                logger.warning(
+                    'Could not place %r in the global frame; it will be exported at '
+                    'the origin. %s: %s', name, type(error).__name__, error,
+                )
 
         shape.label = name
         placed.append(shape)

@@ -36,8 +36,20 @@ AnyBlock = Union[Primitive, ConditionalBlock, LoopBlock]
 
 
 def _eval_expr(e: Expr | float, params: dict) -> float:
+    """Reduce an expression to a number, given values for its parameters.
+
+    ``Expr.evaluate(params).simplify()`` returns an ``Expr`` -- a constant one, when the
+    parameters cover everything it depends on -- and ``Expr`` defines no ``__float__``,
+    so calling ``float()`` on it raises ``TypeError``. The number is under ``.value``.
+    """
     if isinstance(e, Expr):
-        return float(e.evaluate(params).simplify())
+        reduced = e.evaluate(params).simplify()
+        try:
+            return float(reduced.value)
+        except (AttributeError, NotImplementedError, TypeError) as error:
+            raise ValueError(
+                f'{e} does not reduce to a number with {params}; it is {reduced}'
+            ) from error
     return float(e)
 
 
