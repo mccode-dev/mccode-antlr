@@ -711,11 +711,14 @@ class Expr(msgspec.Struct, dict=True, eq=False):
     def evaluate(self, known: dict) -> 'Expr':
         sub_map = {}
         for name, val in known.items():
-            sym = sympy.Symbol(name)
             if isinstance(val, Expr) and val.is_singular:
-                sub_map[sym] = val._exprs[0]
+                substitution = val._exprs[0]
             elif isinstance(val, (int, float)):
-                sub_map[sym] = sympy.sympify(val)
+                substitution = sympy.sympify(val)
+            else:
+                continue
+            for sym in (sympy.Symbol(name), McCodeParameter(name)):
+                sub_map[sym] = substitution
         result = [e.subs(sub_map) for e in self._exprs]
         evaluated = Expr(result, self.data_type, self.shape_type, self.object_type).simplify()
         # After evaluation, if all free symbols are gone, it's now a value
