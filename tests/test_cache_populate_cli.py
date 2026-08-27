@@ -6,7 +6,7 @@ parameter is passed to _mccode_pooch_registries() instead of the loop variable.
 """
 import pytest
 from mccode_antlr import Flavor
-from mccode_antlr.cli.cache import cache_populate, populate_from_clone, warm_via_pooch
+from mccode_antlr.cli.cache import cache_populate, populate_from_clone, seed_registry_manifests, warm_via_pooch
 import mccode_antlr.reader.registry as registry_mod
 
 
@@ -322,6 +322,73 @@ def test_cache_populate_lenient_exits_zero(tmp_path, monkeypatch):
     cache_populate(
         tag="v3.5.31", from_path=str(tmp_path), clone_url="unused", flavor="mcstas", strict=False,
     )
+
+
+def test_seed_registry_manifests_copies_matching_files(tmp_path, monkeypatch, capsys):
+    """seed_registry_manifests copies only the manifests that exist in registry_dir."""
+    import pooch
+
+    cache_root = tmp_path / "cache"
+    monkeypatch.setattr(pooch, "os_cache", lambda subdir: cache_root / subdir)
+
+    registry_dir = tmp_path / "regs"
+    registry_dir.mkdir()
+    content = "a.comp deadbeef\n"
+    (registry_dir / "mcstas-registry.txt").write_text(content)
+
+    seeded = seed_registry_manifests(["mcstas", "libc"], "v3.5.31", registry_dir)
+
+    assert seeded == ["mcstas"]
+    dest = cache_root / "mccodeantlr/mcstas" / "v3.5.31" / "mcstas-registry.txt"
+    assert dest.read_text() == content
+
+    out = capsys.readouterr().out
+    assert "WARNING: " in out
+    assert "libc-registry.txt" in out
+
+
+def test_cache_populate_registry_dir_seeds_before_populate(tmp_path, monkeypatch):
+    """cache_populate(registry_dir=...) seeds pooch's OS cache before populate_from_clone runs."""
+    import pooch
+
+    cache_root = tmp_path / "cache"
+    monkeypatch.setattr(pooch, "os_cache", lambda subdir: cache_root / subdir)
+    monkeypatch.setattr(
+        "mccode_antlr.cli.cache.populate_from_clone",
+        lambda clone, tag, flavor=None, strict=True, check_hashes=False: (0, 0),
+    )
+
+    registry_dir = tmp_path / "regs"
+    registry_dir.mkdir()
+    mcstas_content = "a.comp deadbeef\n"
+    libc_content = "b.c cafebabe\n"
+    (registry_dir / "mcstas-registry.txt").write_text(mcstas_content)
+    (registry_dir / "libc-registry.txt").write_text(libc_content)
+
+    from_path_dir = tmp_path / "checkout"
+    from_path_dir.mkdir()
+
+    cache_populate(
+        tag="v3.5.31", from_path=str(from_path_dir), clone_url="unused", flavor="mcstas",
+        registry_dir=str(registry_dir),
+    )
+
+    assert (cache_root / "mccodeantlr/mcstas" / "v3.5.31" / "mcstas-registry.txt").read_text() == mcstas_content
+    assert (cache_root / "mccodeantlr/libc" / "v3.5.31" / "libc-registry.txt").read_text() == libc_content
+
+
+def test_cache_populate_registry_dir_missing_dir_exits_nonzero(tmp_path, capsys):
+    """cache_populate(registry_dir=...) exits 1 when the directory doesn't exist."""
+    missing = tmp_path / "does-not-exist"
+
+    with pytest.raises(SystemExit) as exc_info:
+        cache_populate(
+            tag="v3.5.31", from_path=str(tmp_path), clone_url="unused", flavor="mcstas",
+            registry_dir=str(missing),
+        )
+
+    assert exc_info.value.code == 1
+    assert "ERROR: " in capsys.readouterr().out
 
 
 def _make_dummy_mccode_clone(tmp_path):

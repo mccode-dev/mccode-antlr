@@ -152,6 +152,46 @@ def build_registry(
     return hashes
 
 
+def seed_registry_manifests(names: list[str], tag: str, registry_dir: Path) -> list[str]:
+    """Copy locally-minted "<name>-registry.txt" files into pooch's OS-cache
+    path for each name+tag, so GitHubRegistry._build_pooch() finds them
+    without any network access.
+
+    Parameters
+    ----------
+    names:
+        Registry names to seed (e.g. ``['libc', 'mcstas']``).
+    tag:
+        The McCode version tag currently in effect (e.g. ``v3.5.31``) — must
+        match what ``_mccode_pooch_registries()`` will later resolve for this
+        manifest to actually be found.
+    registry_dir:
+        Directory containing ``<name>-registry.txt`` files, e.g. produced by
+        `cache register`.
+
+    Returns
+    -------
+    The subset of ``names`` that were actually seeded. A name whose manifest
+    file isn't found in ``registry_dir`` is left for the normal
+    remote/already-cached resolution to handle instead (reported as a
+    WARNING, not fatal — a user may only have minted some registries locally).
+    """
+    import shutil
+    import pooch
+
+    seeded = []
+    for name in names:
+        src = registry_dir / f'{name}-registry.txt'
+        if not src.is_file():
+            print(f"WARNING: {src} not found; {name} will use its normal remote/cached resolution", flush=True)
+            continue
+        dest = pooch.os_cache(f'mccodeantlr/{name}') / tag / f'{name}-registry.txt'
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dest)
+        seeded.append(name)
+    return seeded
+
+
 def warm_via_pooch(flavor=None) -> tuple[int, int]:
     """Populate the pooch caches using individual file downloads (slow fallback).
 
@@ -227,7 +267,7 @@ def cache_list(name, long):
 
 def cache_populate(
     tag: str | None, from_path: str | None, clone_url: str, flavor: str,
-    strict: bool = True, check_hashes: bool | None = None,
+    strict: bool = True, check_hashes: bool | None = None, registry_dir: str | None = None,
 ):
     """Bulk-populate the pooch caches from a McCode git tag or a local checkout."""
     import os
@@ -259,6 +299,20 @@ def cache_populate(
     os.environ['MCCODEANTLR_MCCODE_POOCH__TAG'] = tag
 
     print(f"Populating pooch caches for McCode {tag} …", flush=True)
+
+    if registry_dir is not None:
+        registry_dir_path = Path(registry_dir).resolve()
+        if not registry_dir_path.is_dir():
+            print(f"ERROR: --registry-dir {registry_dir_path} does not exist or is not a directory.", flush=True)
+            sys.exit(1)
+        from mccode_antlr.reader.registry import default_registry_names
+        flavors_for_names = (Flavor.MCSTAS, Flavor.MCXTRACE) if resolved_flavor is None else (resolved_flavor,)
+        names = []
+        for flv in flavors_for_names:
+            for n in default_registry_names(flv):
+                if n not in names:
+                    names.append(n)
+        seed_registry_manifests(names, tag, registry_dir_path)
 
     if from_path is not None:
         src = Path(from_path).resolve()
@@ -602,6 +656,16 @@ def add_cache_management_parser(modes):
             'Verify each copied file against the registry-recorded sha256 hash '
             '(default: follows --strict/--no-strict, i.e. on when strict, off when lenient). '
             'A mismatch is reported the same way as a missing file.'
+        ),
+    )
+    p.add_argument(
+        '--registry-dir', dest='registry_dir', default=None, metavar='DIR',
+        help=(
+            'Directory containing locally-minted "<name>-registry.txt" manifests '
+            '(e.g. produced by `cache register`). When given, these are used '
+            'instead of fetching the manifest from mccode_pooch.registry, and '
+            'seed pooch\'s cache so later cache populate / translation calls at '
+            'the same tag also use them without any network access.'
         ),
     )
     p.set_defaults(action=cache_populate)

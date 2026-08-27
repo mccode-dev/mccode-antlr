@@ -192,6 +192,7 @@ mccode-antlr SUBCOMMAND [OPTIONS]
 | `list [name]` | List named caches or the versions of one cache (`-l` for long format) |
 | `remove [name] [version]` | Remove a named cache or specific version (`-f` to skip confirmation) |
 | `populate` | Bulk-populate pooch caches from a McCode git tag or local checkout |
+| `register` | Mint a pooch registry file (path + sha256 hash per line) from a local directory tree |
 | `ir-list` | List component IR cache files (`*.comp.json`) (`-l` for paths, sizes, stale status) |
 | `ir-clean` | Delete component IR cache files (`--stale` for stale-only; `-f` to skip confirmation) |
 | `ir-build` | Pre-build component IR cache files for all known registries |
@@ -204,6 +205,19 @@ mccode-antlr SUBCOMMAND [OPTIONS]
 | `--from-path PATH` | Use an existing local McCode checkout instead of cloning |
 | `--clone-url URL` | Git URL to clone (used when `--from-path` is not given) |
 | `--flavor {mcstas,mcxtrace,both}` | Which flavor's registries to populate (default: `both`) |
+| `--strict` / `--no-strict` | Treat a missing registry file as a fatal `ERROR` that exits non-zero (default). `--no-strict` reports it as a `WARNING` and exits `0` instead |
+| `--check-hashes` / `--no-check-hashes` | Verify each copied file's sha256 hash against the registry (default: follows `--strict`/`--no-strict` — on when strict, off when lenient). A mismatch is reported the same way as a missing file |
+| `--registry-dir DIR` | Directory of locally-minted `<name>-registry.txt` manifests (e.g. from `cache register`) to use instead of fetching from the configured registry source; seeds the cache so later `cache populate`/translation calls at the same tag also use them offline |
+
+**`cache register` options:**
+
+| Flag | Description |
+|---|---|
+| `ROOT` | Root path; registry entries are recorded relative to this |
+| `DIR ...` | One or more directories under `ROOT` to walk (repeatable positional) |
+| `--out FILE`, `-o FILE` | Registry output file path (default: `pooch-registry.txt`) |
+| `--ext SUFFIX` | Only include files whose name ends with this suffix (repeatable); default includes every file |
+| `--recursive` / `--no-recursive` | Recurse into subdirectories of each `DIR` (default) |
 
 **`cache ir-build` options:**
 
