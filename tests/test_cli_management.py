@@ -421,11 +421,12 @@ class TestCacheManagement:
 
         captured = {}
 
-        def fake_populate_from_clone(clone, tag, flavor=None, strict=True):
+        def fake_populate_from_clone(clone, tag, flavor=None, strict=True, check_hashes=False):
             captured['clone'] = clone
             captured['tag'] = tag
             captured['flavor'] = flavor
             captured['strict'] = strict
+            captured['check_hashes'] = check_hashes
             return 0, 0
 
         monkeypatch.setattr(cache_module, 'populate_from_clone', fake_populate_from_clone)
@@ -507,6 +508,26 @@ class TestParserFunctions:
         parser = mccode_management_parser()
         args = parser.parse_args(['cache', 'populate', '--no-strict'])
         assert args.strict is False
+
+    def test_cache_populate_check_hashes_flag_defaults_none(self):
+        """cache populate should default check_hashes to None (follow --strict) when omitted."""
+        from mccode_antlr.cli.management import mccode_management_parser
+
+        parser = mccode_management_parser()
+        args = parser.parse_args(['cache', 'populate'])
+        assert args.check_hashes is None
+
+    def test_cache_populate_check_hashes_flag_parses_explicitly(self):
+        """cache populate --check-hashes / --no-check-hashes should parse to explicit booleans."""
+        from mccode_antlr.cli.management import mccode_management_parser
+
+        parser = mccode_management_parser()
+
+        args = parser.parse_args(['cache', 'populate', '--check-hashes'])
+        assert args.check_hashes is True
+
+        args = parser.parse_args(['cache', 'populate', '--no-check-hashes'])
+        assert args.check_hashes is False
 
 
 # ---------------------------------------------------------------------------

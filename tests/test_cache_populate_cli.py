@@ -134,9 +134,10 @@ def test_warm_via_pooch_with_flavor_none(monkeypatch):
 
 
 class _FakePooch:
-    def __init__(self, path, registry_files):
+    def __init__(self, path, registry_files, registry=None):
         self.path = path
         self.registry_files = registry_files
+        self.registry = registry or {}
 
 
 class _FakeRegistry:
@@ -151,6 +152,27 @@ def _registries_with_one_missing_file(tmp_path, monkeypatch):
     clone = _make_dummy_mccode_clone(tmp_path)
     cache_dir = tmp_path / "pooch-cache"
     fake_pooch = _FakePooch(str(cache_dir), ["missing-file.dat"])
+    fake_reg = _FakeRegistry("mcstas", fake_pooch)
+
+    def fake_registries(names):
+        return [fake_reg]
+
+    monkeypatch.setattr(registry_mod, "_mccode_pooch_registries", fake_registries)
+    return clone
+
+
+def _registries_with_one_hash_mismatch(tmp_path, monkeypatch):
+    """Patch _mccode_pooch_registries to return a single registry whose one
+    registry file exists under the dummy clone but has the wrong content
+    (and therefore the wrong hash), and return the clone."""
+    clone = _make_dummy_mccode_clone(tmp_path)
+    (clone / "mismatched-file.dat").write_text("actual content")
+    cache_dir = tmp_path / "pooch-cache"
+    fake_pooch = _FakePooch(
+        str(cache_dir),
+        ["mismatched-file.dat"],
+        registry={"mismatched-file.dat": "0" * 64},  # deliberately wrong hash
+    )
     fake_reg = _FakeRegistry("mcstas", fake_pooch)
 
     def fake_registries(names):
@@ -186,11 +208,101 @@ def test_populate_from_clone_lenient_prints_warning(tmp_path, monkeypatch, capsy
     assert "ERROR: " not in out
 
 
+def test_populate_from_clone_check_hashes_off_by_default_copies_mismatch(tmp_path, monkeypatch, capsys):
+    """With check_hashes left at its default (False), a hash mismatch goes undetected and the file is copied."""
+    clone = _registries_with_one_hash_mismatch(tmp_path, monkeypatch)
+
+    total, errors = populate_from_clone(clone, tag="v3.5.31", flavor=Flavor.MCSTAS)
+
+    out = capsys.readouterr().out
+    assert errors == 0
+    assert total == 1
+    assert "hash mismatch" not in out
+    assert (tmp_path / "pooch-cache" / "mismatched-file.dat").exists()
+
+
+def test_populate_from_clone_check_hashes_strict_flags_mismatch_as_error(tmp_path, monkeypatch, capsys):
+    """With check_hashes=True and strict (default), a hash mismatch is an ERROR and the file is not copied."""
+    clone = _registries_with_one_hash_mismatch(tmp_path, monkeypatch)
+
+    total, errors = populate_from_clone(clone, tag="v3.5.31", flavor=Flavor.MCSTAS, check_hashes=True)
+
+    out = capsys.readouterr().out
+    assert errors == 1
+    assert total == 0
+    assert "ERROR: " in out
+    assert "hash mismatch" in out
+    assert not (tmp_path / "pooch-cache" / "mismatched-file.dat").exists()
+
+
+def test_populate_from_clone_check_hashes_lenient_flags_mismatch_as_warning(tmp_path, monkeypatch, capsys):
+    """With check_hashes=True and strict=False, a hash mismatch is a WARNING (still not copied)."""
+    clone = _registries_with_one_hash_mismatch(tmp_path, monkeypatch)
+
+    total, errors = populate_from_clone(
+        clone, tag="v3.5.31", flavor=Flavor.MCSTAS, strict=False, check_hashes=True,
+    )
+
+    out = capsys.readouterr().out
+    assert errors == 1
+    assert total == 0
+    assert "WARNING: " in out
+    assert "hash mismatch" in out
+    assert "ERROR: " not in out
+
+
+def test_cache_populate_check_hashes_defaults_to_strict_value(tmp_path, monkeypatch):
+    """cache_populate should resolve check_hashes=None to follow --strict/--no-strict."""
+    captured = {}
+
+    def fake_populate_from_clone(clone, tag, flavor=None, strict=True, check_hashes=False):
+        captured['strict'] = strict
+        captured['check_hashes'] = check_hashes
+        return 0, 0
+
+    monkeypatch.setattr("mccode_antlr.cli.cache.populate_from_clone", fake_populate_from_clone)
+
+    cache_populate(tag="v3.5.31", from_path=str(tmp_path), clone_url="unused", flavor="mcstas")
+    assert captured['strict'] is True
+    assert captured['check_hashes'] is True
+
+    cache_populate(
+        tag="v3.5.31", from_path=str(tmp_path), clone_url="unused", flavor="mcstas", strict=False,
+    )
+    assert captured['strict'] is False
+    assert captured['check_hashes'] is False
+
+
+def test_cache_populate_check_hashes_explicit_overrides_strict(tmp_path, monkeypatch):
+    """An explicit check_hashes value should win over the strict-derived default."""
+    captured = {}
+
+    def fake_populate_from_clone(clone, tag, flavor=None, strict=True, check_hashes=False):
+        captured['check_hashes'] = check_hashes
+        return 0, 0
+
+    monkeypatch.setattr("mccode_antlr.cli.cache.populate_from_clone", fake_populate_from_clone)
+
+    # strict=False (check_hashes would default to False) but explicitly requested True.
+    cache_populate(
+        tag="v3.5.31", from_path=str(tmp_path), clone_url="unused", flavor="mcstas",
+        strict=False, check_hashes=True,
+    )
+    assert captured['check_hashes'] is True
+
+    # strict=True (check_hashes would default to True) but explicitly requested False.
+    cache_populate(
+        tag="v3.5.31", from_path=str(tmp_path), clone_url="unused", flavor="mcstas",
+        strict=True, check_hashes=False,
+    )
+    assert captured['check_hashes'] is False
+
+
 def test_cache_populate_strict_default_exits_nonzero(tmp_path, monkeypatch):
     """cache_populate exits with code 1 when errors occurred and strict is left at its default."""
     monkeypatch.setattr(
         "mccode_antlr.cli.cache.populate_from_clone",
-        lambda clone, tag, flavor=None, strict=True: (0, 1),
+        lambda clone, tag, flavor=None, strict=True, check_hashes=False: (0, 1),
     )
 
     with pytest.raises(SystemExit) as exc_info:
@@ -203,7 +315,7 @@ def test_cache_populate_lenient_exits_zero(tmp_path, monkeypatch):
     """cache_populate does not exit non-zero when strict=False, even if errors occurred."""
     monkeypatch.setattr(
         "mccode_antlr.cli.cache.populate_from_clone",
-        lambda clone, tag, flavor=None, strict=True: (0, 1),
+        lambda clone, tag, flavor=None, strict=True, check_hashes=False: (0, 1),
     )
 
     # Should not raise SystemExit.
