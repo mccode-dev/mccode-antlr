@@ -18,6 +18,7 @@ cache), but they accumulate and users may wish to inspect or clean them up.
 """
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
 
 
@@ -31,7 +32,9 @@ def _cache_root() -> Path:
     return os_cache('mccodeantlr')
 
 
-def populate_from_clone(clone: Path, tag: str, flavor=None) -> tuple[int, int]:
+def populate_from_clone(
+    clone: Path, tag: str, flavor=None, strict: bool = True, check_hashes: bool = False,
+) -> tuple[int, int]:
     """Copy registry files from a McCode repository clone into the pooch cache.
 
     Parameters
@@ -45,12 +48,26 @@ def populate_from_clone(clone: Path, tag: str, flavor=None) -> tuple[int, int]:
     flavor:
         ``None`` → both flavors; otherwise one of ``Flavor.MCSTAS`` /
         ``Flavor.MCXTRACE``.
+    strict:
+        If ``True`` (default), a registry file missing from the clone (or,
+        with ``check_hashes``, a content-hash mismatch) is printed with an
+        ``ERROR`` tag. If ``False``, the same conditions are printed with a
+        ``WARNING`` tag instead. Either way the miss/mismatch is counted in
+        the returned ``error_count``.
+    check_hashes:
+        If ``True``, also verify each source file's sha256 hash against the
+        registry-recorded hash before copying, flagging a mismatch the same
+        way a missing file is flagged. ``False`` (default) skips this and
+        only checks that the file exists, which is cheaper but will silently
+        copy a locally-modified file whose content no longer matches the
+        registry.
 
     Returns
     -------
     (total_copied, error_count)
     """
     import shutil
+    from pooch import file_hash
     from mccode_antlr import Flavor
     from mccode_antlr.reader.registry import _mccode_pooch_registries, default_registry_names
 
@@ -70,10 +87,22 @@ def populate_from_clone(clone: Path, tag: str, flavor=None) -> tuple[int, int]:
             for fname in files:
                 src = clone / fname
                 dst = Path(p.path) / fname
+                label = 'ERROR' if strict else 'WARNING'
                 if not src.exists():
-                    print(f"    WARNING: {src} not in clone", flush=True)
+                    print(f"    {label}: {src} not in clone", flush=True)
                     errors += 1
                     continue
+                if check_hashes:
+                    expected = p.registry.get(fname)
+                    actual = file_hash(str(src))
+                    if expected is not None and actual != expected:
+                        print(
+                            f"    {label}: {src} hash mismatch "
+                            f"(expected {expected}, got {actual})",
+                            flush=True,
+                        )
+                        errors += 1
+                        continue
                 dst.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(src, dst)
                 total += 1
@@ -154,7 +183,10 @@ def cache_list(name, long):
     print(f'{n} known {c} for {path.name}:\n{dstr}')
 
 
-def cache_populate(tag: str | None, from_path: str | None, clone_url: str, flavor: str):
+def cache_populate(
+    tag: str | None, from_path: str | None, clone_url: str, flavor: str,
+    strict: bool = True, check_hashes: bool | None = None,
+):
     """Bulk-populate the pooch caches from a McCode git tag or a local checkout."""
     import os
     import tempfile
@@ -166,6 +198,9 @@ def cache_populate(tag: str | None, from_path: str | None, clone_url: str, flavo
     resolved_flavor = None
     if flavor and flavor.lower() != 'both':
         resolved_flavor = Flavor[flavor.upper()]
+
+    # check_hashes defaults to following --strict/--no-strict when not given explicitly.
+    resolved_check_hashes = strict if check_hashes is None else check_hashes
 
     # Resolve the tag to use.
     # - no --tag      -> currently configured/effective registry tag
@@ -189,7 +224,9 @@ def cache_populate(tag: str | None, from_path: str | None, clone_url: str, flavo
             print(f"ERROR: --from-path {src} does not exist or is not a directory.", flush=True)
             sys.exit(1)
         print(f"Using local checkout: {src}", flush=True)
-        total, errors = populate_from_clone(src, tag, flavor=resolved_flavor)
+        total, errors = populate_from_clone(
+            src, tag, flavor=resolved_flavor, strict=strict, check_hashes=resolved_check_hashes,
+        )
     else:
         with tempfile.TemporaryDirectory() as tmp:
             dest = Path(tmp) / 'McCode'
@@ -199,10 +236,12 @@ def cache_populate(tag: str | None, from_path: str | None, clone_url: str, flavo
                  '--branch', tag, '--', clone_url, str(dest)],
                 check=True,
             )
-            total, errors = populate_from_clone(dest, tag, flavor=resolved_flavor)
+            total, errors = populate_from_clone(
+                dest, tag, flavor=resolved_flavor, strict=strict, check_hashes=resolved_check_hashes,
+            )
 
     print(f"\nDone. {total} files cached, {errors} errors.", flush=True)
-    if errors:
+    if errors and strict:
         sys.exit(1)
 
 
@@ -482,6 +521,21 @@ def add_cache_management_parser(modes):
     p.add_argument(
         '--flavor', default='both', choices=['mcstas', 'mcxtrace', 'both'],
         help="Which flavor's registries to populate (default: both)",
+    )
+    p.add_argument(
+        '--strict', action=argparse.BooleanOptionalAction, default=True,
+        help=(
+            'Treat missing registry files as fatal errors (default). '
+            'Use --no-strict to only warn and exit 0 when files are missing.'
+        ),
+    )
+    p.add_argument(
+        '--check-hashes', dest='check_hashes', action=argparse.BooleanOptionalAction, default=None,
+        help=(
+            'Verify each copied file against the registry-recorded sha256 hash '
+            '(default: follows --strict/--no-strict, i.e. on when strict, off when lenient). '
+            'A mismatch is reported the same way as a missing file.'
+        ),
     )
     p.set_defaults(action=cache_populate)
 
