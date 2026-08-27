@@ -529,6 +529,18 @@ class TestParserFunctions:
         args = parser.parse_args(['cache', 'populate', '--no-check-hashes'])
         assert args.check_hashes is False
 
+    def test_cache_populate_registry_dir_flag_defaults_none_and_parses(self):
+        """cache populate --registry-dir should default to None and parse an explicit value."""
+        from mccode_antlr.cli.management import mccode_management_parser
+
+        parser = mccode_management_parser()
+
+        args = parser.parse_args(['cache', 'populate'])
+        assert args.registry_dir is None
+
+        args = parser.parse_args(['cache', 'populate', '--registry-dir', 'some/dir'])
+        assert args.registry_dir == 'some/dir'
+
     def test_cache_register_parses_root_dirs_and_out(self):
         """cache register should parse root, dirs, and --out as expected."""
         from mccode_antlr.cli.management import mccode_management_parser
