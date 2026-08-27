@@ -529,6 +529,42 @@ class TestParserFunctions:
         args = parser.parse_args(['cache', 'populate', '--no-check-hashes'])
         assert args.check_hashes is False
 
+    def test_cache_register_parses_root_dirs_and_out(self):
+        """cache register should parse root, dirs, and --out as expected."""
+        from mccode_antlr.cli.management import mccode_management_parser
+
+        parser = mccode_management_parser()
+        args = parser.parse_args(['cache', 'register', 'root', 'dir1', 'dir2', '--out', 'file.txt'])
+        assert args.root == 'root'
+        assert args.dirs == ['dir1', 'dir2']
+        assert args.out == 'file.txt'
+        assert args.ext is None
+        assert args.recursive is True
+
+    def test_cache_register_out_defaults_to_pooch_registry_txt(self):
+        """cache register --out should default to pooch-registry.txt when omitted."""
+        from mccode_antlr.cli.management import mccode_management_parser
+
+        parser = mccode_management_parser()
+        args = parser.parse_args(['cache', 'register', 'root', 'dir1'])
+        assert args.out == 'pooch-registry.txt'
+
+    def test_cache_register_ext_is_repeatable(self):
+        """cache register --ext should be repeatable and collect into a list."""
+        from mccode_antlr.cli.management import mccode_management_parser
+
+        parser = mccode_management_parser()
+        args = parser.parse_args(['cache', 'register', 'root', 'dir1', '--ext', '.comp', '--ext', '.instr'])
+        assert args.ext == ['.comp', '.instr']
+
+    def test_cache_register_no_recursive_flag(self):
+        """cache register --no-recursive should set recursive=False."""
+        from mccode_antlr.cli.management import mccode_management_parser
+
+        parser = mccode_management_parser()
+        args = parser.parse_args(['cache', 'register', 'root', 'dir1', '--no-recursive'])
+        assert args.recursive is False
+
 
 # ---------------------------------------------------------------------------
 # Minimal .comp source used throughout TestCacheIR
