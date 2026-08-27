@@ -6,6 +6,8 @@ Pooch-registered file caches
 - ``remove``   – remove a named cache (or a specific version within it).
 - ``populate`` – bulk-populate all pooch caches from a McCode git tag or a
                  local repository checkout (avoids individual file downloads).
+- ``register`` – mint a pooch registry file (path + sha256 hash per line)
+                 from a local directory tree.
 
 Component intermediate-representation (IR) cache
 -------------------------------------------------
@@ -108,6 +110,46 @@ def populate_from_clone(
                 total += 1
 
     return total, errors
+
+
+def build_registry(
+    root: Path, dirs: list[str], ext: list[str] | None = None, recursive: bool = True,
+) -> dict[str, str]:
+    """Hash every matching file under root/<dir> for each dir in dirs.
+
+    Parameters
+    ----------
+    root:
+        Root path; registry keys are POSIX paths relative to this root.
+    dirs:
+        Sub-directories (relative to root) to walk.
+    ext:
+        Optional list of filename-suffix filters (repeatable). A file is
+        included if its name ends with any of them (matches literal
+        suffixes like ``.comp`` or ``lib.c``, mirroring the reference
+        scripts this replaces). ``None`` includes every file.
+    recursive:
+        Recurse into subdirectories of each ``dirs`` entry (default), or
+        only look at their immediate contents if ``False``.
+
+    Returns
+    -------
+    dict mapping POSIX relative path -> sha256 hex digest (``pooch.file_hash``).
+    """
+    from pooch import file_hash
+
+    pattern_prefix = '**/*' if recursive else '*'
+    suffixes = ext if ext else [None]
+
+    hashes: dict[str, str] = {}
+    for d in dirs:
+        base = root / d
+        for suffix in suffixes:
+            pattern = pattern_prefix + suffix if suffix else pattern_prefix
+            for path in base.glob(pattern):
+                if path.is_file():
+                    hashes[path.relative_to(root).as_posix()] = file_hash(str(path))
+    return hashes
 
 
 def warm_via_pooch(flavor=None) -> tuple[int, int]:
@@ -243,6 +285,31 @@ def cache_populate(
     print(f"\nDone. {total} files cached, {errors} errors.", flush=True)
     if errors and strict:
         sys.exit(1)
+
+
+def cache_register(
+    root: str, dirs: list[str], out: str = 'pooch-registry.txt',
+    ext: list[str] | None = None, recursive: bool = True,
+):
+    """Mint a pooch registry file (path + sha256 hash per line) from a local directory tree."""
+    import sys
+
+    root_path = Path(root).resolve()
+    if not root_path.is_dir():
+        print(f"ERROR: root {root_path} does not exist or is not a directory.", flush=True)
+        sys.exit(1)
+
+    for d in dirs:
+        if not (root_path / d).is_dir():
+            print(f"WARNING: {root_path / d} does not exist or is not a directory.", flush=True)
+
+    hashes = build_registry(root_path, dirs, ext=ext, recursive=recursive)
+
+    out_path = Path(out)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(''.join(f'{name} {hashes[name]}\n' for name in sorted(hashes)))
+
+    print(f"Wrote {len(hashes)} entries to {out_path}", flush=True)
 
 
 # ---------------------------------------------------------------------------
@@ -596,5 +663,26 @@ def add_cache_management_parser(modes):
         ),
     )
     ib.set_defaults(action=cache_ir_build)
+
+    # -- register --
+    reg = actions.add_parser(
+        name='register',
+        help='Mint a pooch registry file (path + sha256 hash per line) from a local directory tree',
+    )
+    reg.add_argument('root', type=str, help='Root path; registry entries are recorded relative to this')
+    reg.add_argument('dirs', type=str, nargs='+', metavar='DIR', help='One or more directories under root to walk')
+    reg.add_argument(
+        '--out', '-o', dest='out', default='pooch-registry.txt', metavar='FILE',
+        help='Registry output file path (default: pooch-registry.txt)',
+    )
+    reg.add_argument(
+        '--ext', action='append', default=None, metavar='SUFFIX',
+        help='Only include files whose name ends with this suffix (repeatable); default includes every file',
+    )
+    reg.add_argument(
+        '--recursive', action=argparse.BooleanOptionalAction, default=True,
+        help='Recurse into subdirectories of each DIR (default). Use --no-recursive to only look at their top level.',
+    )
+    reg.set_defaults(action=cache_register)
 
     return actions
