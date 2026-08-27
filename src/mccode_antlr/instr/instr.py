@@ -685,7 +685,7 @@ class Instr(Struct):
             if registry.known(filename, strict=True):
                 print(registry.path(filename))
                 return registry.path(filename).absolute().resolve()
-        logger.warning(f'Unable to resolve path of "{filename}" in any of\n\t{"\t".join(str(r) for r in self.registries)}')
+        logger.warning(rf'Unable to resolve path of "{filename}" in any of\n\t{"\t".join(str(r) for r in self.registries)}')
         return Path()
 
     def _replace_env_getpath_cmd(self, flags: str):
