@@ -18,6 +18,7 @@ cache), but they accumulate and users may wish to inspect or clean them up.
 """
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
 
 
@@ -31,7 +32,7 @@ def _cache_root() -> Path:
     return os_cache('mccodeantlr')
 
 
-def populate_from_clone(clone: Path, tag: str, flavor=None) -> tuple[int, int]:
+def populate_from_clone(clone: Path, tag: str, flavor=None, strict: bool = True) -> tuple[int, int]:
     """Copy registry files from a McCode repository clone into the pooch cache.
 
     Parameters
@@ -45,6 +46,11 @@ def populate_from_clone(clone: Path, tag: str, flavor=None) -> tuple[int, int]:
     flavor:
         ``None`` → both flavors; otherwise one of ``Flavor.MCSTAS`` /
         ``Flavor.MCXTRACE``.
+    strict:
+        If ``True`` (default), a registry file missing from the clone is
+        printed with an ``ERROR`` tag. If ``False``, the same condition is
+        printed with a ``WARNING`` tag instead. Either way the miss is
+        counted in the returned ``error_count``.
 
     Returns
     -------
@@ -71,7 +77,8 @@ def populate_from_clone(clone: Path, tag: str, flavor=None) -> tuple[int, int]:
                 src = clone / fname
                 dst = Path(p.path) / fname
                 if not src.exists():
-                    print(f"    WARNING: {src} not in clone", flush=True)
+                    label = 'ERROR' if strict else 'WARNING'
+                    print(f"    {label}: {src} not in clone", flush=True)
                     errors += 1
                     continue
                 dst.parent.mkdir(parents=True, exist_ok=True)
@@ -154,7 +161,7 @@ def cache_list(name, long):
     print(f'{n} known {c} for {path.name}:\n{dstr}')
 
 
-def cache_populate(tag: str | None, from_path: str | None, clone_url: str, flavor: str):
+def cache_populate(tag: str | None, from_path: str | None, clone_url: str, flavor: str, strict: bool = True):
     """Bulk-populate the pooch caches from a McCode git tag or a local checkout."""
     import os
     import tempfile
@@ -189,7 +196,7 @@ def cache_populate(tag: str | None, from_path: str | None, clone_url: str, flavo
             print(f"ERROR: --from-path {src} does not exist or is not a directory.", flush=True)
             sys.exit(1)
         print(f"Using local checkout: {src}", flush=True)
-        total, errors = populate_from_clone(src, tag, flavor=resolved_flavor)
+        total, errors = populate_from_clone(src, tag, flavor=resolved_flavor, strict=strict)
     else:
         with tempfile.TemporaryDirectory() as tmp:
             dest = Path(tmp) / 'McCode'
@@ -199,10 +206,10 @@ def cache_populate(tag: str | None, from_path: str | None, clone_url: str, flavo
                  '--branch', tag, '--', clone_url, str(dest)],
                 check=True,
             )
-            total, errors = populate_from_clone(dest, tag, flavor=resolved_flavor)
+            total, errors = populate_from_clone(dest, tag, flavor=resolved_flavor, strict=strict)
 
     print(f"\nDone. {total} files cached, {errors} errors.", flush=True)
-    if errors:
+    if errors and strict:
         sys.exit(1)
 
 
@@ -482,6 +489,13 @@ def add_cache_management_parser(modes):
     p.add_argument(
         '--flavor', default='both', choices=['mcstas', 'mcxtrace', 'both'],
         help="Which flavor's registries to populate (default: both)",
+    )
+    p.add_argument(
+        '--strict', action=argparse.BooleanOptionalAction, default=True,
+        help=(
+            'Treat missing registry files as fatal errors (default). '
+            'Use --no-strict to only warn and exit 0 when files are missing.'
+        ),
     )
     p.set_defaults(action=cache_populate)
 

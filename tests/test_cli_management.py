@@ -421,10 +421,11 @@ class TestCacheManagement:
 
         captured = {}
 
-        def fake_populate_from_clone(clone, tag, flavor=None):
+        def fake_populate_from_clone(clone, tag, flavor=None, strict=True):
             captured['clone'] = clone
             captured['tag'] = tag
             captured['flavor'] = flavor
+            captured['strict'] = strict
             return 0, 0
 
         monkeypatch.setattr(cache_module, 'populate_from_clone', fake_populate_from_clone)
@@ -490,6 +491,22 @@ class TestParserFunctions:
         # Try parsing cache subcommand
         args = parser.parse_args(['cache', 'list'])
         assert hasattr(args, 'action')
+
+    def test_cache_populate_strict_flag_defaults_true(self):
+        """cache populate should default to strict=True when --strict/--no-strict is omitted."""
+        from mccode_antlr.cli.management import mccode_management_parser
+
+        parser = mccode_management_parser()
+        args = parser.parse_args(['cache', 'populate'])
+        assert args.strict is True
+
+    def test_cache_populate_no_strict_flag_parses_false(self):
+        """cache populate --no-strict should set strict=False."""
+        from mccode_antlr.cli.management import mccode_management_parser
+
+        parser = mccode_management_parser()
+        args = parser.parse_args(['cache', 'populate', '--no-strict'])
+        assert args.strict is False
 
 
 # ---------------------------------------------------------------------------
