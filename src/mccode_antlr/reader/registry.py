@@ -331,7 +331,7 @@ class RemoteRegistry(Registry):
         deduped = _dedupe_identical_registry_entries(self.pooch, matches)
         if deduped is not None:
             return deduped
-        raise RuntimeError(f'More than one match for {name}:{ext}, which is required of:\n{matches}')
+        raise RuntimeError(f'More than one match for {name}:{ext} in {self}: {", ".join(matches)}')
 
     def is_available(self, name: str, ext: str = None, exact: bool = True):
         return self.pooch.registry_files(self.fullname(name, ext, exact))
