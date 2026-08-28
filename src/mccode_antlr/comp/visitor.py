@@ -9,6 +9,21 @@ from ..common.visitor import add_common_visitors
 from ..grammar.McCompParser import McCompParser
 
 
+# Grammar section rule -> Comp block attribute. A section spelled out in a
+# `DEFINE COMPONENT b INHERIT a` body REPLACES the copy inherited from `a`
+# (upstream McCode: "all redefined blocks override"); see visitComponentDefineCopy.
+_INHERIT_OVERRIDE_SECTIONS = (
+    ('share', 'share'),
+    ('uservars', 'user'),
+    ('declare', 'declare'),
+    ('initialise', 'initialize'),
+    ('component_trace', 'trace'),
+    ('save', 'save'),
+    ('finally_', 'final'),
+    ('display', 'display'),
+)
+
+
 class CompVisitor(McCompVisitor):
     def __init__(self, parent, filename):
         self.parent = parent  # the instrument (handler?) that wanted to read this component
@@ -48,6 +63,13 @@ class CompVisitor(McCompVisitor):
         # add parameters, overwrite all provided details
         if ctx.NoAcc() is not None:
             self.state.no_acc()
+        # Any C section given in this definition replaces the inherited copy
+        # rather than appending to it (the section visitors below use `+=`);
+        # a section omitted here keeps the copy taken from copy_from. This
+        # matches upstream McCode's "all redefined blocks override".
+        for rule, attr in _INHERIT_OVERRIDE_SECTIONS:
+            if getattr(ctx, rule)() is not None:
+                setattr(self.state, attr, ())
         self.visitChildren(ctx)  # Use the visitor methods to overwrite details of the state
 
     def visitCategory(self, ctx: Parser.CategoryContext):
