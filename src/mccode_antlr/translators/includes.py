@@ -9,11 +9,18 @@ from __future__ import annotations
 
 import re
 
-# %include "read_table-lib" -- no extension, so a *library*: the translator pulls
-# in both {name}.h and, when embedding the runtime, {name}.c
-LIBRARY_INCLUDE_RE = re.compile(r'^\s*%include\s*"(?P<libname>[^"\n\.]+)"\s*$', re.MULTILINE)
-# %include "conic.h" -- a specific file, spliced in place
-FILE_INCLUDE_RE = re.compile(r'^\s*%include\s*"(?P<filename>[^"\n]+)"\s*$', re.MULTILINE)
+# A %include directive may carry a trailing line- (`//`) or block- (`/* */`)
+# comment (issue #320). It is matched with a look-ahead so it stays *outside*
+# .span(0): translators/c.py splices the resolved file / erases the library line
+# over exactly .span(0), so a comment left outside survives in place -- after the
+# spliced file's last line, or where the library directive was.
+_TRAILING = r'(?=[^\S\n]*(?://[^\n]*|/\*[^\n]*?\*/[^\S\n]*)?$)'
+
+# %include "read_table-lib" [// comment] -- no extension, so a *library*: the
+# translator pulls in both {name}.h and, when embedding the runtime, {name}.c
+LIBRARY_INCLUDE_RE = re.compile(r'^\s*%include\s*"(?P<libname>[^"\n\.]+)"' + _TRAILING, re.MULTILINE)
+# %include "conic.h" [// comment] -- a specific file, spliced in place
+FILE_INCLUDE_RE = re.compile(r'^\s*%include\s*"(?P<filename>[^"\n]+)"' + _TRAILING, re.MULTILINE)
 
 
 def included_names(text: str) -> tuple[list[str], list[str]]:
