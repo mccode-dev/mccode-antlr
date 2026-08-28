@@ -202,6 +202,8 @@ class Instance(Struct):
     def SPLIT(self, count):
         if isinstance(count, str):
             count = Expr.parse(count)
+        elif not isinstance(count, Expr):
+            count = Expr.best(count)
         if not isinstance(count, Expr):
             raise ValueError(f'Expected provided SPLIT expression to be an Expr not a {type(count)}')
         self.split = count
@@ -210,10 +212,21 @@ class Instance(Struct):
     def WHEN(self, expr):
         if isinstance(expr, str):
             expr = Expr.parse(expr)
+        elif not isinstance(expr, Expr):
+            expr = Expr.best(expr)
         if not isinstance(expr, Expr):
             raise ValueError(f'Expected provided WHEN expression to be an Expr not a {type(expr)}')
         if expr.is_constant:
-            raise RuntimeError(f'Evaluated WHEN statement {expr} would be constant at runtime!')
+            try:
+                always = 'never executes' if not bool(expr.value) else 'always executes'
+            except Exception:
+                always = 'is fixed at translation time'
+            logger.warning(
+                f"WHEN condition {expr} on component '{self.name}' is a compile-time "
+                f"constant, so the component {always}. Remove (or comment out) the "
+                f"component instead, or gate it on an instrument parameter if its "
+                f"position/orientation/DISPLAY is still needed."
+            )
         self.when = expr
         return self
 

@@ -154,7 +154,9 @@ class Assembler:
             A dictionary of parameter names and values to set for the component instance.
         kwargs : dict, optional
             Properties for the constructed component Instance object. Useful keyword values include
-            `when` and `group`.
+            `when`, `split`, and `group`. `when` and `split` accept a string or `Expr` and are
+            validated the same as `Instance.WHEN`/`Instance.SPLIT` (a compile-time-constant `when`
+            logs a guidance warning).
 
         Note
         ----
@@ -165,9 +167,17 @@ class Assembler:
         if type_name != comp_type.name:
             raise RuntimeError(f"Component resolution failed for {type_name}, found {comp_type.name} instead")
         at, ref = self._handle_at(at)
+        # `when` and `split` need string/Expr coercion and validation, so route
+        # them through the builder methods rather than the raw struct constructor.
+        when = kwargs.pop('when', None)
+        split = kwargs.pop('split', None)
         instance = Instance(name, comp_type,
                             at_relative=(at, ref), rotate_relative=self._handle_rotate(rotate, ref),
                             **kwargs)
+        if when is not None:
+            instance.WHEN(when)
+        if split is not None:
+            instance.SPLIT(split)
         self.instrument.add_component(instance)
         if isinstance(parameters, dict):
             instance.set_parameters(**parameters)
