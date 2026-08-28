@@ -193,7 +193,7 @@ mccode-antlr SUBCOMMAND [OPTIONS]
 | `remove [name] [version]` | Remove a named cache or specific version (`-f` to skip confirmation) |
 | `populate` | Bulk-populate pooch caches from a McCode git tag or local checkout |
 | `register` | Mint a pooch registry file (path + sha256 hash per line) from a local directory tree |
-| `ir-list` | List component IR cache files (`*.comp.json`) (`-l` for paths, sizes, stale status) |
+| `ir-list` | List component IR cache files (`*.comp.<build>.json`) (`-l` for paths, sizes, stale status) |
 | `ir-clean` | Delete component IR cache files (`--stale` for stale-only; `-f` to skip confirmation) |
 | `ir-build` | Pre-build component IR cache files for all known registries |
 
@@ -225,7 +225,7 @@ mccode-antlr SUBCOMMAND [OPTIONS]
 |---|---|
 | `--flavor {mcstas,mcxtrace,both}` | Which flavor's registries to build IR for (default: `both`) |
 | `-j N`, `--jobs N` | Number of parallel workers (default: `os.cpu_count()`) |
-| `--force` | Rebuild even if `.comp.json` is already up-to-date |
+| `--force` | Rebuild even if the IR sidecar is already up-to-date |
 | `--download` | Bulk-populate the pooch cache via git clone before building (faster than individual fetches) |
 | `-R SPEC`, `--registry SPEC` | Extra registry to include (repeatable); same `SPEC` formats as `registry_from_specification` |
 
