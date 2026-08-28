@@ -35,6 +35,22 @@ def _promote(a: DataType, b: DataType, op: str) -> DataType:
     return a + b
 
 
+# srepr of the "no value" sentinel. Reconstructing an Expr from its srepr
+# strings goes through eval(s, SYMPY_NAMESPACE), which calls Symbol('_mccode_unset_').
+# SymPy memoizes Symbol instances in a bounded LRU cache; once enough distinct
+# symbols have been created that cache evicts the entry interned at import time as
+# UNSET_SYMPY, and the eval then yields a fresh Symbol that is == but not *is*
+# UNSET_SYMPY. Every `x is UNSET_SYMPY` identity check downstream would silently
+# misfire, so re-canonicalise the sentinel here instead of calling eval for it.
+_UNSET_SREPR = sympy.srepr(UNSET_SYMPY)
+
+
+def _eval_srepr(s: str) -> sympy.Basic:
+    if s == _UNSET_SREPR:
+        return UNSET_SYMPY
+    return eval(s, SYMPY_NAMESPACE)  # noqa: S307
+
+
 def _to_sympy(value) -> sympy.Basic:
     if isinstance(value, Expr):
         if len(value._exprs) != 1:
@@ -95,7 +111,7 @@ class Expr(msgspec.Struct, dict=True, eq=False):
     @property
     def _exprs(self) -> list[sympy.Basic]:
         if '_cache' not in self.__dict__:
-            self.__dict__['_cache'] = [eval(s, SYMPY_NAMESPACE) for s in self.exprs]  # noqa: S307
+            self.__dict__['_cache'] = [_eval_srepr(s) for s in self.exprs]
         return self.__dict__['_cache']
 
     # ------------------------------------------------------------------
@@ -113,7 +129,7 @@ class Expr(msgspec.Struct, dict=True, eq=False):
     @classmethod
     def from_dict(cls, args: dict) -> 'Expr':
         if 'exprs' in args:
-            exprs = [eval(s, SYMPY_NAMESPACE) for s in args['exprs']]  # noqa: S307
+            exprs = [_eval_srepr(s) for s in args['exprs']]
             dt = DataType(args.get('data_type', DataType.undefined.value))
             st = ShapeType(args.get('shape_type', ShapeType.scalar.value))
             ot = ObjectType(args.get('object_type', ObjectType.value.value))

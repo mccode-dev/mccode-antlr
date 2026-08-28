@@ -24,7 +24,14 @@ FAKE_COMPONENTS = dict(
     %{
     %}
     END
-    """)
+    """),
+    no_default_string_parameter=dedent(r"""DEFINE COMPONENT no_default_string_parameter
+    SETTING PARAMETERS (string filename)
+    TRACE
+    %{
+    %}
+    END
+    """),
 )
 
 
@@ -82,3 +89,34 @@ def test_nexus_key_is_expanded():
     assert not any('@NEXUSFLAGS@' == x for x in instr.decoded_flags())
     nexus_flags = config['flags']['nexus'].get()
     assert any(nexus_flags == x for x in instr.decoded_flags())
+
+
+def test_no_default_string_parameter_component_is_compilable():
+    from mccode_antlr.translators.c import CTargetVisitor
+    from mccode_antlr import Flavor
+    instr = parse_mcstas_instr(dedent("""define instrument
+    uses_no_default_string_parameter (string filename="some_file.txt")
+    DEPENDENCY "@NEXUSFLAGS@"
+    trace
+    component origin = no_default_string_parameter(filename=filename) at (0, 0, 0) absolute
+    end
+    """), registries=[in_memory])
+
+    config = dict(
+        default_main=True,
+        enable_trace=True,
+        portable=True,
+        include_runtime=True,
+        embed_instrument_file=False,
+        verbose=False,
+        output=f'{instr.name if instr.name else "none"}.c')
+
+    # Construct the object which will translate the Python instrument to C
+    visitor = CTargetVisitor(instr, flavor=Flavor.MCSTAS, config=config, verbose=False, debug=False)
+    # Go through the instrument, finish by collecting the C file contents:
+    c_program = visitor.contents()
+
+    bad_output = '"filename", , _instrument_var._parameters.filename'
+    good_output = '"filename", "NONE", _instrument_var._parameters.filename'
+    assert bad_output not in c_program
+    assert good_output in c_program

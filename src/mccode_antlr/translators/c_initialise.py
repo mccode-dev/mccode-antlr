@@ -177,6 +177,10 @@ def cogen_comp_setpos(
             tstr = f'"{default.value.mccode_c_type}"'
             if not (default.value.is_str or p.value.is_str):
                 dstr, vstr = [f'"{x}"' for x in (dstr, vstr)]
+            if len(dstr) == 0:
+                dstr = '"NONE"'
+            if len(vstr) == 0:
+                vstr = '"NONE"'
             lns.append(f'    mccomp_param_nexus(nxhandle, {gstr}, "{default.name}", {dstr}, {vstr}, {tstr});')
 
         return '\n'.join(lns + ['    );','    }','  }', '#endif'])
