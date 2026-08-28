@@ -369,6 +369,11 @@ class Expr(msgspec.Struct, dict=True, eq=False):
         e = self._exprs[0]
         if self.data_type == DataType.str:
             return True
+        # A folded boolean literal (`1 == 0` -> False, `2 > 1` -> True) is just
+        # as compile-time-constant as a number, even though SymPy's BooleanAtom
+        # reports is_number == False.
+        if isinstance(e, sympy.logic.boolalg.BooleanAtom):
+            return True
         return e.is_number or e is UNSET_SYMPY
 
     @property
@@ -398,6 +403,8 @@ class Expr(msgspec.Struct, dict=True, eq=False):
             return None
         if self.data_type == DataType.str:
             return e.name
+        if isinstance(e, sympy.logic.boolalg.BooleanAtom):
+            return int(bool(e))
         if self.data_type == DataType.int or (e.is_integer is True):
             return int(e)
         return float(e)

@@ -102,6 +102,73 @@ def test_static_when_conditions_emit_c_compatible_literals():
     assert 'if ((1))  // conditional WHEN execution' in c_program
 
 
+def _warnings_from(fn):
+    from loguru import logger
+    messages = []
+    sink = logger.add(lambda m: messages.append(str(m)), level='WARNING')
+    try:
+        result = fn()
+    finally:
+        logger.remove(sink)
+    return result, messages
+
+
+def test_expr_is_constant_recognises_folded_booleans():
+    from mccode_antlr.common.expression import Expr
+    for src in ('0==1', '1==0', '1==1', '2>1', '3!=3'):
+        assert Expr.parse(src).is_constant, src
+    for src in ('x>0', 'x==1', 'x'):
+        assert not Expr.parse(src).is_constant, src
+
+
+def test_constant_when_warns_but_does_not_raise():
+    # issue #318: a compile-time-constant WHEN used to raise RuntimeError and
+    # abort translation; now it is a guidance warning and the instrument parses.
+    for when_expr in ('1', '2-2', '0==1', '1==1'):
+        instr, messages = _warnings_from(lambda: parse_mcstas_instr(dedent(f"""\
+            DEFINE INSTRUMENT const_when()
+            TRACE
+            COMPONENT only = Arm() WHEN ({when_expr}) AT (0, 0, 0) ABSOLUTE
+            END
+            """)))
+        assert instr.components[0].when is not None
+        assert any('compile-time constant' in m for m in messages), when_expr
+
+
+def test_non_constant_when_does_not_warn():
+    _, messages = _warnings_from(lambda: parse_mcstas_instr(dedent("""\
+        DEFINE INSTRUMENT live_when(int gate=0)
+        TRACE
+        COMPONENT only = Arm() WHEN (gate > 0) AT (0, 0, 0) ABSOLUTE
+        END
+        """)))
+    assert not any('compile-time constant' in m for m in messages)
+
+
+def test_assembler_component_coerces_and_validates_when_and_split():
+    from mccode_antlr.assembler import Assembler
+    from mccode_antlr import Flavor
+    from mccode_antlr.common.expression import Expr
+
+    def build():
+        a = Assembler('when_kwargs', flavor=Flavor.MCSTAS)
+        a.parameter('int gate=0')
+        live = a.component('live', 'Arm', at=(0, 0, 0), when='gate > 0', split='4')
+        const = a.component('const', 'Arm', at=(0, 0, 1), when='1')
+        return live, const
+
+    (live, const), messages = _warnings_from(build)
+
+    # strings routed through Instance.WHEN/SPLIT -> real Expr, not a raw str
+    assert isinstance(live.when, Expr) and isinstance(live.split, Expr)
+    assert isinstance(const.when, Expr)
+    # ... so parameter_used is not fooled by substring matches on a string
+    assert live.parameter_used('gate') and not live.parameter_used('e')
+    # only the constant one warns
+    assert any("'const'" in m and 'compile-time constant' in m for m in messages)
+    assert not any("'live'" in m for m in messages)
+
+
 @compiled_test
 def test_when_equal_parses():
     do_when_op_(lambda x, y: x == y, '==', 'equal')
