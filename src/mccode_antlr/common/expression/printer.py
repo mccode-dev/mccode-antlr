@@ -119,6 +119,15 @@ class McCodeCPrinter(C99CodePrinter):
             return f'{self._print(expr.lhs)}{op}{self._print(expr.rhs)}'
         return super()._print_Relational(expr)
 
+    # --- Boolean literals: C99 has no `true`/`false` keywords without <stdbool.h>.
+    #     SymPy folds e.g. `0==1` to BooleanFalse; emit plain integers instead. ---
+
+    def _print_BooleanTrue(self, expr):
+        return '1'
+
+    def _print_BooleanFalse(self, expr):
+        return '0'
+
     # --- Suppress SymPy's piecewise in favour of our CTernary ---
 
     def _print_Piecewise(self, expr):
