@@ -63,6 +63,45 @@ def do_when_op_(checker, op, message):
                 assert ex == ln
 
 
+def _translate_static_when_instr(when_expr: str) -> str:
+    from mccode_antlr.translators.c import CTargetVisitor
+    from mccode_antlr import Flavor
+    instr = parse_mcstas_instr(dedent(f"""DEFINE INSTRUMENT static_when()
+    TRACE
+    COMPONENT only = Arm() WHEN ({when_expr}) at (0, 0, 0) ABSOLUTE
+    EXTEND %{{
+    printf("only\\n");
+    %}}
+    END
+    """))
+    config = dict(
+        default_main=True,
+        enable_trace=True,
+        portable=True,
+        include_runtime=True,
+        embed_instrument_file=False,
+        verbose=False,
+        output='static_when.c')
+    visitor = CTargetVisitor(instr, flavor=Flavor.MCSTAS, config=config, verbose=False, debug=False)
+    return visitor.contents()
+
+
+def test_static_when_conditions_emit_c_compatible_literals():
+    # SymPy folds `0==1` and `1==0` to the boolean literal False; without a fix
+    # both are printed as the C99-invalid token `false` (see issue #317), which
+    # makes the generated `if ((false))  // conditional WHEN execution` fail to
+    # compile.  Both must instead emit a plain integer.
+    for when_expr in ('0==1', '1==0'):
+        c_program = _translate_static_when_instr(when_expr)
+        assert 'if ((false))  // conditional WHEN execution' not in c_program
+        assert 'if ((0))  // conditional WHEN execution' in c_program
+
+    # And the always-true counterpart folds to `True` -> must emit `1`, not `true`
+    c_program = _translate_static_when_instr('1==1')
+    assert 'if ((true))  // conditional WHEN execution' not in c_program
+    assert 'if ((1))  // conditional WHEN execution' in c_program
+
+
 @compiled_test
 def test_when_equal_parses():
     do_when_op_(lambda x, y: x == y, '==', 'equal')
