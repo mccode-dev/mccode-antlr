@@ -11,12 +11,14 @@ Pooch-registered file caches
 
 Component intermediate-representation (IR) cache
 -------------------------------------------------
-The reader writes a ``{name}.comp.json`` file alongside every ``.comp`` file it
-parses.  These files persist across process restarts (acting as a fast disk
+The reader writes a ``{name}.comp.<salt>.json`` file alongside every ``.comp``
+file it parses (the ``<salt>`` binds the sidecar to the mccode-antlr build that
+wrote it).  These files persist across process restarts (acting as a fast disk
 cache), but they accumulate and users may wish to inspect or clean them up.
 
-- ``ir-list``  – find and list all ``*.comp.json`` files under the cache root.
-- ``ir-clean`` – delete all (or only stale) ``*.comp.json`` files.
+- ``ir-list``  – find and list all component IR sidecars under the cache root.
+- ``ir-clean`` – delete all (or only stale) component IR sidecars; a sidecar
+                 from a different build counts as stale.
 """
 from __future__ import annotations
 
@@ -371,13 +373,18 @@ def cache_register(
 # ---------------------------------------------------------------------------
 
 def _iter_ir_files(root: Path):
-    """Yield all ``*.comp.json`` paths under *root*."""
-    return root.rglob('*.comp.json')
+    """Yield every component IR sidecar under *root* (any build, plus legacy)."""
+    from mccode_antlr.reader.reader import iter_component_ir_paths
+    return iter_component_ir_paths(root)
 
 
 def _is_stale(json_path: Path) -> bool:
-    """Return True if the sibling ``.comp`` file is newer than *json_path*."""
-    comp_path = json_path.with_suffix('')  # removes .json → .comp
+    """True if *json_path* is unusable: sibling ``.comp`` newer, or it was
+    written by a different mccode-antlr build."""
+    from mccode_antlr.reader.reader import component_ir_comp_path, component_ir_is_current
+    if not component_ir_is_current(json_path):
+        return True
+    comp_path = component_ir_comp_path(json_path)
     try:
         return comp_path.stat().st_mtime_ns > json_path.stat().st_mtime_ns
     except OSError:
@@ -398,7 +405,7 @@ def cache_ir_list(long: bool):
             print(f'{f}  ({size} B){stale}')
         else:
             print(f.name)
-    print(f'\n{len(files)} .comp.json file(s) found under {root}')
+    print(f'\n{len(files)} component IR sidecar(s) found under {root}')
 
 
 def cache_ir_clean(stale: bool, force: bool):
@@ -413,11 +420,11 @@ def cache_ir_clean(stale: bool, force: bool):
         description = 'all'
 
     if not targets:
-        print(f"No {description} .comp.json files to remove.")
+        print(f"No {description} component IR sidecars to remove.")
         return
 
     if not force:
-        response = input(f'Remove {len(targets)} {description} .comp.json file(s)? [yN] ')
+        response = input(f'Remove {len(targets)} {description} component IR sidecar(s)? [yN] ')
         if response.lower() not in ('y', 'yes'):
             print("Aborted.")
             return
@@ -430,7 +437,7 @@ def cache_ir_clean(stale: bool, force: bool):
         except OSError as exc:
             print(f'WARNING: could not remove {f}: {exc}')
 
-    print(f'Removed {removed} .comp.json file(s).')
+    print(f'Removed {removed} component IR sidecar(s).')
 
 
 # ---------------------------------------------------------------------------
@@ -450,8 +457,10 @@ def _build_one_ir(comp_path_str: str, force: bool) -> tuple[str, str]:
     from mccode_antlr.comp import Comp
     from mccode_antlr.grammar import McComp_ErrorListener
 
+    from mccode_antlr.reader.reader import component_ir_path
+
     comp_path = Path(comp_path_str)
-    json_path = comp_path.with_suffix(comp_path.suffix + '.json')
+    json_path = component_ir_path(comp_path)
 
     if not force:
         try:
@@ -673,7 +682,7 @@ def add_cache_management_parser(modes):
     # -- ir-list --
     il = actions.add_parser(
         name='ir-list',
-        help='List component IR cache files (*.comp.json) under the cache root',
+        help='List component IR cache sidecars (*.comp.<build>.json) under the cache root',
     )
     il.add_argument('-l', '--long', action='store_true',
                     help='Show full path, size, and stale status')
@@ -682,11 +691,11 @@ def add_cache_management_parser(modes):
     # -- ir-clean --
     ic = actions.add_parser(
         name='ir-clean',
-        help='Delete component IR cache files (*.comp.json) under the cache root',
+        help='Delete component IR cache sidecars (*.comp.<build>.json) under the cache root',
     )
     ic.add_argument(
         '--stale', action='store_true',
-        help='Only remove files whose sibling .comp is newer (stale entries)',
+        help='Only remove sidecars whose sibling .comp is newer, or that a different build wrote',
     )
     ic.add_argument('-f', '--force', action='store_true',
                     help='Skip confirmation prompt')
@@ -695,7 +704,7 @@ def add_cache_management_parser(modes):
     # -- ir-build --
     ib = actions.add_parser(
         name='ir-build',
-        help='Pre-build component IR cache files (*.comp.json) for all known registries',
+        help='Pre-build component IR cache sidecars for all known registries',
     )
     ib.add_argument(
         '--flavor', default='both', choices=['mcstas', 'mcxtrace', 'both'],
@@ -707,7 +716,7 @@ def add_cache_management_parser(modes):
     )
     ib.add_argument(
         '--force', action='store_true',
-        help='Rebuild even if .comp.json is already up-to-date',
+        help='Rebuild even if the IR sidecar is already up-to-date',
     )
     ib.add_argument(
         '--download', action='store_true',

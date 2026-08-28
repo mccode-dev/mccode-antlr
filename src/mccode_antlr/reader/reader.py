@@ -1,4 +1,6 @@
 from __future__ import annotations
+import re
+from functools import lru_cache
 from pathlib import Path
 from loguru import logger
 from msgspec import Struct, field
@@ -14,6 +16,21 @@ from mccode_antlr import Flavor
 # Process-level in-memory + disk component cache
 # ---------------------------------------------------------------------------
 
+# Bump when a change to the component parser/visitor or to the serialised Comp
+# schema means a JSON sidecar written by an older mccode-antlr can no longer be
+# trusted (e.g. the #321 INHERIT block-override fix). Combined with the package
+# version into the sidecar filename, so an upgrade -- or a working-tree change
+# during development -- transparently re-parses the .comp file exactly once.
+_COMPONENT_CACHE_FORMAT = 2
+
+
+@lru_cache(maxsize=1)
+def _component_cache_salt() -> str:
+    from hashlib import sha1
+    from mccode_antlr.version import version
+    return sha1(f'{_COMPONENT_CACHE_FORMAT}:{version()}'.encode()).hexdigest()[:12]
+
+
 class _ComponentCache:
     """Singleton two-level cache for parsed :class:`~mccode_antlr.comp.Comp` objects.
 
@@ -22,13 +39,15 @@ class _ComponentCache:
     beyond a dict lookup and a ``stat()`` call.
 
     **Level 2 – disk JSON cache** (persists across process restarts):
-    A ``{name}.comp.json`` file is written alongside every ``.comp`` file the
-    first time it is parsed.  On subsequent loads the JSON is decoded by
+    A ``{name}.comp.<salt>.json`` file is written alongside every ``.comp`` file
+    the first time it is parsed.  On subsequent loads the JSON is decoded by
     :func:`mccode_antlr.io.json.from_json` in ~0.1 ms instead of running the
     ANTLR parser (~10–25 ms per component).  The JSON file's mtime is compared
     to the ``.comp`` file's mtime; a stale JSON is discarded and the component
-    is re-parsed.  If the cache directory is not writable the disk level is
-    silently skipped.
+    is re-parsed.  The ``<salt>`` encodes the mccode-antlr version and an
+    internal cache-format number (:data:`_COMPONENT_CACHE_FORMAT`), so sidecars
+    written by a different build are ignored and pruned rather than trusted.
+    If the cache directory is not writable the disk level is silently skipped.
 
     Use :meth:`clear` to flush in-memory entries (disk files are left intact
     and will be reloaded on the next access).
@@ -44,7 +63,25 @@ class _ComponentCache:
 
     @staticmethod
     def _json_path(comp_path: Path) -> Path:
-        return comp_path.with_suffix(comp_path.suffix + '.json')
+        return comp_path.with_suffix(comp_path.suffix + f'.{_component_cache_salt()}.json')
+
+    @staticmethod
+    def _foreign_json_paths(comp_path: Path):
+        """Sidecars for *comp_path* written by another build -- the pre-salt
+        ``{name}.comp.json`` or a ``{name}.comp.<other-salt>.json`` -- which must
+        not be trusted and should be pruned."""
+        keep = _ComponentCache._json_path(comp_path).name
+        stem = comp_path.name  # e.g. 'Foo.comp'
+        try:
+            candidates = list(comp_path.parent.glob(stem + '*.json'))
+        except OSError:
+            return
+        for p in candidates:
+            if p.name == keep:
+                continue
+            trailing = p.name[len(stem):]  # '.json' or '.<salt>.json'
+            if re.fullmatch(r'(\.[0-9a-f]{12})?\.json', trailing):
+                yield p
 
     def get(self, path: Path) -> Comp | None:
         key = str(path)
@@ -85,6 +122,8 @@ class _ComponentCache:
         try:
             from mccode_antlr.io.json import to_json
             json_path.write_bytes(to_json(comp))
+            for stale in self._foreign_json_paths(path):
+                stale.unlink(missing_ok=True)
         except Exception:
             pass
 
@@ -120,6 +159,34 @@ class _ComponentCache:
 
 
 component_cache = _ComponentCache()
+
+
+# Any component IR sidecar: this build's `{name}.comp.<salt>.json`, another
+# build's, or the pre-salt `{name}.comp.json`.
+_COMPONENT_IR_SUFFIX_RE = re.compile(r'\.comp(?:\.[0-9a-f]{12})?\.json\Z')
+
+
+def component_ir_path(comp_path: Path) -> Path:
+    """The IR-cache JSON sidecar path *this build* reads and writes for *comp_path*."""
+    return _ComponentCache._json_path(comp_path)
+
+
+def component_ir_comp_path(json_path: Path) -> Path:
+    """The ``.comp`` file an IR sidecar belongs to (inverse of :func:`component_ir_path`)."""
+    return json_path.with_name(_COMPONENT_IR_SUFFIX_RE.sub('.comp', json_path.name))
+
+
+def iter_component_ir_paths(root: Path):
+    """Every component IR sidecar under *root*, regardless of which build wrote it."""
+    for path in root.rglob('*.comp*.json'):
+        if _COMPONENT_IR_SUFFIX_RE.search(path.name):
+            yield path
+
+
+def component_ir_is_current(json_path: Path) -> bool:
+    """True when *json_path* is the sidecar name this build would write (right salt)."""
+    return json_path.name == component_ir_path(component_ir_comp_path(json_path)).name
+
 
 def make_reader_error_listener(super_class, filetype, name, source, pre=5, post=2):
     class ReaderErrorListener(super_class):

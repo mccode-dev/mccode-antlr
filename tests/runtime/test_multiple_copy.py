@@ -113,14 +113,15 @@ for comp, representation in INHERIT_321.items():
 
 
 def _drop_component_json_cache():
-    """The component parser has a disk JSON cache keyed only on the .comp mtime;
-    a stale entry from a previous (pre-fix) parse would mask the behaviour under
-    test. Flush the in-memory level and delete the JSON sidecars in this
-    registry's materialised tree."""
+    """Flush both levels of the component parse cache for this registry's
+    materialised tree, so a sidecar left by an earlier parse cannot mask the
+    behaviour under test."""
     from mccode_antlr.reader.reader import component_cache
     component_cache.clear()
     for name in list(FAKE_COMPONENTS) + list(INHERIT_321):
-        in_memory.path(f'{name}.comp').with_suffix('.comp.json').unlink(missing_ok=True)
+        comp_path = in_memory.path(f'{name}.comp')
+        for sidecar in comp_path.parent.glob(f'{comp_path.name}*.json'):
+            sidecar.unlink(missing_ok=True)
 
 
 def test_inherit_definition_plus_section_inherit_does_not_duplicate_blocks():

@@ -623,14 +623,14 @@ class TestCacheIR:
         from mccode_antlr.cli.cache import cache_ir_list
         cache_ir_list(long=False)
         out = capsys.readouterr().out
-        assert 'CompA.comp.json' in out
-        assert 'CompB.comp.json' in out
+        assert 'CompA.comp' in out and '.json' in out
+        assert 'CompB.comp' in out
 
     def test_ir_list_long(self, capsys, ir_root):
         from mccode_antlr.cli.cache import cache_ir_list
         cache_ir_list(long=True)
         out = capsys.readouterr().out
-        assert 'CompA.comp.json' in out
+        assert 'CompA.comp' in out and '.json' in out
         assert 'B' in out  # full path contains directory name
 
     def test_ir_list_empty(self, capsys, tmp_path, monkeypatch):
@@ -647,9 +647,9 @@ class TestCacheIR:
 
     def test_ir_clean_all_with_force(self, ir_root):
         from mccode_antlr.cli.cache import cache_ir_clean
-        assert list(ir_root.glob('*.comp.json'))
+        assert list(ir_root.glob('*.comp*.json'))
         cache_ir_clean(stale=False, force=True)
-        assert not list(ir_root.glob('*.comp.json'))
+        assert not list(ir_root.glob('*.comp*.json'))
 
     def test_ir_clean_stale_only(self, ir_root):
         from mccode_antlr.cli.cache import cache_ir_clean
@@ -658,22 +658,22 @@ class TestCacheIR:
         import time; time.sleep(0.01)
         comp_a.write_text(comp_a.read_text())  # updates mtime
         cache_ir_clean(stale=True, force=True)
-        # CompA.comp.json should be gone; CompB.comp.json should remain
-        assert not (ir_root / 'CompA.comp.json').exists()
-        assert (ir_root / 'CompB.comp.json').exists()
+        # CompA's sidecar should be gone; CompB's should remain
+        assert not list(ir_root.glob('CompA.comp*.json'))
+        assert list(ir_root.glob('CompB.comp*.json'))
 
     def test_ir_clean_confirmation_declined(self, ir_root, monkeypatch):
         from mccode_antlr.cli.cache import cache_ir_clean
         monkeypatch.setattr('builtins.input', lambda _: 'n')
         cache_ir_clean(stale=False, force=False)
         # Files should be untouched
-        assert list(ir_root.glob('*.comp.json'))
+        assert list(ir_root.glob('*.comp*.json'))
 
     def test_ir_clean_confirmation_accepted(self, ir_root, monkeypatch):
         from mccode_antlr.cli.cache import cache_ir_clean
         monkeypatch.setattr('builtins.input', lambda _: 'y')
         cache_ir_clean(stale=False, force=False)
-        assert not list(ir_root.glob('*.comp.json'))
+        assert not list(ir_root.glob('*.comp*.json'))
 
     # ------------------------------------------------------------------
     # ir-build
@@ -688,12 +688,12 @@ class TestCacheIR:
 
     def test_ir_build_creates_json(self, comp_dir, capsys, mock_default_registries):
         from mccode_antlr.cli.cache import cache_ir_build
-        assert not list(comp_dir.glob('*.comp.json'))
+        assert not list(comp_dir.glob('*.comp*.json'))
         cache_ir_build(
             flavor='mcstas', jobs=1, force=False, download=False,
             registry=[str(comp_dir)],
         )
-        assert list(comp_dir.glob('*.comp.json'))
+        assert list(comp_dir.glob('*.comp*.json'))
 
     def test_ir_build_hits_on_second_run(self, comp_dir, capsys, mock_default_registries):
         from mccode_antlr.cli.cache import cache_ir_build
