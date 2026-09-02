@@ -216,8 +216,10 @@ class TargetVisitor:
 
         Scans every component instance's string parameters.  For each literal
         string value that matches a registered data file (i.e. its registry path
-        includes a ``data/`` path component) the file is fetched into the local
-        Pooch cache so it is available before the compiled C instrument runs.
+        has a directory named ``data`` somewhere among its ancestors -- directly,
+        as in ``data/foo.dat``, or nested, as in ``data/ISIS_tables/TS2.imat``)
+        the file is fetched into the local Pooch cache so it is available before
+        the compiled C instrument runs.
         """
         from pathlib import Path
         if not self.registries:
@@ -240,13 +242,18 @@ class TargetVisitor:
                     # Only consider exact basename matches inside a data/ directory.
                     # reg.known(name, strict=True) checks Path(x).name == name which is
                     # exact, but doesn't filter by directory.  We additionally require the
-                    # matched file to live under data/ to avoid fetching non-data assets.
+                    # matched file to live under a directory named data/ -- at any depth,
+                    # since McStas nests some data families a level deeper (data/ISIS_tables/,
+                    # data/Gas_tables/, ...) -- to avoid fetching non-data assets.
                     if not reg.known(name, strict=True):
                         continue
                     # Use the exact fullname (default exact=True) to avoid the loose
                     # substring fallback that raises on multiple matches.
                     fullname = reg.fullname(name)
-                    if fullname is None or f'data/{name}' not in str(fullname).replace('\\', '/'):
+                    if fullname is None:
+                        continue
+                    parts = str(fullname).replace('\\', '/').split('/')
+                    if 'data' not in parts[:-1]:
                         continue
                     cached = reg.path(name)
                     logger.info(
