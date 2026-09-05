@@ -110,19 +110,11 @@ class Instance(Struct):
 
     @classmethod
     def from_instance(cls, name: str, ref: InstanceReference, at: VectorReference, rotate: AnglesReference):
-        # copy each of: parameters, extend, group, jump, when, metadata
-        #
-        # A bug in upstream McCode's code generator always replaces a copied EXTEND
-        # by an empty block: https://github.com/mccode-dev/McCode/issues/2621
-        # This bug is being promoted to a feature.
-        # If the upstream behavior changes again, the commented extend line below
-        # can be restored.
+        # copy each of: parameters, 
+        # do not copy any of: extend, group, jump, when, metadata
         return cls(name, ref.type, at, rotate,
                    parameters=tuple([par for par in ref.parameters]),
-                   when=ref.when, group=ref.group,
-                   #extend=tuple([ext for ext in ref.extend]),
-                   jump=tuple([jmp for jmp in ref.jump]),
-                   metadata=tuple([md for md in ref.metadata]))
+                   )
 
     def __post_init__(self):
         if not self.type.acc:
