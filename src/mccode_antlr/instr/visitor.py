@@ -281,7 +281,7 @@ class InstrVisitor(McInstrVisitor):
     def visitSave(self, ctx:McInstrParser.SaveContext):
         self.state.SAVE(*self.multi_block("save", ctx.multi_block()))
 
-    def visitFinalize(self, ctx:McInstrParser.FinalizeContext):
+    def visitFinally(self, ctx:McInstrParser.FinallyContext):
         self.state.FINALLY(*self.multi_block("final", ctx.multi_block()))
 
     def visitExtend(self, ctx: McInstrParser.ExtendContext):
