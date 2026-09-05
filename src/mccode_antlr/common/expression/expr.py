@@ -506,7 +506,18 @@ class Expr(msgspec.Struct, dict=True, eq=False):
         dt = _promote(self.data_type, other_dt, op)
         if dt == DataType.undefined:
             dt = _infer_data_type(sym_result)
-        return Expr(sym_result, dt)
+        # SymPy may auto-simplify an identity operation (x*1, x+0, x**1, ...) straight
+        # back down to the bare operand symbol -- re-derive object_type from what
+        # actually survives, rather than always resetting to ObjectType.value, so an
+        # instrument parameter/identifier collapsed back to its own atom is not
+        # silently demoted to a plain value (see issue #334).
+        if isinstance(sym_result, McCodeParameter):
+            ot = ObjectType.parameter
+        elif isinstance(sym_result, sympy.Symbol):
+            ot = ObjectType.identifier
+        else:
+            ot = ObjectType.value
+        return Expr(sym_result, dt, self.shape_type, ot)
 
     def _get_dt(self, other) -> DataType:
         if isinstance(other, Expr):

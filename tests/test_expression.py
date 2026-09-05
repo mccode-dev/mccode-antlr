@@ -541,6 +541,33 @@ class TestComparisonMethods(TestCase):
         e = Expr.parameter('flag')
         self.assertIs(Expr.parameter(e), e)
 
+    def test_parameter_identity_arithmetic_stays_parameter(self):
+        """Issue #334: arithmetic that SymPy simplifies back to the bare parameter
+        atom (x*1, x+0, x**1, ...) must not lose ObjectType.parameter, or codegen
+        emits a literal 0 instead of the instrument parameter reference."""
+        flip = Expr.parameter('FLIP', DataType.float)
+        one = Expr.integer(1)
+        zero = Expr.integer(0)
+        cases = {
+            'flip*1': flip * one,
+            '1*flip': one * flip,
+            'flip+0': flip + zero,
+            '0+flip': zero + flip,
+            'flip-0': flip - zero,
+            'flip**1': flip ** one,
+        }
+        for label, expr in cases.items():
+            with self.subTest(case=label):
+                self.assertTrue(expr.is_id)
+                self.assertEqual(expr.object_type, ObjectType.parameter)
+                self.assertFalse(expr.has_value)
+                self.assertEqual(format(expr, 'p'), '_instrument_var._parameters.FLIP')
+
+        # Sanity: a genuine compound expression is unaffected (already worked before the fix)
+        compound = flip * Expr.integer(2)
+        self.assertTrue(compound.is_op)
+        self.assertEqual(format(compound, 'p'), '2*_instrument_var._parameters.FLIP')
+
     def test_value_eq(self):
         """eq() always returns an Expr, never a bool."""
         v = Expr.parameter('flag')
