@@ -105,13 +105,11 @@ def mccode_compile_cmd(flavor, prog: str | None = None):
             reader = Reader(registries=collect_local_registries(flavor, args.search_dir))
             instrument = reader.get_instrument(filename)
 
-        # Determine binary destination.
-        if output is None:
-            binary_path = Path() / instrument.name
-        elif output.is_dir():
-            binary_path = output / instrument.name
-        else:
-            binary_path = output
+        # Determine binary destination -- a directory or nothing at all picks up
+        # the target tag and platform extension; an explicit filename is honoured.
+        from mccode_antlr.compiler.c import CBinaryTarget, binary_path as target_binary_path
+        binary_path = target_binary_path(output, instrument.name,
+                                         CBinaryTarget(**target_kwargs))
 
         config = dict(
             enable_trace=args.trace,

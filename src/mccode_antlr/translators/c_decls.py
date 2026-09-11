@@ -14,7 +14,8 @@ from loguru import logger
 
 
 def declarations_pre_libraries(source, typedefs: list, component_declared_parameters: dict,
-                               line_directives: bool = False):
+                               line_directives: bool = False,
+                               build_info_row: str | None = None):
     warnings = 0
 
     def instrument_parameters_struct():
@@ -83,10 +84,21 @@ def declarations_pre_libraries(source, typedefs: list, component_declared_parame
             from ..common.utilities import escape_str_for_c
             return f' {{"{defined_by}", "{name}", "{mimetype}", "{escape_str_for_c(value)}"}}, '
 
-        metadata = source.collect_metadata()
+        from ..build_info import BUILD_INFO_NAME
+        collected = source.collect_metadata()
+        metadata = [m for m in collected if m.name != BUILD_INFO_NAME]
+        if len(metadata) != len(collected):
+            logger.warning(f'Ignoring metadata named {BUILD_INFO_NAME!r}:'
+                           ' that name is reserved for build information')
         lines = ['struct metadata_table_struct metadata_table[] = {']
         lines.extend([one_line(m.source.name, m.name, m.mimetype, m.value) for m in metadata])
-        lines.extend(['  {"", "", "", ""}', '};', f'int num_metadata = {len(metadata)};'])
+        count = len(metadata)
+        if build_info_row is not None:
+            # Already a complete initializer: its value mixes escaped text with
+            # bare preprocessor macros, so it must not be escaped again here.
+            lines.append(build_info_row)
+            count += 1
+        lines.extend(['  {"", "", "", ""}', '};', f'int num_metadata = {count};'])
         return '\n'.join(lines)
 
     def component_share_declarations():

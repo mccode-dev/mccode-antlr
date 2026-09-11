@@ -72,11 +72,27 @@ Compile and run an instrument simulation.
 | `--bufsiz N` | `Monitor_nD` list/buffer size |
 | `--format FORMAT` | Output data format |
 | `--dryrun` | Print scan commands without running any simulations |
-| `--parallel` | Use MPI multi-process parallelism |
-| `--gpu` | Use GPU OpenACC parallelism |
+| `--parallel` / `--no-parallel` | Use MPI multi-process parallelism. Unspecified: taken from the binary |
+| `--gpu` / `--no-gpu` | Use GPU OpenACC parallelism. Unspecified: taken from the binary |
 | `--process-count N` | Number of MPI processes (default: system default) |
+| `--build-info` | Print what a compiled binary was built from and with, then exit |
 | `--copyright` | Print the McCode copyright statement and exit |
 | `-v`, `--version` | Print the McCode version and exit |
+
+### Choosing a parallelism target
+
+When `mcrun-antlr` is given an already-compiled binary, `--parallel` and `--gpu`
+are three-valued. Left out, the binary's own build information decides — so
+running an MPI binary launches it under `mpirun` without being told to. Given
+explicitly, they are never silently overridden:
+
+* `--parallel` on a binary built without MPI is an error, rather than an
+  `mpirun` invocation that would start N independent full-`ncount` runs racing
+  on one output directory.
+* `--no-parallel` on an MPI binary warns and runs it as a single process.
+
+When the binary carries no build information and none can be inferred, the flag
+as given is used.
 
 ### Parameter syntax
 
@@ -132,9 +148,9 @@ Accepts `.instr`, `.json`, or pre-generated `.c` files.
 | `-t` / `--trace` / `--no-trace` | on | Enable *trace* mode for instrument display |
 | `--source` / `--no-source` | off | Embed the instrument source in the executable |
 | `--verbose` / `--no-verbose` | off | Verbose compiler/linker output |
-| `--parallel` | off | Use MPI multi-process parallelism |
-| `--gpu` | off | Use GPU OpenACC parallelism |
-| `--nexus` | off | Enable NeXus output support |
+| `--parallel` | off | Use MPI multi-process parallelism; names the binary `<instr>.mpi.out` |
+| `--gpu` | off | Use GPU OpenACC parallelism; names the binary `<instr>.acc.out` |
+| `--nexus` | off | Enable NeXus output support (not part of the binary name) |
 | `-c`, `--dump-source` | off | Keep the generated C source file alongside the binary |
 | `-v`, `--version` | — | Print version and exit |
 

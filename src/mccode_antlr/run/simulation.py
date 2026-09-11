@@ -117,19 +117,20 @@ class Simulation:
         if not directory.is_dir():
             raise RuntimeError(f"{directory} is not a directory.")
 
-        binary_path = directory / self.instr.name
-        if binary_path.exists() and access(binary_path, X_OK) and not force:
-            self._binary = binary_path
-            # Reconstruct a default target so run/scan work without knowing the original settings.
-            self._target = CBinaryTarget(mpi=parallel, acc=gpu, count=process_count, nexus=False)
-        elif binary_path.exists() and not access(binary_path, X_OK) and not force:
+        target = {'mpi': parallel, 'acc': gpu, 'count': process_count, 'nexus': False}
+        from mccode_antlr.compiler.c import binary_path as target_binary_path
+        binary_path = target_binary_path(
+            directory, self.instr.name,
+            CBinaryTarget(mpi=parallel, acc=gpu, count=process_count, nexus=False))
+        if binary_path.exists() and not access(binary_path, X_OK) and not force:
             raise RuntimeError(f"{binary_path} exists but is not an executable, overwrite by passing `force=True`.")
-        else:
-            target = {'mpi': parallel, 'acc': gpu, 'count': process_count, 'nexus': False}
-            config = {'enable_trace': trace, 'embed_instrument_file': source, 'verbose': verbose}
-            self._binary, self._target = mccode_compile(
-                self.instr, binary_path, self.flavor, target=target, config=config, replace=True
-            )
+        # Whether an existing binary can be reused is decided inside
+        # compile_instrument, which checks that it was built from this instrument
+        # for this target -- not merely that a file exists at the path.
+        config = {'enable_trace': trace, 'embed_instrument_file': source, 'verbose': verbose}
+        self._binary, self._target = mccode_compile(
+            self.instr, binary_path, self.flavor, target=target, config=config, replace=force
+        )
 
         self.directory = directory
         return self
