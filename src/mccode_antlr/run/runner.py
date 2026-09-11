@@ -119,7 +119,14 @@ def mccode_run_script_parser(prog: str):
     aa('-o', '--output-file', type=str, help='Output filename for C runtime binary', default=None)
     aa('-d', '--directory', type=str, help='Output directory for C runtime artifacts')
     aa('-I', '--search-dir', action='append', type=resolvable, help='Extra component search directory')
-    aa('-t', '--trace', action=BooleanOptionalAction, default=True, help="Enable 'trace' mode for instrument display")
+    # This one flag drives both the compile-time trace support (MC_TRACE_ENABLED)
+    # and the runtime --trace argument. Tracing every particle at every component
+    # costs kilobytes of output per particle, which under MPI is funnelled through
+    # the launcher and then captured here -- around 90x slower on a real
+    # instrument -- so it is off unless asked for, as it is in classic mcrun.
+    aa('-t', '--trace', action=BooleanOptionalAction, default=False,
+       help="Trace particles through the instrument: compiles in trace support"
+            " and enables it at runtime (default: off)")
     aa('--copyright', action='store_true', help='Print the McCode copyright statement')
     aa('--source', action=BooleanOptionalAction, default=False, help='Embed the instrument source code in the executable')
     aa('--verbose', action=BooleanOptionalAction, default=False, help='Verbose output')

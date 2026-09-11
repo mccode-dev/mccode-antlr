@@ -64,7 +64,7 @@ Compile and run an instrument simulation.
 | `-I DIR`, `--search-dir DIR` | Extra component search directory (repeatable) |
 | `-n N`, `--ncount N` | Number of rays to simulate |
 | `-s N`, `--seed N` | Random number generator seed |
-| `-t` / `--trace` / `--no-trace` | Enable *trace* mode for instrument display |
+| `-t` / `--trace` / `--no-trace` | Trace particles through the instrument — compiles in trace support *and* enables it at runtime (default: off) |
 | `--source` / `--no-source` | Embed the instrument source code in the binary |
 | `--verbose` / `--no-verbose` | Verbose output |
 | `-g`, `--gravitation` | Enable gravitation for all trajectories |
@@ -78,6 +78,17 @@ Compile and run an instrument simulation.
 | `--build-info` | Print what a compiled binary was built from and with, then exit |
 | `--copyright` | Print the McCode copyright statement and exit |
 | `-v`, `--version` | Print the McCode version and exit |
+
+### Tracing
+
+`-t`/`--trace` is off by default. It is a debugging aid: the binary reports every
+particle's state at every component, which for a real instrument is kilobytes of
+output per particle. Under MPI every rank's share of that is funnelled through the
+launcher and captured by `mcrun-antlr`, which on a chopper instrument at
+`-n 3e5` costs around 90x the untraced runtime.
+
+Because the flag also controls whether trace support is compiled in, switching it
+on for an instrument that was already built without it recompiles the binary.
 
 ### Choosing a parallelism target
 
