@@ -17,7 +17,9 @@ class CBinaryTarget:
         mpi = auto()
         nexus = auto()
 
-    def __init__(self, mpi: bool = False, acc: bool = False, count: int = 1, nexus: bool = False):
+    def __init__(self, mpi: bool = False, acc: bool = False, count: int | str = 1,
+                 nexus: bool = False):
+        # count is a positive integer, or 'auto' to leave the choice to the launcher
         self.count = count
         if mpi and acc:
             self.type = CBinaryTarget.Type.acc | CBinaryTarget.Type.mpi
@@ -488,7 +490,94 @@ def infer_binary_target(binary: Path, count: int = 1,
                          nexus=bool(probe.nexus), count=count)
 
 
-def run_compiled_instrument(binary: Path, target: CBinaryTarget, options: str, capture=False, dry_run: bool = False):
+def mpi_process_flags(count: int | str) -> list[str]:
+    """The '-np N' part of an mpirun command line, if one is needed.
+
+    A positive integer is passed through. Anything else means 'auto': name no
+    number and let the launcher -- or the batch scheduler that started it --
+    decide. Passing '-np 0' instead, as this used to, is not a way of saying
+    'default'; it is a request for zero processes that only OpenMPI happens to
+    tolerate. Separating mpirun's flags from the binary's is the job of the '--'
+    added after these, not of '-np'.
+    """
+    from platform import system
+    if isinstance(count, int) and count >= 1:
+        return ['-np', str(count)]
+    if 'Windows' == system():
+        # msmpi's mpiexec accepts neither the '--' separator nor a missing
+        # process count, so it has to be given a number
+        from os import cpu_count
+        return ['-np', str(cpu_count() or 1)]
+    logger.info('Letting mpirun choose the number of processes')
+    return []
+
+
+#: What to do with a running simulation's stdout/stderr.
+#:   'no'   stream it to this process's own streams -- the user watches it happen
+#:   'yes'  keep it to ourselves, and show it only if the run fails
+#:   'tee'  stream it *and* keep a copy in <output directory>/mccode.out
+#:   'tui'  keep the copy, but show a live summary instead of the raw output,
+#:          and erase the summary when the scan ends
+CAPTURE_MODES = ('no', 'yes', 'tee', 'tui')
+CAPTURE_LOG_NAME = 'mccode.out'
+
+#: Lines kept from a streamed run so that a failure can still be explained.
+#: Bounded on purpose: a traced MPI run emits gigabytes.
+_TAIL_LINES = 200
+
+
+def normalise_capture(capture) -> str:
+    """Accept a CAPTURE_MODES string, or the bool this argument used to be."""
+    if isinstance(capture, str):
+        if capture not in CAPTURE_MODES:
+            raise ValueError(f'capture must be one of {CAPTURE_MODES}, got {capture!r}')
+        return capture
+    return 'yes' if capture else 'no'
+
+
+def _stream_and_tee(command, log_file: Path | None, consumer=None):
+    """Run *command*, copying its output to *log_file* and to the screen.
+
+    With no *consumer* every line is echoed as it arrives. Given one, the lines
+    go to it instead and it decides what the user sees -- which is how the live
+    scan display shows a summary rather than the raw stream.
+
+    The output directory is created by the simulation itself, and McCode refuses
+    to start if it already exists, so the copy is written somewhere neutral and
+    moved into place afterwards.
+    """
+    import sys
+    from collections import deque
+    from shutil import move
+    from subprocess import Popen, PIPE, STDOUT
+    from tempfile import NamedTemporaryFile
+
+    tail = deque(maxlen=_TAIL_LINES)
+    with NamedTemporaryFile('wb', delete=False, suffix='.out') as scratch:
+        scratch_name = Path(scratch.name)
+        with Popen(command, stdout=PIPE, stderr=STDOUT) as process:
+            for line in process.stdout:
+                if consumer is None:
+                    sys.stdout.buffer.write(line)
+                    sys.stdout.buffer.flush()
+                else:
+                    consumer(line)
+                scratch.write(line)
+                tail.append(line)
+            returncode = process.wait()
+
+    if log_file is not None and log_file.parent.is_dir():
+        move(str(scratch_name), str(log_file))
+        logger.info(f'Simulation output copied to {log_file}')
+    else:
+        # no directory to move it into (a failed run, or none was named)
+        logger.info(f'Simulation output kept in {scratch_name}')
+    return returncode, b''.join(tail)
+
+
+def run_compiled_instrument(binary: Path, target: CBinaryTarget, options: str, capture=False,
+                            dry_run: bool = False, log_file: Path | None = None,
+                            consumer=None):
     from subprocess import run, CalledProcessError
     from platform import system
     from mccode_antlr.config import config
@@ -526,12 +615,7 @@ def run_compiled_instrument(binary: Path, target: CBinaryTarget, options: str, c
         # we execute mpirun
         command.append(config['mpi']['run'].as_str_expanded())
         # which takes optional flags
-        if target.count == 0 and not is_open_mpi:
-            print("Using system default number of mpirun processes")
-        else:
-            # Even if zero, OpenMPI needs this to avoid interpreting options flags
-            # for the binary as if they were for it.
-            command.extend(['-np', str(target.count)])
+        command.extend(mpi_process_flags(target.count))
         if config['machinefile'].exists():
             # --machinefile is only an OpenMPI option. mpich uses -f?
             machinefile = config['machinefile'].as_str_expanded()
@@ -557,10 +641,27 @@ def run_compiled_instrument(binary: Path, target: CBinaryTarget, options: str, c
     if dry_run:
         logger.info(f'Would execute {command}')
         return ""
-    result = run(command, capture_output=capture)
-    if result.returncode and capture:
-        raise RuntimeError(f'Execution of {command} failed with output\n{result.stdout}\n and error\n{result.stderr}')
-    elif result.returncode:
-        raise RuntimeError(f'Execution of {command} failed, see above for error message(s)')
+    def decoded(raw):
+        return raw.decode('utf-8', errors='replace') if isinstance(raw, bytes) else (raw or '')
 
-    return (result.stdout + result.stderr) if capture else ""
+    mode = normalise_capture(capture)
+    if mode in ('tee', 'tui'):
+        returncode, tail = _stream_and_tee(command, log_file,
+                                           consumer if mode == 'tui' else None)
+        if returncode:
+            raise RuntimeError(f'Execution of {" ".join(command)} failed. Last output was\n'
+                               f'{decoded(tail)}')
+        return ''
+    if mode == 'yes':
+        result = run(command, capture_output=True)
+        if result.returncode:
+            raise RuntimeError(f'Execution of {" ".join(command)} failed with output\n'
+                               f'{decoded(result.stdout)}\nand error\n{decoded(result.stderr)}')
+        # bytes, as this has always returned -- callers decode it themselves
+        return result.stdout + result.stderr
+    # 'no': the simulation writes straight to our stdout/stderr, so there is
+    # nothing to report here that the user has not already seen
+    result = run(command)
+    if result.returncode:
+        raise RuntimeError(f'Execution of {" ".join(command)} failed, see above for error message(s)')
+    return ''

@@ -78,7 +78,7 @@ class Simulation:
         verbose: bool = False,
         parallel: bool = False,
         gpu: bool = False,
-        process_count: int = 0,
+        process_count: int | str = 'auto',
         force: bool = False,
         create_directory: bool = True,
     ) -> 'Simulation':
@@ -93,7 +93,7 @@ class Simulation:
         :param verbose: Verbose compiler output.
         :param parallel: Compile with MPI support.
         :param gpu: Compile with OpenACC GPU support.
-        :param process_count: MPI process count (0 = system default).
+        :param process_count: MPI process count, or 'auto' to let the launcher decide.
         :param force: Re-compile even if the binary already exists.
         :param create_directory: Create the directory if it doesn't exist.
         :returns: self, to allow method chaining.
@@ -177,7 +177,7 @@ class Simulation:
         bufsiz: int | None = None,
         fmt: str | None = None,
         dry_run: bool = False,
-        capture: bool = True,
+        capture: bool | str = True,
     ) -> tuple:
         """Run a single simulation point.
 
@@ -194,7 +194,9 @@ class Simulation:
         :param bufsiz: Monitor buffer size.
         :param fmt: Output data format.
         :param dry_run: Print the command without executing it.
-        :param capture: Capture subprocess output.
+        :param capture: What to do with the simulation's output: True/'yes' to
+            capture and return it, False/'no' to let it stream to the terminal,
+            or 'tee' to do both and save <directory>/mccode.out.
         :returns: ``(result, dats)`` where *result* is the subprocess result and
             *dats* is a dict mapping monitor stem names to loaded data objects.
         :raises ValueError: If any parameter value resolves to more than one point.
@@ -254,7 +256,7 @@ class Simulation:
         bufsiz: int | None = None,
         fmt: str | None = None,
         dry_run: bool = False,
-        capture: bool = True,
+        capture: bool | str = True,
     ) -> 'ScanOutput':
         """Run a parameter scan.
 
@@ -282,7 +284,9 @@ class Simulation:
         :param bufsiz: Monitor buffer size.
         :param fmt: Output data format.
         :param dry_run: Print commands without executing.
-        :param capture: Capture subprocess output.
+        :param capture: What to do with the simulation's output: True/'yes' to
+            capture and return it, False/'no' to let it stream to the terminal,
+            or 'tee' to do both and save <directory>/mccode.out.
         :returns: :class:`~mccode_antlr.run.output.ScanOutput` with one
             :class:`~mccode_antlr.run.output.RunOutput` per scan point and an
             :attr:`~mccode_antlr.run.output.ScanOutput.axes` mapping of the

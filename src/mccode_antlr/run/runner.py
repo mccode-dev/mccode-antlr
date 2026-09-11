@@ -102,10 +102,29 @@ def si_int(s: str) -> int:
     return value
 
 
+def mpi_process_count(s: str):
+    """Parse an MPI process count: a positive integer, or 'auto'.
+
+    'auto' leaves the choice to the launcher rather than naming a number. Values
+    below one are accepted as synonyms for it, so that scripts written against
+    the old `--process-count 0` ("system default") keep working.
+    """
+    from argparse import ArgumentTypeError
+    text = str(s).strip().lower()
+    if text == 'auto':
+        return 'auto'
+    try:
+        count = int(text)
+    except ValueError:
+        raise ArgumentTypeError(f"expected a positive integer or 'auto', not {s!r}")
+    return count if count >= 1 else 'auto'
+
+
 def mccode_run_script_parser(prog: str):
     from argparse import ArgumentParser, BooleanOptionalAction
     from pathlib import Path
     from mccode_antlr import __version__
+    from mccode_antlr.compiler.c import CAPTURE_MODES
 
     def resolvable(name: str):
         return None if name is None else Path(name).resolve()
@@ -119,10 +138,22 @@ def mccode_run_script_parser(prog: str):
     aa('-o', '--output-file', type=str, help='Output filename for C runtime binary', default=None)
     aa('-d', '--directory', type=str, help='Output directory for C runtime artifacts')
     aa('-I', '--search-dir', action='append', type=resolvable, help='Extra component search directory')
-    aa('-t', '--trace', action=BooleanOptionalAction, default=True, help="Enable 'trace' mode for instrument display")
+    # This one flag drives both the compile-time trace support (MC_TRACE_ENABLED)
+    # and the runtime --trace argument. Tracing every particle at every component
+    # costs kilobytes of output per particle, which under MPI is funnelled through
+    # the launcher and then captured here -- around 90x slower on a real
+    # instrument -- so it is off unless asked for, as it is in classic mcrun.
+    aa('-t', '--trace', action=BooleanOptionalAction, default=False,
+       help="Trace particles through the instrument: compiles in trace support"
+            " and enables it at runtime (default: off)")
     aa('--copyright', action='store_true', help='Print the McCode copyright statement')
     aa('--source', action=BooleanOptionalAction, default=False, help='Embed the instrument source code in the executable')
-    aa('--verbose', action=BooleanOptionalAction, default=False, help='Verbose output')
+    aa('--verbose', action=BooleanOptionalAction, default=False,
+       help='Verbose compiler and linker output')
+    aa('--capture', choices=CAPTURE_MODES, default='no',
+       help="What to do with the simulation's own output: stream it to the terminal"
+            " ('no', the default), keep it hidden unless the run fails ('yes'), or"
+            " stream it and also save it as <output directory>/mccode.out ('tee')")
     aa('-n', '--ncount', nargs=1, type=si_int, default=None, help='Number of neutrons to simulate')
     aa('-m', '--mesh', action='store_true', default=False, help='N-dimensional mesh scan')
     aa('-s', '--seed', nargs=1, type=int, default=None, help='Random number generator seed')
@@ -140,7 +171,12 @@ def mccode_run_script_parser(prog: str):
        help='Use MPI multi-process parallelism')
     aa('--gpu', action=BooleanOptionalAction, default=None,
        help='Use GPU OpenACC parallelism')
-    aa('--process-count', nargs=1, type=int, default=0, help='MPI process count, 0 == System Default')
+    # nargs is deliberately absent: with nargs=1 this arrived as [4] rather than 4
+    # and reached mpirun as '-np [4]'.
+    aa('--mpi', '--process-count', dest='mpi', metavar='NB_CPU',
+       type=mpi_process_count, default='auto',
+       help="Number of MPI processes, or 'auto' to let the launcher decide"
+            " (default: auto). --process-count is an alias.")
     aa('--build-info', action='store_true', default=False,
        help='Print what a compiled instrument binary was built from and with, then exit')
     aa('--trust-local-registries', action=BooleanOptionalAction, default=None,
@@ -226,20 +262,56 @@ def mccode_compile(instr, directory, flavor: Flavor, target: dict | None = None,
     return binary, def_target
 
 
+from contextlib import contextmanager
+
+
+@contextmanager
+def _nothing():
+    yield None
+
+
+def resolve_scan_reporter(capture, name: str, n_points: int, dry_run: bool = False):
+    """Return the capture mode to use and, for 'tui', the display to drive it.
+
+    'tui' degrades to 'tee' wherever a live display would be useless or in the
+    way -- a pipe, a CI log, a dumb terminal, or a dry run that produces no
+    output to summarise. The log file is written either way, so nothing is lost
+    by the downgrade.
+    """
+    from loguru import logger
+    from mccode_antlr.compiler.c import normalise_capture
+    if normalise_capture(capture) != 'tui':
+        return capture, None
+    if dry_run:
+        return 'tee', None
+    from mccode_antlr.run.report import ScanReporter, tui_is_usable
+    if not tui_is_usable():
+        logger.info('Not a terminal: falling back to --capture=tee')
+        return 'tee', None
+    # parameters_to_scan reports no points at all when nothing is scanned, but
+    # that still runs the instrument once
+    return 'tui', ScanReporter(name, max(1, n_points))
+
+
 def mccode_run_compiled(
-        binary, target, directory: Path | str, parameters: str, capture: bool = True,
-        dry_run: bool = False, use_defaults: bool = False, tmpdir: Path | None = None
+        binary, target, directory: Path | str, parameters: str, capture: bool | str = True,
+        dry_run: bool = False, use_defaults: bool = False, tmpdir: Path | None = None,
+        consumer=None
 ):
-    from mccode_antlr.compiler.c import run_compiled_instrument
+    from mccode_antlr.compiler.c import CAPTURE_LOG_NAME, run_compiled_instrument
     from mccode_antlr.run.output import _collect_output
     from pathlib import Path
 
     yes_flag = '--yes ' if use_defaults else ''
-    result = run_compiled_instrument(binary, target, f'--dir {directory} {yes_flag}{parameters}', capture=capture, dry_run=dry_run)
+    result = run_compiled_instrument(
+        binary, target, f'--dir {directory} {yes_flag}{parameters}', capture=capture,
+        dry_run=dry_run, log_file=Path(directory).joinpath(CAPTURE_LOG_NAME),
+        consumer=consumer
+    )
     return result, _collect_output(Path(directory), tmpdir=tmpdir)
 
 
-def mccode_run_scan(name: str, binary, target, parameters, directory, grid: bool, capture: bool = True, dry_run: bool = False, use_defaults: bool = False, **r_args):
+def mccode_run_scan(name: str, binary, target, parameters, directory, grid: bool, capture: bool | str = True, dry_run: bool = False, use_defaults: bool = False, **r_args):
     from .range import parameters_to_scan
     n_pts, names, scan = parameters_to_scan(parameters, grid=grid)
     # n_zeros = len(str(n_pts))
@@ -252,22 +324,38 @@ def mccode_run_scan(name: str, binary, target, parameters, directory, grid: bool
     elif not isinstance(directory, Path):
         directory = Path(directory)
 
-    # if there is only one point, we don't need to scan
-    if n_pts > 1:
-        directory.mkdir(parents=True, exist_ok=True)
-        results = []
-        for number, values in enumerate(scan):
-            # TODO Use the following line instead of the one after it when McCode is fixed to use zero-padded folder names
-            # # runtime_arguments['dir'] = args["dir"].joinpath(str(number).zfill(n_zeros))
-            this_directory = directory.joinpath(str(number))
-            pars = mccode_runtime_parameters(args, dict(zip(names, values)))
-            r, d = mccode_run_compiled(binary, target, this_directory, pars, capture=capture, dry_run=dry_run, use_defaults=use_defaults)
-            results.append((r, d))
-        return results
-    else:
-        directory.parent.mkdir(parents=True, exist_ok=True)
-        pars = mccode_runtime_parameters(args, parameters)
-        return [mccode_run_compiled(binary, target, directory, pars, capture=capture, dry_run=dry_run, use_defaults=use_defaults)]
+    capture, reporter = resolve_scan_reporter(capture, name, n_pts, dry_run)
+    # The display belongs to the scan, not to a point: created per point it would
+    # tear down and redraw between them.
+    with reporter or _nothing():
+        consumer = reporter.consume if reporter is not None else None
+        # if there is only one point, we don't need to scan
+        if n_pts > 1:
+            directory.mkdir(parents=True, exist_ok=True)
+            results = []
+            for number, values in enumerate(scan):
+                # TODO Use the following line instead of the one after it when McCode is fixed to use zero-padded folder names
+                # # runtime_arguments['dir'] = args["dir"].joinpath(str(number).zfill(n_zeros))
+                this_directory = directory.joinpath(str(number))
+                point = dict(zip(names, values))
+                pars = mccode_runtime_parameters(args, point)
+                if reporter is not None:
+                    reporter.start_point(number, point)
+                r, d = mccode_run_compiled(binary, target, this_directory, pars, capture=capture, dry_run=dry_run, use_defaults=use_defaults, consumer=consumer)
+                if reporter is not None:
+                    reporter.finish_point(number)
+                results.append((r, d))
+        else:
+            directory.parent.mkdir(parents=True, exist_ok=True)
+            pars = mccode_runtime_parameters(args, parameters)
+            if reporter is not None:
+                reporter.start_point(0)
+            results = [mccode_run_compiled(binary, target, directory, pars, capture=capture, dry_run=dry_run, use_defaults=use_defaults, consumer=consumer)]
+            if reporter is not None:
+                reporter.finish_point(0)
+    if reporter is not None:
+        reporter.done(directory)
+    return results
 
 
 def mccode_run(instrument: Instr,
@@ -275,7 +363,9 @@ def mccode_run(instrument: Instr,
                parameters, directory: str | Path,
                binary_name: str | None = None,
                trace: bool = False, source: bool = False, verbose: bool = False,
-               parallel: bool | None = None, gpu: bool | None = None, process_count: int = 0,
+               capture: bool | str = True,
+               parallel: bool | None = None, gpu: bool | None = None,
+               process_count: int | str = 'auto',
                mesh: bool = False, seed: int | None = None, ncount: int | None = None,
                gravitation: bool | None = None, bufsize: int | None = None, dryrun: bool = False, fmt: str | None = None,
                ):
@@ -305,7 +395,7 @@ def mccode_run(instrument: Instr,
         bufsiz=bufsize,
         format=fmt,
         dry_run=dryrun,
-        capture=(not verbose) if verbose is not None else False,
+        capture=capture,
     )
     out_dir = directory.joinpath(f'{instrument.name}{datetime.now().strftime("%Y%m%d_%H%M%S")}')
 
@@ -331,7 +421,7 @@ def mccode_run_cmd(flavor: Flavor):
     target = dict(
         mpi=args.parallel,
         acc=args.gpu,
-        count=args.process_count,
+        count=args.mpi,
         nexus=False
     )
     runtime = dict(
@@ -342,7 +432,7 @@ def mccode_run_cmd(flavor: Flavor):
         bufsiz=args.bufsiz[0] if args.bufsiz is not None else None,
         format=args.format[0] if args.format is not None else None,
         dry_run=args.dryrun,
-        capture=(not args.verbose) if args.verbose is not None else False,
+        capture=args.capture,
         use_defaults=args.yes,
     )
     if args.build_info:
