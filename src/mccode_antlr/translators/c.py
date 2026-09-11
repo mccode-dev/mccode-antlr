@@ -349,6 +349,13 @@ class CTargetVisitor(TargetVisitor, target_language='c'):
 
         self.out(header_post_runtime(self.source, self.flavor, self.config, self.include_path(),
                                      data_path=self._flavor_data_path()))
+        if self.config.get('build_info', True):
+            # Emitted separately rather than interpolated into header_post_runtime:
+            # that function builds its output with textwrap.dedent, which takes the
+            # common prefix over every line, so a multi-line unindented splice would
+            # silently disable dedent for the whole block.
+            from mccode_antlr.build_info import build_info_macros
+            self.out(build_info_macros())
 
     def _flavor_data_path(self):
         """Return the comps root of the flavor-specific registry, or None.
@@ -407,8 +414,13 @@ class CTargetVisitor(TargetVisitor, target_language='c'):
             self.include_header(include)
 
         self.info('Pre library declarations')
+        build_info_row = None
+        if self.config.get('build_info', True):
+            from mccode_antlr.build_info import build_info_c_row
+            build_info_row = build_info_c_row(self.source, self.flavor, self.config)
         contents, warnings = declarations_pre_libraries(self.source, self.typedefs, self.component_declared_parameters,
-                                                        line_directives=self.line_directives)
+                                                        line_directives=self.line_directives,
+                                                        build_info_row=build_info_row)
         self.out(contents)
 
         self.info('Include runtime / list dependencies')

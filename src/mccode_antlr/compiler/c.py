@@ -47,6 +47,16 @@ class CBinaryTarget:
             self.type |= CBinaryTarget.Type.nexus
 
     @property
+    def tag(self) -> str:
+        """Filename tag distinguishing this target: '', 'mpi', 'acc' or 'mpiacc'.
+
+        NeXus is deliberately not tagged: it is orthogonal to the parallelism
+        choice and is recorded in the binary's build information instead.
+        """
+        return ('mpi' if self.type & CBinaryTarget.Type.mpi else '') \
+             + ('acc' if self.type & CBinaryTarget.Type.acc else '')
+
+    @property
     def compiler(self) -> str:
         from mccode_antlr.config import config
         if self.type & CBinaryTarget.Type.acc:
@@ -82,6 +92,44 @@ class CBinaryTarget:
         if self.type & CBinaryTarget.Type.nexus:
             extras.extend(config['flags']['nexus'].as_str_expanded().split())
         return extras
+
+
+def strip_target_tag(name: str) -> str:
+    """Remove a trailing target tag from a binary or source stem.
+
+    'straight_trex.mpi' -> 'straight_trex'. Needed so that recompiling a dumped
+    'foo.mpi.c' for a different target does not produce a mislabelled name.
+    """
+    from mccode_antlr.build_info import TARGET_TAGS
+    for tag in TARGET_TAGS:  # longest first
+        if name.endswith(f'.{tag}'):
+            return name[:-(len(tag) + 1)]
+    return name
+
+
+def binary_filename(name: str, target: CBinaryTarget | None = None) -> str:
+    """'foo' for an MPI target -> 'foo.mpi.out' ('.exe' on Windows)."""
+    from mccode_antlr.config import config
+    tag = target.tag if target is not None else ''
+    # Deliberately not Path.with_suffix: that would truncate an instrument named
+    # 'TAS.v2' to 'TAS.out'.
+    return f'{strip_target_tag(name)}{"." + tag if tag else ""}{config["ext"].get(str)}'
+
+
+def binary_path(output, name: str, target: CBinaryTarget | None = None) -> Path:
+    """Decide where a compiled binary goes -- the single place that rule lives.
+
+    None            -> CWD / binary_filename(name, target)
+    a directory     -> directory / binary_filename(name, target)
+    a suffix-less   -> parent / binary_filename(that name, target)
+    a full filename -> used verbatim; the user named the file, so do not argue
+    """
+    output = Path() if output is None else Path(output)
+    if output.is_dir():
+        return output.joinpath(binary_filename(name, target))
+    if not output.suffix:
+        return output.parent.joinpath(binary_filename(output.name, target))
+    return output
 
 
 def instrument_source(instrument: Instr, flavor: Flavor, config: dict, verbose: bool = None):
@@ -197,18 +245,10 @@ def _compile_instrument(
     from os import R_OK, access
     from subprocess import run, CalledProcessError
     from platform import system
-    from mccode_antlr.config import config
     logger.info(f'Compile {instrument.name}')
-    # determine a name and location for the binary file
-    if output is None:
-        # use the current working directory if nothing provided
-        output = Path()
-    if not isinstance(output, Path):
-        # allow for a string input to be interpreted as a path
-        output = Path(output)
-    if output.is_dir():
-        # allow for the user to specify only the output *directory*
-        output = output.joinpath(instrument.name).with_suffix(config['ext'].get(str))
+    # determine a name and location for the binary file -- a directory or a bare
+    # name picks up the target tag and platform extension, a full filename does not
+    output = binary_path(output, instrument.name, target)
 
     # Data files carried inside the instrument have to sit somewhere the compiled
     # binary looks. It searches its own directory, so put them beside the binary:
@@ -219,11 +259,18 @@ def _compile_instrument(
     deposit_embedded_data_files(instrument, output.parent)
 
     if output.exists() and not replace:
-        return output
+        from mccode_antlr.build_info import (build_info_matches, expected_build_info,
+                                             read_build_info)
+        expected = expected_build_info(instrument, kwargs.get('flavor'),
+                                       kwargs.get('config') or {}, target)
+        reusable, reason = build_info_matches(read_build_info(output), expected)
+        if reusable:
+            return output
+        logger.info(f'Rebuilding {output} because {reason}')
 
     source = instrument_source(instrument, **kwargs)
     if source_file or ('Windows' != system() and dump_source):
-        source_file = source_file or Path().joinpath(output.parts[-1]).with_suffix('.c')
+        source_file = source_file or Path(strip_target_tag(Path(output.parts[-1]).stem) + '.c')
         logger.info(f'Source written in {source_file}')
         with open(source_file, 'w') as cfile:
             cfile.write(source)
@@ -372,20 +419,14 @@ def compile_c_file(
     """
     from os import R_OK, access
     from platform import system
-    from mccode_antlr.config import config
 
     c_file = Path(c_file)
     source = c_file.read_text()
     name = c_file.stem
 
-    if output is None:
-        output = Path()
-    if not isinstance(output, Path):
-        output = Path(output)
-    if output.is_dir():
-        output = output / name
-    if not output.suffix:
-        output = output.with_suffix(config['ext'].get(str))
+    # strip_target_tag inside binary_path keeps 'foo.mpi.c' compiled for OpenACC
+    # from being named 'foo.mpi.out'
+    output = binary_path(output, name, target)
 
     if output.exists() and not replace:
         return output
@@ -408,19 +449,23 @@ def compile_c_file(
     return output
 
 
-def infer_binary_target(binary: Path, count: int = 1) -> CBinaryTarget:
-    """Infer a CBinaryTarget by scanning the compiled binary for known symbols.
+def infer_binary_target(binary: Path, count: int = 1,
+                        default: CBinaryTarget | None = None,
+                        allow_exec: bool = True) -> CBinaryTarget:
+    """Determine a CBinaryTarget from what the compiled binary says about itself.
 
-    Checks for canonical MPI and OpenACC entry-point names in the binary.
-    These appear in the import table (dynamically linked) or the symbol
-    table / string pool (statically linked), so no external tooling is
-    required and the approach works on Windows, Linux, and macOS.
+    Evidence is taken in descending order of authority: the build-information
+    metadata entry mccode-antlr writes into the generated C, then the
+    preprocessor-gated help strings in the McCode runtime (which also cover
+    binaries built by classic ``mcstas``), then running ``binary --help``.
 
-    The file is memory-mapped rather than fully loaded, so large binaries are
-    handled without exhausting RAM.
+    Scanning for ``MPI_Init``/``acc_init`` symbol names, which this replaces, was
+    unsound: those bytes appear in any binary that merely *mentions* them, so a
+    serial binary built with ``--source`` whose embedded instrument text contains
+    an ``#ifdef USE_MPI`` block was reported as an MPI binary.
 
-    The ``count`` (number of MPI processes) cannot be inferred from the binary;
-    callers should pass the value from CLI flags or use the default of 1.
+    When nothing can be determined, *default* is returned unchanged rather than a
+    guess, so that a caller's explicit choice survives.
 
     Parameters
     ----------
@@ -428,19 +473,19 @@ def infer_binary_target(binary: Path, count: int = 1) -> CBinaryTarget:
         Path to the compiled instrument binary to inspect.
     count:
         Number of MPI processes to use; cannot be determined from the binary.
+    default:
+        Target to fall back on when the binary says nothing.
+    allow_exec:
+        Whether running the binary is acceptable as a last resort.
     """
-    import mmap
-    _mpi_markers = [b'MPI_Init', b'MPI_Finalize', b'MPI_Comm_size']
-    _acc_markers = [b'acc_init', b'acc_shutdown', b'_acc_present']
-    try:
-        with open(binary, 'rb') as f:
-            with mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ) as mm:
-                mpi = any(mm.find(m) != -1 for m in _mpi_markers)
-                acc = any(mm.find(m) != -1 for m in _acc_markers)
-    except (IOError, OSError, ValueError):
-        logger.warning(f"Could not read {binary} to infer target type; assuming single-threaded")
-        return CBinaryTarget(count=count)
-    return CBinaryTarget(mpi=mpi, acc=acc, count=count)
+    from mccode_antlr.build_info import probe_binary
+    probe = probe_binary(binary, allow_exec=allow_exec)
+    if not probe.known:
+        logger.info(f'Could not determine the target of {Path(binary).name}; using '
+                    f'{"the supplied" if default is not None else "single-process"} settings')
+        return default if default is not None else CBinaryTarget(count=count)
+    return CBinaryTarget(mpi=bool(probe.mpi), acc=bool(probe.acc),
+                         nexus=bool(probe.nexus), count=count)
 
 
 def run_compiled_instrument(binary: Path, target: CBinaryTarget, options: str, capture=False, dry_run: bool = False):
@@ -463,6 +508,15 @@ def run_compiled_instrument(binary: Path, target: CBinaryTarget, options: str, c
 
     command = []
     if target.type & CBinaryTarget.Type.mpi:
+        # Launching a non-MPI binary under mpirun starts N independent full-ncount
+        # runs which race on the output directory; catch it before any process starts
+        from mccode_antlr.build_info import probe_binary
+        if probe_binary(binary, allow_exec=False).mpi is False:
+            raise RuntimeError(
+                f'{Path(binary).name} was not built with MPI support, so it cannot be run'
+                ' under mpirun. Recompile the instrument with --parallel, or run it'
+                ' without.'
+            )
         # is the available MPI OpenMPI, mpich, or something else?
         res = run(['mpirun', '--version'], capture_output=True)
         if res.returncode != 0:

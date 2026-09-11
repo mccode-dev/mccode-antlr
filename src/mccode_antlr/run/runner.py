@@ -134,9 +134,15 @@ def mccode_run_script_parser(prog: str):
        help='Do not run any simulations, just print the commands')
     aa('-y', '--yes', action='store_true', default=False,
        help='Assume default values for all instrument parameters not explicitly specified')
-    aa('--parallel', action='store_true', default=False, help='Use MPI multi-process parallelism')
-    aa('--gpu', action='store_true', default=False, help='Use GPU OpenACC parallelism')
+    # Tri-state on purpose: None means 'not specified', so that a value read from
+    # an already-compiled binary can fill it in without overriding an explicit choice
+    aa('--parallel', action=BooleanOptionalAction, default=None,
+       help='Use MPI multi-process parallelism')
+    aa('--gpu', action=BooleanOptionalAction, default=None,
+       help='Use GPU OpenACC parallelism')
     aa('--process-count', nargs=1, type=int, default=0, help='MPI process count, 0 == System Default')
+    aa('--build-info', action='store_true', default=False,
+       help='Print what a compiled instrument binary was built from and with, then exit')
     aa('--trust-local-registries', action=BooleanOptionalAction, default=None,
        help='Trust local registries from a serialized instrument')
 
@@ -160,6 +166,45 @@ def parse_mccode_run_script(prog: str):
     args = mccode_run_script_parser(prog).parse_args()
     parameters = parse_scan_parameters(args.parameters)
     return args, parameters
+
+
+def print_binary_build_info(binary: Path) -> int:
+    """Report what a compiled binary was built from and with; the --build-info flag."""
+    import json
+    from mccode_antlr.build_info import probe_binary, read_build_info
+    info = read_build_info(binary)
+    if info is not None:
+        print(json.dumps(info, indent=2))
+        return 0
+    probe = probe_binary(binary)
+    if probe.known:
+        print(f'{binary} carries no mccode-antlr build information.')
+        print(f'Inferred from {probe.origin}: mpi={probe.mpi} acc={probe.acc}')
+        return 0
+    print(f'Nothing could be determined about {binary}.')
+    return 1
+
+
+def resolve_target_flag(flag: str, name: str, requested, detected, binary) -> bool:
+    """Reconcile an explicit CLI target flag with what a compiled binary reports.
+
+    *requested* is None when the flag was not given at all, which is what lets an
+    unspecified flag take the binary's value without a value of False -- which the
+    user may well have meant -- being silently overridden.
+    """
+    from loguru import logger
+    if requested is None:
+        return bool(detected)
+    if detected is None or bool(requested) == bool(detected):
+        return bool(requested)
+    if requested:
+        raise RuntimeError(
+            f'{flag} was requested but {Path(binary).name} was not built with {name}'
+            f' support. Recompile the instrument with {flag}, or drop it.'
+        )
+    logger.warning(f'{Path(binary).name} was built with {name} support but {flag} was'
+                   f' not requested; running without it')
+    return False
 
 
 def mccode_compile(instr, directory, flavor: Flavor, target: dict | None = None, config: dict | None = None, **kwargs):
@@ -230,26 +275,27 @@ def mccode_run(instrument: Instr,
                parameters, directory: str | Path,
                binary_name: str | None = None,
                trace: bool = False, source: bool = False, verbose: bool = False,
-               parallel: bool = False, gpu: bool = False, process_count: int = 0,
+               parallel: bool | None = None, gpu: bool | None = None, process_count: int = 0,
                mesh: bool = False, seed: int | None = None, ncount: int | None = None,
                gravitation: bool | None = None, bufsize: int | None = None, dryrun: bool = False, fmt: str | None = None,
                ):
     from os import access, R_OK
     from datetime import datetime
+    from mccode_antlr.compiler.c import CBinaryTarget, binary_path as target_binary_path
     if not isinstance(directory, Path):
         directory = Path(directory)
-    if binary_name is not None:
-        binary_path = directory.joinpath(binary_name)
-    else:
-        binary_path = directory.joinpath(instrument.name)
+    target = {'mpi': bool(parallel), 'acc': bool(gpu), 'count': process_count, 'nexus': False}
+    binary_path = target_binary_path(directory, binary_name or instrument.name,
+                                     CBinaryTarget(**{k: target[k] for k in ('mpi', 'acc', 'nexus')}))
 
     if binary_path.exists() and not access(binary_path, R_OK):
         raise ValueError(f"{binary_path} exists but is not an executable")
 
-    target = {'mpi': parallel, 'acc': gpu, 'count': process_count, 'nexus': False}
-    if not binary_path.exists():
-        config = {'enable_trace': trace, 'embed_instrument_file': source, 'verbose': verbose}
-        binary_path, target = mccode_compile(instrument, binary_path, flavor=flavor, target=target, config=config)
+    # Reuse is decided inside compile_instrument, which checks that an existing
+    # binary was built from this instrument for this target rather than only that
+    # something exists at the path.
+    config = {'enable_trace': trace, 'embed_instrument_file': source, 'verbose': verbose}
+    binary_path, target = mccode_compile(instrument, binary_path, flavor=flavor, target=target, config=config)
 
     runtime = dict(
         seed=seed,
@@ -299,35 +345,29 @@ def mccode_run_cmd(flavor: Flavor):
         capture=(not args.verbose) if args.verbose is not None else False,
         use_defaults=args.yes,
     )
+    if args.build_info:
+        # non-zero when nothing could be determined, so scripts can branch on it
+        raise SystemExit(print_binary_build_info(filename))
     # check if the filename is actually a compiled instrument already:
     # os.access(path, X_OK) always returns True on Windows for any existing file (no POSIX execute bit),
     # so we must also exclude known source-file extensions to avoid treating .instr/.json as binaries.
     _source_suffixes = {'.instr', '.json', '.c'}
     if args.output_file is None and filename.exists() and access(filename, X_OK) \
             and filename.suffix.lower() not in _source_suffixes:
-        from loguru import logger
-        from mccode_antlr.compiler.c import infer_binary_target
+        from mccode_antlr.compiler.c import CBinaryTarget, strip_target_tag
+        from mccode_antlr.build_info import probe_binary
         binary = filename
-        name = filename.stem
+        name = strip_target_tag(filename.stem)
         has_parameters = None  # unknown for a pre-compiled binary
-        # Infer MPI/ACC type from the binary itself rather than trusting CLI flags,
-        # since the binary may have been compiled externally.
-        inferred = infer_binary_target(binary, count=target.get('count', 1))
-        # Warn if the CLI flags disagree with the binary's actual linkage.
-        cli_mpi = bool(target.get('mpi', False))
-        cli_acc = bool(target.get('acc', False))
-        from mccode_antlr.compiler.c import CBinaryTarget as _CBT
-        if cli_mpi != bool(inferred.type & _CBT.Type.mpi):
-            logger.warning(
-                f"CLI flag --parallel ({cli_mpi}) does not match MPI linkage inferred from {binary.name} "
-                f"({bool(inferred.type & _CBT.Type.mpi)}); using binary-inferred value"
-            )
-        if cli_acc != bool(inferred.type & _CBT.Type.acc):
-            logger.warning(
-                f"CLI flag --gpu ({cli_acc}) does not match OpenACC linkage inferred from {binary.name} "
-                f"({bool(inferred.type & _CBT.Type.acc)}); using binary-inferred value"
-            )
-        target = inferred
+        # The binary may have been compiled elsewhere, so ask it what it is -- but
+        # never let that override a choice the user made explicitly.
+        probe = probe_binary(binary)
+        resolved = {
+            'mpi': resolve_target_flag('--parallel', 'MPI', args.parallel, probe.mpi, binary),
+            'acc': resolve_target_flag('--gpu', 'OpenACC', args.gpu, probe.acc, binary),
+        }
+        target = CBinaryTarget(mpi=resolved['mpi'], acc=resolved['acc'],
+                               nexus=bool(probe.nexus), count=target.get('count', 1))
     elif not filename.exists() or not access(filename, R_OK):
         raise RuntimeError(f'{filename} does not exist or is not readable')
     else:

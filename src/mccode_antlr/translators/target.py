@@ -22,7 +22,7 @@ class FileReplacement:
 # These _should_ be set in a call to, e.g., `mcstas4`,
 # They were previously set in the yacc generated main function
 CONFIG = dict(default_main=True, enable_trace=True, portable=True, include_runtime=True,
-              embed_instrument_file=False,)
+              embed_instrument_file=False, build_info=True,)
 
 
 # Follow the logic of codegen.c(.in) from McCode-3, but make use of visitor semantics for possible alternate runtimes

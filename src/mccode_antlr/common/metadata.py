@@ -81,10 +81,5 @@ class MetaData(Struct):
         return MetaData.partial_from_tokens(source=DataSource(DataSource.Type.Instrument, source),
                                             mimetype=mimetype, name=name, value=value)
 
-    # output to metadata_table_struct initializer list
-    def to_table_row(self):
-        from .utilities import escape_str_for_c as c
-        return ','.join(c(x) for x in (self.source.name, self.name, self.mimetype, self.value))
-
     def copy(self):
         return MetaData(self.source, self.name, self.mimetype, self.value)

@@ -209,6 +209,70 @@ binary, target = mccode_compile(
 )
 ```
 
+### Binary names
+
+Each parallelism target gets its own filename, so builds for different targets
+do not overwrite one another:
+
+| target | name |
+|---|---|
+| single process | `MyInstrument.out` |
+| MPI | `MyInstrument.mpi.out` |
+| OpenACC | `MyInstrument.acc.out` |
+| MPI + OpenACC | `MyInstrument.mpiacc.out` |
+
+(`.exe` instead of `.out` on Windows — the extension comes from `config['ext']`.)
+NeXus support is orthogonal to parallelism and is not part of the name; it is
+recorded in the build information instead.
+
+Passing an explicit filename — `mccode_compile(instr, Path('mybinary'))` or
+`mcc-antlr -o mybinary` — is honoured verbatim, without a tag or an extension
+being added.
+
+### Build information
+
+Every compiled binary records what it was built from and with, as an ordinary
+instrument-level `METADATA` entry named `mccode_antlr_build` with mimetype
+`application/json`. Ask the binary directly:
+
+```console
+$ ./MyInstrument.mpi.out --meta-data MyInstrument:mccode_antlr_build
+{"mccode_antlr_build_info":1,"generator":"mccode-antlr",...,"mpi":true,"acc":false,"nexus":false}
+```
+
+or read it without running anything, which also works for a binary built on
+another machine or for a different architecture:
+
+```python
+from mccode_antlr.build_info import read_build_info, probe_binary
+
+info = read_build_info("MyInstrument.mpi.out")
+print(info["source_hash"], info["mpi"])
+
+# probe_binary adds fallbacks for binaries that carry no entry, including ones
+# built by classic mcstas; `origin` says which evidence answered.
+probe = probe_binary("SomeOtherInstrument.out")
+print(probe.mpi, probe.acc, probe.origin)
+```
+
+`mpi`, `acc` and `nexus` are filled in by the C preprocessor from the same
+`-DUSE_MPI` / `-DOPENACC` / `-DUSE_NEXUS` flags that decide whether that code is
+compiled in at all. They therefore stay correct even when a `.c` generated for
+one target is later compiled for another:
+
+```console
+$ mcstas-antlr MyInstrument.instr -o MyInstrument.c   # target not yet decided
+$ mcc-antlr --parallel MyInstrument.c                 # records "mpi": true
+```
+
+`source_hash` is a digest of the instrument, and is what lets a cached binary be
+reused only when it still matches. Editing the `.instr` triggers a rebuild
+rather than a silent reuse; so does switching flavor or upgrading `mccode-antlr`.
+Pass `replace=True` (or `force=True` to `Simulation.compile`) to rebuild
+unconditionally.
+
+Set `config={"build_info": False}` to leave the entry out of the generated C.
+
 ---
 
 ## Level 3 — Run a compiled binary
