@@ -74,7 +74,7 @@ Compile and run an instrument simulation.
 | `--dryrun` | Print scan commands without running any simulations |
 | `--parallel` / `--no-parallel` | Use MPI multi-process parallelism. Unspecified: taken from the binary |
 | `--gpu` / `--no-gpu` | Use GPU OpenACC parallelism. Unspecified: taken from the binary |
-| `--process-count N` | Number of MPI processes (default: system default) |
+| `--mpi NB_CPU` | Number of MPI processes, or `auto` to let the launcher decide (default: `auto`). `--process-count` is an alias |
 | `--build-info` | Print what a compiled binary was built from and with, then exit |
 | `--copyright` | Print the McCode copyright statement and exit |
 | `-v`, `--version` | Print the McCode version and exit |
@@ -104,6 +104,11 @@ explicitly, they are never silently overridden:
 
 When the binary carries no build information and none can be inferred, the flag
 as given is used.
+
+`--mpi` decides how many processes to ask for. The default, `auto`, names no
+number at all: `mpirun` — or the batch scheduler that started it — chooses, which
+is what you want inside a job allocation. On Windows, where `mpiexec` has no
+sensible default, `auto` resolves to the CPU count. Give an integer to pin it.
 
 ### Parameter syntax
 

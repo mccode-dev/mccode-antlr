@@ -78,7 +78,7 @@ class Simulation:
         verbose: bool = False,
         parallel: bool = False,
         gpu: bool = False,
-        process_count: int = 0,
+        process_count: int | str = 'auto',
         force: bool = False,
         create_directory: bool = True,
     ) -> 'Simulation':
@@ -93,7 +93,7 @@ class Simulation:
         :param verbose: Verbose compiler output.
         :param parallel: Compile with MPI support.
         :param gpu: Compile with OpenACC GPU support.
-        :param process_count: MPI process count (0 = system default).
+        :param process_count: MPI process count, or 'auto' to let the launcher decide.
         :param force: Re-compile even if the binary already exists.
         :param create_directory: Create the directory if it doesn't exist.
         :returns: self, to allow method chaining.

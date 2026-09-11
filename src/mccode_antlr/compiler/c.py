@@ -17,7 +17,9 @@ class CBinaryTarget:
         mpi = auto()
         nexus = auto()
 
-    def __init__(self, mpi: bool = False, acc: bool = False, count: int = 1, nexus: bool = False):
+    def __init__(self, mpi: bool = False, acc: bool = False, count: int | str = 1,
+                 nexus: bool = False):
+        # count is a positive integer, or 'auto' to leave the choice to the launcher
         self.count = count
         if mpi and acc:
             self.type = CBinaryTarget.Type.acc | CBinaryTarget.Type.mpi
@@ -488,6 +490,28 @@ def infer_binary_target(binary: Path, count: int = 1,
                          nexus=bool(probe.nexus), count=count)
 
 
+def mpi_process_flags(count: int | str) -> list[str]:
+    """The '-np N' part of an mpirun command line, if one is needed.
+
+    A positive integer is passed through. Anything else means 'auto': name no
+    number and let the launcher -- or the batch scheduler that started it --
+    decide. Passing '-np 0' instead, as this used to, is not a way of saying
+    'default'; it is a request for zero processes that only OpenMPI happens to
+    tolerate. Separating mpirun's flags from the binary's is the job of the '--'
+    added after these, not of '-np'.
+    """
+    from platform import system
+    if isinstance(count, int) and count >= 1:
+        return ['-np', str(count)]
+    if 'Windows' == system():
+        # msmpi's mpiexec accepts neither the '--' separator nor a missing
+        # process count, so it has to be given a number
+        from os import cpu_count
+        return ['-np', str(cpu_count() or 1)]
+    logger.info('Letting mpirun choose the number of processes')
+    return []
+
+
 def run_compiled_instrument(binary: Path, target: CBinaryTarget, options: str, capture=False, dry_run: bool = False):
     from subprocess import run, CalledProcessError
     from platform import system
@@ -526,12 +550,7 @@ def run_compiled_instrument(binary: Path, target: CBinaryTarget, options: str, c
         # we execute mpirun
         command.append(config['mpi']['run'].as_str_expanded())
         # which takes optional flags
-        if target.count == 0 and not is_open_mpi:
-            print("Using system default number of mpirun processes")
-        else:
-            # Even if zero, OpenMPI needs this to avoid interpreting options flags
-            # for the binary as if they were for it.
-            command.extend(['-np', str(target.count)])
+        command.extend(mpi_process_flags(target.count))
         if config['machinefile'].exists():
             # --machinefile is only an OpenMPI option. mpich uses -f?
             machinefile = config['machinefile'].as_str_expanded()

@@ -102,6 +102,24 @@ def si_int(s: str) -> int:
     return value
 
 
+def mpi_process_count(s: str):
+    """Parse an MPI process count: a positive integer, or 'auto'.
+
+    'auto' leaves the choice to the launcher rather than naming a number. Values
+    below one are accepted as synonyms for it, so that scripts written against
+    the old `--process-count 0` ("system default") keep working.
+    """
+    from argparse import ArgumentTypeError
+    text = str(s).strip().lower()
+    if text == 'auto':
+        return 'auto'
+    try:
+        count = int(text)
+    except ValueError:
+        raise ArgumentTypeError(f"expected a positive integer or 'auto', not {s!r}")
+    return count if count >= 1 else 'auto'
+
+
 def mccode_run_script_parser(prog: str):
     from argparse import ArgumentParser, BooleanOptionalAction
     from pathlib import Path
@@ -147,7 +165,12 @@ def mccode_run_script_parser(prog: str):
        help='Use MPI multi-process parallelism')
     aa('--gpu', action=BooleanOptionalAction, default=None,
        help='Use GPU OpenACC parallelism')
-    aa('--process-count', nargs=1, type=int, default=0, help='MPI process count, 0 == System Default')
+    # nargs is deliberately absent: with nargs=1 this arrived as [4] rather than 4
+    # and reached mpirun as '-np [4]'.
+    aa('--mpi', '--process-count', dest='mpi', metavar='NB_CPU',
+       type=mpi_process_count, default='auto',
+       help="Number of MPI processes, or 'auto' to let the launcher decide"
+            " (default: auto). --process-count is an alias.")
     aa('--build-info', action='store_true', default=False,
        help='Print what a compiled instrument binary was built from and with, then exit')
     aa('--trust-local-registries', action=BooleanOptionalAction, default=None,
@@ -282,7 +305,8 @@ def mccode_run(instrument: Instr,
                parameters, directory: str | Path,
                binary_name: str | None = None,
                trace: bool = False, source: bool = False, verbose: bool = False,
-               parallel: bool | None = None, gpu: bool | None = None, process_count: int = 0,
+               parallel: bool | None = None, gpu: bool | None = None,
+               process_count: int | str = 'auto',
                mesh: bool = False, seed: int | None = None, ncount: int | None = None,
                gravitation: bool | None = None, bufsize: int | None = None, dryrun: bool = False, fmt: str | None = None,
                ):
@@ -338,7 +362,7 @@ def mccode_run_cmd(flavor: Flavor):
     target = dict(
         mpi=args.parallel,
         acc=args.gpu,
-        count=args.process_count,
+        count=args.mpi,
         nexus=False
     )
     runtime = dict(
