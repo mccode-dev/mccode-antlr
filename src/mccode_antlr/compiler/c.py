@@ -512,7 +512,62 @@ def mpi_process_flags(count: int | str) -> list[str]:
     return []
 
 
-def run_compiled_instrument(binary: Path, target: CBinaryTarget, options: str, capture=False, dry_run: bool = False):
+#: What to do with a running simulation's stdout/stderr.
+#:   'no'   stream it to this process's own streams -- the user watches it happen
+#:   'yes'  keep it to ourselves, and show it only if the run fails
+#:   'tee'  stream it *and* keep a copy in <output directory>/mccode.out
+CAPTURE_MODES = ('no', 'yes', 'tee')
+CAPTURE_LOG_NAME = 'mccode.out'
+
+#: Lines kept from a streamed run so that a failure can still be explained.
+#: Bounded on purpose: a traced MPI run emits gigabytes.
+_TAIL_LINES = 200
+
+
+def normalise_capture(capture) -> str:
+    """Accept a CAPTURE_MODES string, or the bool this argument used to be."""
+    if isinstance(capture, str):
+        if capture not in CAPTURE_MODES:
+            raise ValueError(f'capture must be one of {CAPTURE_MODES}, got {capture!r}')
+        return capture
+    return 'yes' if capture else 'no'
+
+
+def _stream_and_tee(command, log_file: Path | None):
+    """Run *command*, copying its output to our stdout and to *log_file*.
+
+    The output directory is created by the simulation itself, and McCode refuses
+    to start if it already exists, so the copy is written somewhere neutral and
+    moved into place afterwards.
+    """
+    import sys
+    from collections import deque
+    from shutil import move
+    from subprocess import Popen, PIPE, STDOUT
+    from tempfile import NamedTemporaryFile
+
+    tail = deque(maxlen=_TAIL_LINES)
+    with NamedTemporaryFile('wb', delete=False, suffix='.out') as scratch:
+        scratch_name = Path(scratch.name)
+        with Popen(command, stdout=PIPE, stderr=STDOUT) as process:
+            for line in process.stdout:
+                sys.stdout.buffer.write(line)
+                sys.stdout.buffer.flush()
+                scratch.write(line)
+                tail.append(line)
+            returncode = process.wait()
+
+    if log_file is not None and log_file.parent.is_dir():
+        move(str(scratch_name), str(log_file))
+        logger.info(f'Simulation output copied to {log_file}')
+    else:
+        # no directory to move it into (a failed run, or none was named)
+        logger.info(f'Simulation output kept in {scratch_name}')
+    return returncode, b''.join(tail)
+
+
+def run_compiled_instrument(binary: Path, target: CBinaryTarget, options: str, capture=False,
+                            dry_run: bool = False, log_file: Path | None = None):
     from subprocess import run, CalledProcessError
     from platform import system
     from mccode_antlr.config import config
@@ -576,10 +631,26 @@ def run_compiled_instrument(binary: Path, target: CBinaryTarget, options: str, c
     if dry_run:
         logger.info(f'Would execute {command}')
         return ""
-    result = run(command, capture_output=capture)
-    if result.returncode and capture:
-        raise RuntimeError(f'Execution of {command} failed with output\n{result.stdout}\n and error\n{result.stderr}')
-    elif result.returncode:
-        raise RuntimeError(f'Execution of {command} failed, see above for error message(s)')
+    def decoded(raw):
+        return raw.decode('utf-8', errors='replace') if isinstance(raw, bytes) else (raw or '')
 
-    return (result.stdout + result.stderr) if capture else ""
+    mode = normalise_capture(capture)
+    if mode == 'tee':
+        returncode, tail = _stream_and_tee(command, log_file)
+        if returncode:
+            raise RuntimeError(f'Execution of {" ".join(command)} failed. Last output was\n'
+                               f'{decoded(tail)}')
+        return ''
+    if mode == 'yes':
+        result = run(command, capture_output=True)
+        if result.returncode:
+            raise RuntimeError(f'Execution of {" ".join(command)} failed with output\n'
+                               f'{decoded(result.stdout)}\nand error\n{decoded(result.stderr)}')
+        # bytes, as this has always returned -- callers decode it themselves
+        return result.stdout + result.stderr
+    # 'no': the simulation writes straight to our stdout/stderr, so there is
+    # nothing to report here that the user has not already seen
+    result = run(command)
+    if result.returncode:
+        raise RuntimeError(f'Execution of {" ".join(command)} failed, see above for error message(s)')
+    return ''

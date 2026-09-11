@@ -108,3 +108,42 @@ class TestValueParser:
         from mccode_antlr.run.runner import mpi_process_count
         with pytest.raises(ArgumentTypeError):
             mpi_process_count(given)
+
+
+class TestCaptureFlag:
+    def test_streams_by_default(self):
+        """The simulation's output is the user's progress indicator; it used to be
+        captured and then dropped on the floor, so a plain run showed nothing."""
+        assert parse().capture == 'no'
+
+    @pytest.mark.parametrize('mode', ['no', 'yes', 'tee'])
+    def test_modes_accepted(self, mode):
+        assert parse('--capture', mode).capture == mode
+
+    def test_a_bad_mode_is_rejected(self):
+        with pytest.raises(SystemExit):
+            parse('--capture', 'sometimes')
+
+    def test_verbose_no_longer_decides_it(self):
+        """--verbose is compiler and linker verbosity; it used to double as the
+        only way to see the simulation at all."""
+        assert parse('--verbose').capture == 'no'
+        assert parse('--no-verbose').capture == 'no'
+
+
+class TestNormaliseCapture:
+    def test_the_modes_pass_through(self):
+        from mccode_antlr.compiler.c import normalise_capture
+        for mode in ('no', 'yes', 'tee'):
+            assert normalise_capture(mode) == mode
+
+    def test_booleans_still_work(self):
+        """capture= was a bool, and Simulation.run still passes one."""
+        from mccode_antlr.compiler.c import normalise_capture
+        assert normalise_capture(True) == 'yes'
+        assert normalise_capture(False) == 'no'
+
+    def test_an_unknown_mode_is_refused(self):
+        from mccode_antlr.compiler.c import normalise_capture
+        with pytest.raises(ValueError, match='capture must be one of'):
+            normalise_capture('maybe')

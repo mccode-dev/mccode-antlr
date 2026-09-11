@@ -124,6 +124,7 @@ def mccode_run_script_parser(prog: str):
     from argparse import ArgumentParser, BooleanOptionalAction
     from pathlib import Path
     from mccode_antlr import __version__
+    from mccode_antlr.compiler.c import CAPTURE_MODES
 
     def resolvable(name: str):
         return None if name is None else Path(name).resolve()
@@ -147,7 +148,12 @@ def mccode_run_script_parser(prog: str):
             " and enables it at runtime (default: off)")
     aa('--copyright', action='store_true', help='Print the McCode copyright statement')
     aa('--source', action=BooleanOptionalAction, default=False, help='Embed the instrument source code in the executable')
-    aa('--verbose', action=BooleanOptionalAction, default=False, help='Verbose output')
+    aa('--verbose', action=BooleanOptionalAction, default=False,
+       help='Verbose compiler and linker output')
+    aa('--capture', choices=CAPTURE_MODES, default='no',
+       help="What to do with the simulation's own output: stream it to the terminal"
+            " ('no', the default), keep it hidden unless the run fails ('yes'), or"
+            " stream it and also save it as <output directory>/mccode.out ('tee')")
     aa('-n', '--ncount', nargs=1, type=si_int, default=None, help='Number of neutrons to simulate')
     aa('-m', '--mesh', action='store_true', default=False, help='N-dimensional mesh scan')
     aa('-s', '--seed', nargs=1, type=int, default=None, help='Random number generator seed')
@@ -257,19 +263,22 @@ def mccode_compile(instr, directory, flavor: Flavor, target: dict | None = None,
 
 
 def mccode_run_compiled(
-        binary, target, directory: Path | str, parameters: str, capture: bool = True,
+        binary, target, directory: Path | str, parameters: str, capture: bool | str = True,
         dry_run: bool = False, use_defaults: bool = False, tmpdir: Path | None = None
 ):
-    from mccode_antlr.compiler.c import run_compiled_instrument
+    from mccode_antlr.compiler.c import CAPTURE_LOG_NAME, run_compiled_instrument
     from mccode_antlr.run.output import _collect_output
     from pathlib import Path
 
     yes_flag = '--yes ' if use_defaults else ''
-    result = run_compiled_instrument(binary, target, f'--dir {directory} {yes_flag}{parameters}', capture=capture, dry_run=dry_run)
+    result = run_compiled_instrument(
+        binary, target, f'--dir {directory} {yes_flag}{parameters}', capture=capture,
+        dry_run=dry_run, log_file=Path(directory).joinpath(CAPTURE_LOG_NAME)
+    )
     return result, _collect_output(Path(directory), tmpdir=tmpdir)
 
 
-def mccode_run_scan(name: str, binary, target, parameters, directory, grid: bool, capture: bool = True, dry_run: bool = False, use_defaults: bool = False, **r_args):
+def mccode_run_scan(name: str, binary, target, parameters, directory, grid: bool, capture: bool | str = True, dry_run: bool = False, use_defaults: bool = False, **r_args):
     from .range import parameters_to_scan
     n_pts, names, scan = parameters_to_scan(parameters, grid=grid)
     # n_zeros = len(str(n_pts))
@@ -305,6 +314,7 @@ def mccode_run(instrument: Instr,
                parameters, directory: str | Path,
                binary_name: str | None = None,
                trace: bool = False, source: bool = False, verbose: bool = False,
+               capture: bool | str = True,
                parallel: bool | None = None, gpu: bool | None = None,
                process_count: int | str = 'auto',
                mesh: bool = False, seed: int | None = None, ncount: int | None = None,
@@ -336,7 +346,7 @@ def mccode_run(instrument: Instr,
         bufsiz=bufsize,
         format=fmt,
         dry_run=dryrun,
-        capture=(not verbose) if verbose is not None else False,
+        capture=capture,
     )
     out_dir = directory.joinpath(f'{instrument.name}{datetime.now().strftime("%Y%m%d_%H%M%S")}')
 
@@ -373,7 +383,7 @@ def mccode_run_cmd(flavor: Flavor):
         bufsiz=args.bufsiz[0] if args.bufsiz is not None else None,
         format=args.format[0] if args.format is not None else None,
         dry_run=args.dryrun,
-        capture=(not args.verbose) if args.verbose is not None else False,
+        capture=args.capture,
         use_defaults=args.yes,
     )
     if args.build_info:

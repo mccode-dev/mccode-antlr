@@ -66,7 +66,8 @@ Compile and run an instrument simulation.
 | `-s N`, `--seed N` | Random number generator seed |
 | `-t` / `--trace` / `--no-trace` | Trace particles through the instrument — compiles in trace support *and* enables it at runtime (default: off) |
 | `--source` / `--no-source` | Embed the instrument source code in the binary |
-| `--verbose` / `--no-verbose` | Verbose output |
+| `--verbose` / `--no-verbose` | Verbose compiler and linker output |
+| `--capture {no,yes,tee}` | Where the simulation's own output goes (default: `no`, i.e. straight to your terminal) |
 | `-g`, `--gravitation` | Enable gravitation for all trajectories |
 | `-m`, `--mesh` | Treat multiple scanned parameters as a multidimensional grid scan |
 | `--bufsiz N` | `Monitor_nD` list/buffer size |
@@ -78,6 +79,24 @@ Compile and run an instrument simulation.
 | `--build-info` | Print what a compiled binary was built from and with, then exit |
 | `--copyright` | Print the McCode copyright statement and exit |
 | `-v`, `--version` | Print the McCode version and exit |
+
+### Seeing the simulation's output
+
+A running simulation writes its progress, detector summaries and any component
+warnings to its own stdout. `--capture` decides where that goes:
+
+| value | behaviour |
+|---|---|
+| `no` (default) | straight through to your terminal, as it is produced |
+| `yes` | held back, and shown only if the run fails |
+| `tee` | both: streamed, and saved as `<output directory>/mccode.out` |
+
+`tee` writes one log per scan point, beside that point's `mccode.sim`. It is the
+one to reach for under MPI, where the ranks' output interleaves on screen and is
+easier to read afterwards than live.
+
+`--capture=no` also keeps memory flat: `yes` and the old behaviour hold the whole
+run's output in RAM until it finishes.
 
 ### Tracing
 
