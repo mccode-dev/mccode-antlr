@@ -67,7 +67,7 @@ Compile and run an instrument simulation.
 | `-t` / `--trace` / `--no-trace` | Trace particles through the instrument — compiles in trace support *and* enables it at runtime (default: off) |
 | `--source` / `--no-source` | Embed the instrument source code in the binary |
 | `--verbose` / `--no-verbose` | Verbose compiler and linker output |
-| `--capture {no,yes,tee}` | Where the simulation's own output goes (default: `no`, i.e. straight to your terminal) |
+| `--capture {no,yes,tee,tui}` | Where the simulation's own output goes (default: `no`, i.e. straight to your terminal) |
 | `-g`, `--gravitation` | Enable gravitation for all trajectories |
 | `-m`, `--mesh` | Treat multiple scanned parameters as a multidimensional grid scan |
 | `--bufsiz N` | `Monitor_nD` list/buffer size |
@@ -90,6 +90,7 @@ warnings to its own stdout. `--capture` decides where that goes:
 | `no` (default) | straight through to your terminal, as it is produced |
 | `yes` | held back, and shown only if the run fails |
 | `tee` | both: streamed, and saved as `<output directory>/mccode.out` |
+| `tui` | saved as `tee` does, but summarised live instead of echoed |
 
 `tee` writes one log per scan point, beside that point's `mccode.sim`. It is the
 one to reach for under MPI, where the ranks' output interleaves on screen and is
@@ -97,6 +98,24 @@ easier to read afterwards than live.
 
 `--capture=no` also keeps memory flat: `yes` and the old behaviour hold the whole
 run's output in RAM until it finishes.
+
+#### `--capture=tui`
+
+`tui` pins a small live summary to the terminal — how many scan points are done,
+how far the current one has got, its parameter values, the most recent detector
+result, and any errors — and erases it when the scan ends, leaving you looking at
+your own last command instead of at thousands of lines of output. The output
+itself is not discarded; it is written per point exactly as `tee` writes it.
+
+The per-point percentage comes from the `Progress_bar` component, which prints it
+only when the instrument has one, and only every `percent` of the way (10 by
+default, and coarser still for small `-n`). Without it the point bar stays
+indeterminate rather than inventing progress; add `Progress_bar(percent=1)` to
+the instrument for a smoother one.
+
+`tui` falls back to `tee` wherever a live display would be useless or in the way:
+a pipe, a CI log, a terminal that cannot handle it, or `--dryrun`. Since the log
+is written either way, nothing is lost in the fallback.
 
 ### Tracing
 

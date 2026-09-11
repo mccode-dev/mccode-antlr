@@ -516,7 +516,9 @@ def mpi_process_flags(count: int | str) -> list[str]:
 #:   'no'   stream it to this process's own streams -- the user watches it happen
 #:   'yes'  keep it to ourselves, and show it only if the run fails
 #:   'tee'  stream it *and* keep a copy in <output directory>/mccode.out
-CAPTURE_MODES = ('no', 'yes', 'tee')
+#:   'tui'  keep the copy, but show a live summary instead of the raw output,
+#:          and erase the summary when the scan ends
+CAPTURE_MODES = ('no', 'yes', 'tee', 'tui')
 CAPTURE_LOG_NAME = 'mccode.out'
 
 #: Lines kept from a streamed run so that a failure can still be explained.
@@ -533,8 +535,12 @@ def normalise_capture(capture) -> str:
     return 'yes' if capture else 'no'
 
 
-def _stream_and_tee(command, log_file: Path | None):
-    """Run *command*, copying its output to our stdout and to *log_file*.
+def _stream_and_tee(command, log_file: Path | None, consumer=None):
+    """Run *command*, copying its output to *log_file* and to the screen.
+
+    With no *consumer* every line is echoed as it arrives. Given one, the lines
+    go to it instead and it decides what the user sees -- which is how the live
+    scan display shows a summary rather than the raw stream.
 
     The output directory is created by the simulation itself, and McCode refuses
     to start if it already exists, so the copy is written somewhere neutral and
@@ -551,8 +557,11 @@ def _stream_and_tee(command, log_file: Path | None):
         scratch_name = Path(scratch.name)
         with Popen(command, stdout=PIPE, stderr=STDOUT) as process:
             for line in process.stdout:
-                sys.stdout.buffer.write(line)
-                sys.stdout.buffer.flush()
+                if consumer is None:
+                    sys.stdout.buffer.write(line)
+                    sys.stdout.buffer.flush()
+                else:
+                    consumer(line)
                 scratch.write(line)
                 tail.append(line)
             returncode = process.wait()
@@ -567,7 +576,8 @@ def _stream_and_tee(command, log_file: Path | None):
 
 
 def run_compiled_instrument(binary: Path, target: CBinaryTarget, options: str, capture=False,
-                            dry_run: bool = False, log_file: Path | None = None):
+                            dry_run: bool = False, log_file: Path | None = None,
+                            consumer=None):
     from subprocess import run, CalledProcessError
     from platform import system
     from mccode_antlr.config import config
@@ -635,8 +645,9 @@ def run_compiled_instrument(binary: Path, target: CBinaryTarget, options: str, c
         return raw.decode('utf-8', errors='replace') if isinstance(raw, bytes) else (raw or '')
 
     mode = normalise_capture(capture)
-    if mode == 'tee':
-        returncode, tail = _stream_and_tee(command, log_file)
+    if mode in ('tee', 'tui'):
+        returncode, tail = _stream_and_tee(command, log_file,
+                                           consumer if mode == 'tui' else None)
         if returncode:
             raise RuntimeError(f'Execution of {" ".join(command)} failed. Last output was\n'
                                f'{decoded(tail)}')
