@@ -9,6 +9,37 @@ class McCodeAntlrDeprecationWarning(FutureWarning):
     pass
 
 
+class McCodeSyntaxError(RuntimeError):
+    """Raised when a McCode source file does not parse.
+
+    ANTLR recovers from a syntax error by inventing or discarding tokens and
+    carrying on, so parsing "succeeds" and returns a structurally wrong object:
+    a component parameter silently loses its default value, or acquires the name
+    ``<missing Identifier>``. Recovery is still worth having -- it lets one parse
+    report every error in a file rather than only the first -- but the result must
+    not be used. Collect the errors, then raise.
+
+    Attributes
+    ----------
+    filetype, name:
+        What was being parsed, for the message.
+    errors:
+        ``(line, column, message)`` for every error the parse reported.
+    """
+
+    def __init__(self, filetype: str, name: str, errors):
+        self.filetype = filetype
+        self.name = name
+        self.errors = list(errors)
+        detail = '\n'.join(f'  line {line}:{column} {message}'
+                            for line, column, message in self.errors)
+        count = len(self.errors)
+        super().__init__(
+            f'{count} syntax error{"" if count == 1 else "s"} parsing '
+            f'{filetype} {name}:\n{detail}'
+        )
+
+
 def deprecated(*, since: str, replacement: str | None = None, remove_in: str | None = None):
     def deco(func):
         msg = f"{func.__module__}.{func.__qualname__} is deprecated since {since}."

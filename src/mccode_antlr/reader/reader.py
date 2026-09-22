@@ -10,6 +10,7 @@ from .registry import (Registry, registries_match, registry_from_specification,
 from ..comp import Comp
 
 from mccode_antlr import Flavor
+from mccode_antlr.utils import McCodeSyntaxError
 
 
 # ---------------------------------------------------------------------------
@@ -207,6 +208,17 @@ def make_reader_error_listener(super_class, filetype, name, source, pre=5, post=
             self.source = source
             self.pre = pre
             self.post = post
+            self.errors = []
+
+        def raise_for_errors(self):
+            """Raise if the parse reported any syntax error.
+
+            Called after parsing rather than from syntaxError itself, so that
+            ANTLR's recovery can report every error in the file before the first
+            one aborts it.
+            """
+            if self.errors:
+                raise McCodeSyntaxError(self.filetype, self.name, self.errors)
 
         def syntaxError(self, recognizer, offendingSymbol, *args, **kwargs):
             if len(args) == 4 and isinstance(args[3], str):
@@ -215,6 +227,7 @@ def make_reader_error_listener(super_class, filetype, name, source, pre=5, post=
             else:
                 # the antlr4 (4.13.0) syntax
                 line, column, msg, e = args
+            self.errors.append((line, column, msg))
             logger.error(f'Syntax error in parsing {self.filetype} {self.name} at {line},{column}')
             lines = self.source.split('\n')
             pre_lines = lines[line-self.pre:line]
@@ -416,6 +429,7 @@ class Reader(Struct):
             McInstr_ErrorListener, 'Instrument', name, source
         )
         tree = McInstr_parse(stream, 'prog', error_listener)
+        error_listener.raise_for_errors()
 
         visitor = InstrVisitor(self, filename, destination=destination)
         res = visitor.visitProg(tree)
