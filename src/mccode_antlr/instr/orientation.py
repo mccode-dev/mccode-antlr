@@ -393,15 +393,47 @@ def acos_degree(v):
     return acos(v) / pi * 180
 
 
+# unary_expr/binary_expr fold a constant with the degree-aware Python function
+# they are handed, but build the symbolic branch from the C function *name*
+# alone. sympy.sin and friends work in radians, and nothing in the resulting
+# expression records that degrees were ever involved -- so on the symbolic path
+# the conversion has to be baked in here, the last place that information exists.
+#
+# The factors are numeric rather than degree_to_radian's Expr.id('PI') so the
+# result stays self-contained: a consumer calling evaluate({'TT': 30}) gets a
+# number, where a free PI symbol leaves it unreduced and unusable to everything
+# outside the C translator, the only place PI is given a value.
+
+def _symbolic(*values: Expr) -> bool:
+    """True when unary_expr/binary_expr would take their symbolic branch."""
+    return not all(v.is_constant and v.has_value for v in values)
+
+
+def _to_radians(v: Expr) -> Expr:
+    from math import pi
+    return v * Expr.float(pi / 180)
+
+
+def _to_degrees(v: Expr) -> Expr:
+    from math import pi
+    return v * Expr.float(180 / pi)
+
+
 def acos_value(v: Expr, degrees=True):
     from math import acos
     pi = Expr.float(180) if degrees else Expr.id('PI')
-    if v.is_value(1) or v > Expr.float(1):
+    # The out-of-domain clamps only make sense for a value we can actually
+    # compare. A symbolic Expr satisfies `> 1` *and* `< -1`, so guarding on them
+    # directly made every symbolic arccosine return 0.
+    known = not _symbolic(v)
+    if v.is_value(1) or (known and v > Expr.float(1)):
         return Expr.float(0)
     if v.is_value(0):
         return pi / Expr.float(2)
-    if v.is_value(-1) or v < Expr.float(-1):
+    if v.is_value(-1) or (known and v < Expr.float(-1)):
         return pi
+    if degrees and not known:
+        return _to_degrees(unary_expr(acos, 'acos', v))
     return unary_expr(acos_degree if degrees else acos, 'acos', v)
 
 
@@ -417,6 +449,8 @@ def cos_value(v: Expr, degrees=True):
         return Expr.integer(-1)
     if (degrees and v.is_value(Expr.float(-90))) or (not degrees and v.is_value(-pi/Expr.float(2))):
         return Expr.integer(0)
+    if degrees and _symbolic(v):
+        return unary_expr(cos, 'cos', _to_radians(v))
     return unary_expr(cos_degree if degrees else cos, 'cos', v)
 
 
@@ -431,6 +465,8 @@ def sin_value(v: Expr, degrees=True):
         return Expr.integer(0)
     if (degrees and v.is_value(Expr.float(-90))) or (not degrees and v.is_value(-pi / Expr.float(2))):
         return Expr.integer(-1)
+    if degrees and _symbolic(v):
+        return unary_expr(sin, 'sin', _to_radians(v))
     return unary_expr(sin_degree if degrees else sin, 'sin', v)
 
 
@@ -447,6 +483,8 @@ def atan2_value(va: Expr, vb: Expr, degrees=True):
         if va.is_op:
             return [-half, half]
         return [half if va > zero else -half]
+    if degrees and _symbolic(va, vb):
+        return [_to_degrees(binary_expr(atan2, 'atan2', va, vb))]
     return [binary_expr(atan2_degree if degrees else atan2, 'atan2', va, vb)]
 
 

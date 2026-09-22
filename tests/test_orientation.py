@@ -540,7 +540,7 @@ class TestOrientation(TestCase):
         self.assertEqual(four.position(), three.position() - v_x1)
 
     def test_DepedentOrientation_triple_axis(self):
-        from math import sin, cos
+        from math import sin, cos, pi
         from mccode_antlr.common import Expr, unary_expr
         from mccode_antlr.instr.orientation import Vector, Angles, Orient, Rotation, Parts, RotationY
 
@@ -570,8 +570,13 @@ class TestOrientation(TestCase):
         #self.assertEqual(sample.position(), v1 +v1)
 
         ai = [Expr.id(f'a{i}') for i in range(7)]
-        sa = [unary_expr(sin, 'sin', a) for a in ai]
-        ca = [unary_expr(cos, 'cos', a) for a in ai]
+        # ROTATED angles are degrees, and sympy's sin/cos take radians, so
+        # sin_value/cos_value bake the conversion into the symbolic expression.
+        # The expected values have to carry the same factor -- before they did
+        # not, and this test asserted the missing conversion.
+        ar = [a * Expr.float(pi / 180) for a in ai]
+        sa = [unary_expr(sin, 'sin', a) for a in ar]
+        ca = [unary_expr(cos, 'cos', a) for a in ar]
         sample_position = Vector(sa[2], Expr.float(0.0), Expr.float(1) + ca[2])
         sample_analyzer_vector = Vector(ca[2] * sa[4] + sa[2] * ca[4], Expr.float(0), - sa[2] * sa[4] + ca[4] * ca[2])
 
