@@ -176,10 +176,21 @@ def component_ir_comp_path(json_path: Path) -> Path:
     return json_path.with_name(_COMPONENT_IR_SUFFIX_RE.sub('.comp', json_path.name))
 
 
+def is_component_ir_sidecar(path) -> bool:
+    """True for any component IR sidecar, whichever build wrote it.
+
+    Accepts a :class:`~pathlib.Path` or a bare filename. Used to keep generated
+    sidecars out of places that should only ever describe source files -- see
+    :func:`mccode_antlr.cli.cache.build_registry`.
+    """
+    name = path.name if isinstance(path, Path) else str(path)
+    return _COMPONENT_IR_SUFFIX_RE.search(name) is not None
+
+
 def iter_component_ir_paths(root: Path):
     """Every component IR sidecar under *root*, regardless of which build wrote it."""
     for path in root.rglob('*.comp*.json'):
-        if _COMPONENT_IR_SUFFIX_RE.search(path.name):
+        if is_component_ir_sidecar(path):
             yield path
 
 

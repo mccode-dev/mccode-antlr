@@ -119,6 +119,13 @@ def build_registry(
 ) -> dict[str, str]:
     """Hash every matching file under root/<dir> for each dir in dirs.
 
+    Component IR sidecars are always skipped. A registry describes source files,
+    and a sidecar is something mccode-antlr *generated* from one, so registering
+    it promises a file that no source repository contains -- which is how
+    ``mcstas-comps/optics/Collimator_linear.comp.json`` reached the published
+    McCode registries and broke ``cache populate`` for every tag that carried it.
+    There is deliberately no way to opt back in.
+
     Parameters
     ----------
     root:
@@ -139,18 +146,31 @@ def build_registry(
     dict mapping POSIX relative path -> sha256 hex digest (``pooch.file_hash``).
     """
     from pooch import file_hash
+    from mccode_antlr.reader.reader import is_component_ir_sidecar
 
     pattern_prefix = '**/*' if recursive else '*'
     suffixes = ext if ext else [None]
 
     hashes: dict[str, str] = {}
+    skipped: set[str] = set()
     for d in dirs:
         base = root / d
         for suffix in suffixes:
             pattern = pattern_prefix + suffix if suffix else pattern_prefix
             for path in base.glob(pattern):
-                if path.is_file():
-                    hashes[path.relative_to(root).as_posix()] = file_hash(str(path))
+                if not path.is_file():
+                    continue
+                name = path.relative_to(root).as_posix()
+                if is_component_ir_sidecar(path):
+                    skipped.add(name)
+                    continue
+                hashes[name] = file_hash(str(path))
+    if skipped:
+        print(
+            f"  skipped {len(skipped)} generated component IR sidecar(s), "
+            f"e.g. {sorted(skipped)[0]}",
+            flush=True,
+        )
     return hashes
 
 
@@ -936,7 +956,12 @@ def add_cache_management_parser(modes):
     # -- register --
     reg = actions.add_parser(
         name='register',
-        help='Mint a pooch registry file (path + sha256 hash per line) from a local directory tree',
+        help=(
+            'Mint a pooch registry file (path + sha256 hash per line) from a local '
+            'directory tree. Component IR sidecars (*.comp.json, *.comp.<salt>.json) '
+            'are always skipped: they are generated, so no source repository contains '
+            'them and registering one promises a file that can never be fetched.'
+        ),
     )
     reg.add_argument('root', type=str, help='Root path; registry entries are recorded relative to this')
     reg.add_argument('dirs', type=str, nargs='+', metavar='DIR', help='One or more directories under root to walk')

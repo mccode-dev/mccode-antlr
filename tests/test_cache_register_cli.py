@@ -101,3 +101,50 @@ def test_cache_register_missing_dir_warns_but_succeeds(tmp_path, capsys):
 
     lines = out.read_text().splitlines()
     assert {line.split(" ", 1)[0] for line in lines} == {"dir1/a.comp", "dir1/b.txt", "dir1/nested/c.comp"}
+
+
+def test_build_registry_skips_component_ir_sidecars(tmp_path):
+    """Generated IR sidecars are never registered, whichever build wrote them.
+
+    Registering one promises a file no source repository contains -- exactly how
+    mcstas-comps/optics/Collimator_linear.comp.json reached the published McCode
+    registries and made `cache populate` fail for every tag that carried it.
+    """
+    root = _make_tree(tmp_path)
+    # pre-salt sidecar (the form that actually leaked), and a salted one
+    (root / "dir1" / "a.comp.json").write_text("{}")
+    (root / "dir2" / "d.comp.8553da4f0f17.json").write_text("{}")
+
+    hashes = build_registry(root, ["dir1", "dir2"])
+
+    assert "dir1/a.comp" in hashes
+    assert "dir2/d.comp" in hashes
+    assert "dir1/a.comp.json" not in hashes
+    assert "dir2/d.comp.8553da4f0f17.json" not in hashes
+    assert not any(k.endswith(".json") for k in hashes)
+
+
+def test_build_registry_keeps_unrelated_json(tmp_path):
+    """Only the IR sidecar spelling is skipped -- other JSON is ordinary content."""
+    root = _make_tree(tmp_path)
+    (root / "dir1" / "data.json").write_text("{}")
+    (root / "dir1" / "thing.instr.json").write_text("{}")
+
+    hashes = build_registry(root, ["dir1", "dir2"])
+
+    assert "dir1/data.json" in hashes
+    assert "dir1/thing.instr.json" in hashes
+
+
+def test_cache_register_omits_sidecars_from_output(tmp_path, capsys):
+    """The minted file contains no sidecar, and the skip is reported."""
+    root = _make_tree(tmp_path)
+    (root / "dir1" / "a.comp.json").write_text("{}")
+    out = tmp_path / "pooch-registry.txt"
+
+    cache_register(str(root), ["dir1", "dir2"], out=str(out))
+
+    text = out.read_text()
+    assert "dir1/a.comp " in text
+    assert "a.comp.json" not in text
+    assert "skipped 1 generated component IR sidecar" in capsys.readouterr().out
