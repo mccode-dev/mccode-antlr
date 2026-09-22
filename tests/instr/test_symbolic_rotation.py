@@ -102,3 +102,46 @@ def test_radian_callers_are_untouched():
     """degrees=False must not acquire a conversion factor."""
     assert str(sin_value(Expr.parse('x'), degrees=False)) == 'sin(x)'
     assert str(cos_value(Expr.parse('x'), degrees=False)) == 'cos(x)'
+
+
+FORWARD_REF = """DEFINE INSTRUMENT fwd(TT=30)
+TRACE
+COMPONENT a = Thing() AT (0, 0, 0) ABSOLUTE
+COMPONENT b = Thing() AT (0, 0, 1) RELATIVE a
+COMPONENT c = Thing() AT (0, 0, 2) RELATIVE a
+END
+"""
+
+
+@pytest.mark.parametrize('angle', [0.0, 30.0, 45.0, 90.0, -60.0])
+def test_rotation_from_angles_agrees_symbolic_and_literal(angle):
+    """Rotation.from_angles built its trig with unary_expr directly, bypassing
+    sin_value/cos_value and so also bypassing the degrees conversion."""
+    from mccode_antlr.instr.orientation import Angles, Rotation
+
+    z = Expr.float(0)
+    literal = Rotation.from_angles(Angles(z, Expr.float(angle), z))
+    symbolic = Rotation.from_angles(Angles(z, Expr.parse('TT'), z))
+    for a, b in zip(literal, symbolic):
+        got = float(str(b.evaluate({'TT': angle}).simplify()))
+        assert got == pytest.approx(float(str(a)), abs=1e-12)
+
+
+def test_insert_component_keeps_a_symbolic_rotation():
+    """The live path onto Rotation.from_angles: inserting a component whose
+    ROTATED refers forward makes _fix_forward_ref_rotation re-express it, which
+    used to return -81.13 degrees where TT=30 was asked for."""
+    from mccode_antlr.instr.orientation import Angles
+
+    instr = parse_mccode_instr(FORWARD_REF, [_registry()])
+    z = Expr.float(0)
+    inserted = instr.insert_component(
+        'n', instr.components[0].type, before='b',
+        at_relative=((0, 0, 0.5), instr.get_component('a')),
+        rotate_relative=(Angles(z, Expr.parse('TT'), z), instr.get_component('c')),
+    )
+    angles = inserted.rotate_relative[0]
+    got = [float(str(x.evaluate({'TT': 30.0}).simplify()))
+           for x in (angles.x, angles.y, angles.z)]
+    # c carries no rotation of its own, so re-expressing must give back TT about y
+    assert got == pytest.approx([0.0, 30.0, 0.0], abs=1e-9)

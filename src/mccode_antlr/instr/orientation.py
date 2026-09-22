@@ -269,10 +269,14 @@ class Rotation(Struct):
     @staticmethod
     def from_angles(angles: Angles, degrees=True) -> RotationType:
         """Construct a rotation matrix from three angles"""
-        from math import cos, sin
-        from mccode_antlr.common import Expr, unary_expr
-        s = [unary_expr(sin_degree if degrees else sin, 'sin', j) for j in angles]
-        c = [unary_expr(cos_degree if degrees else cos, 'cos', j) for j in angles]
+        from mccode_antlr.common import Expr
+        # Go through sin_value/cos_value rather than unary_expr directly: they are
+        # what bake the degrees-to-radians conversion into a symbolic angle, and
+        # calling unary_expr here bypassed it, so from_angles built rotation
+        # matrices whose trig was in the wrong units the moment an angle was not a
+        # literal.
+        s = [sin_value(j, degrees=degrees) for j in angles]
+        c = [cos_value(j, degrees=degrees) for j in angles]
         z, o = Expr.float(0), Expr.float(1)
         rx = Rotation() if angles.x.is_zero else Rotation(o, z, z, z, c[0], s[0], z, -s[0], c[0])
         ry = Rotation() if angles.y.is_zero else Rotation(c[1], z, -s[1], z, o, z, s[1], z, c[1])
