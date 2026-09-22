@@ -750,8 +750,13 @@ class RotationPart(Part):
         return self.rotation_axis, self.v, 'degrees' if self.degrees else 'radian'
 
     def _cos_sin_one_zero(self):
-        r = self.v if self.degrees else degree_to_radian(self.v)
-        return cos_value(r), sin_value(r), Expr.integer(1), Expr.integer(0)
+        # `degrees` says what unit `v` is already in, so it is what cos_value and
+        # sin_value have to be told. Converting v and then leaving them on their
+        # degrees=True default ran the conversion twice, in the wrong direction:
+        # a v of pi/6 radians gave cos 0.99999 where 30 degrees is cos 0.86603.
+        return (cos_value(self.v, degrees=self.degrees),
+                sin_value(self.v, degrees=self.degrees),
+                Expr.integer(1), Expr.integer(0))
 
     def position(self, which=None) -> Vector:
         z = Expr.float(0)
