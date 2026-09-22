@@ -194,8 +194,46 @@ def seed_registry_manifests(names: list[str], tag: str, registry_dir: Path) -> l
     return seeded
 
 
+def warm_registries_via_pooch(registries) -> tuple[int, int]:
+    """Download every file of each pooch-backed registry in *registries*.
+
+    One request per file, so this is the slow path.  For the McCode registries
+    :func:`populate_from_clone` is far faster; this is what remains for registries
+    that have no git-clone shortcut, such as those named with ``--registry``.
+    Local registries are skipped: their files are already on disk.
+
+    Returns
+    -------
+    (total_fetched, error_count)
+    """
+    total = errors = 0
+    seen: set = set()
+
+    for reg in registries:
+        p = getattr(reg, 'pooch', None)
+        if p is None or id(p) in seen:
+            continue
+        seen.add(id(p))
+        # A registry manifest that lists itself cannot be re-fetched: the recorded
+        # hash is of the file as it stood before that line was added, so pooch
+        # rejects the download. We already hold the manifest, so skip it.
+        own = getattr(reg, 'filename', None)
+        own = own.name if isinstance(own, Path) else own
+        files = [f for f in p.registry_files if f != own]
+        print(f"  [{reg.name}] downloading {len(files)} files …", flush=True)
+        for fname in files:
+            try:
+                p.fetch(fname)
+                total += 1
+            except Exception as exc:
+                print(f"    WARNING: could not fetch {fname}: {exc}", flush=True)
+                errors += 1
+
+    return total, errors
+
+
 def warm_via_pooch(flavor=None) -> tuple[int, int]:
-    """Populate the pooch caches using individual file downloads (slow fallback).
+    """Populate the default McCode pooch caches using individual file downloads.
 
     Parameters
     ----------
@@ -208,28 +246,17 @@ def warm_via_pooch(flavor=None) -> tuple[int, int]:
     (total_fetched, error_count)
     """
     from mccode_antlr import Flavor
-    from mccode_antlr.reader.registry import _mccode_pooch_registries, default_registry_names
+    from mccode_antlr.reader import registry as _registry_mod
+    from mccode_antlr.reader.registry import default_registry_names
 
     flavors = (Flavor.MCSTAS, Flavor.MCXTRACE) if flavor is None else (flavor,)
 
     total = errors = 0
-    seen: set = set()
-
     for flv in flavors:
-        for reg in _mccode_pooch_registries(default_registry_names(flv)):
-            p = getattr(reg, 'pooch', None)
-            if p is None or id(p) in seen:
-                continue
-            seen.add(id(p))
-            files = list(p.registry_files)
-            print(f"  [{reg.name}] downloading {len(files)} files …", flush=True)
-            for fname in files:
-                try:
-                    p.fetch(fname)
-                    total += 1
-                except Exception as exc:
-                    print(f"    WARNING: could not fetch {fname}: {exc}", flush=True)
-                    errors += 1
+        regs = _registry_mod._mccode_pooch_registries(default_registry_names(flv))
+        t, e = warm_registries_via_pooch(regs)
+        total += t
+        errors += e
 
     return total, errors
 
@@ -267,28 +294,18 @@ def cache_list(name, long):
     print(f'{n} known {c} for {path.name}:\n{dstr}')
 
 
-def cache_populate(
-    tag: str | None, from_path: str | None, clone_url: str, flavor: str,
-    strict: bool = True, check_hashes: bool | None = None, registry_dir: str | None = None,
-):
-    """Bulk-populate the pooch caches from a McCode git tag or a local checkout."""
+def _resolve_mccode_tag(tag: str | None) -> str:
+    """Resolve *tag* to a concrete McCode version tag and make it effective.
+
+    ``None`` keeps the currently-configured tag, ``'latest'`` resolves to the
+    newest released one, anything else is taken as given.  The resolved value is
+    written back to ``MCCODEANTLR_MCCODE_POOCH__TAG`` so that every registry this
+    process builds afterwards points at the same version -- the pooch caches are
+    laid out per tag (``.../mcstas/v3.7.22/``), so this is what selects which
+    cached tree a command operates on.
+    """
     import os
-    import tempfile
-    import subprocess
-    import sys
 
-    from mccode_antlr import Flavor
-
-    resolved_flavor = None
-    if flavor and flavor.lower() != 'both':
-        resolved_flavor = Flavor[flavor.upper()]
-
-    # check_hashes defaults to following --strict/--no-strict when not given explicitly.
-    resolved_check_hashes = strict if check_hashes is None else check_hashes
-
-    # Resolve the tag to use.
-    # - no --tag      -> currently configured/effective registry tag
-    # - --tag latest  -> resolve to newest real version tag
     if tag is None or tag.lower() == 'latest':
         from mccode_antlr.reader.registry import _source_registry_tag
         if tag is not None:
@@ -297,46 +314,101 @@ def cache_populate(
         _, _, version = _source_registry_tag()
         tag = f'v{version}'
 
-    # Ensure the environment variable matches the resolved concrete tag for this process.
     os.environ['MCCODEANTLR_MCCODE_POOCH__TAG'] = tag
+    return tag
 
-    print(f"Populating pooch caches for McCode {tag} …", flush=True)
 
-    if registry_dir is not None:
-        registry_dir_path = Path(registry_dir).resolve()
-        if not registry_dir_path.is_dir():
-            print(f"ERROR: --registry-dir {registry_dir_path} does not exist or is not a directory.", flush=True)
-            sys.exit(1)
-        from mccode_antlr.reader.registry import default_registry_names
-        flavors_for_names = (Flavor.MCSTAS, Flavor.MCXTRACE) if resolved_flavor is None else (resolved_flavor,)
-        names = []
-        for flv in flavors_for_names:
-            for n in default_registry_names(flv):
-                if n not in names:
-                    names.append(n)
-        seed_registry_manifests(names, tag, registry_dir_path)
+def cache_populate(
+    tag: str | None, from_path: str | None, clone_url: str, flavor: str,
+    strict: bool = True, check_hashes: bool | None = None, registry_dir: str | None = None,
+    registry: list[str] | None = None,
+):
+    """Bulk-populate the pooch caches from a McCode git tag or a local checkout.
 
-    if from_path is not None:
-        src = Path(from_path).resolve()
-        if not src.is_dir():
-            print(f"ERROR: --from-path {src} does not exist or is not a directory.", flush=True)
-            sys.exit(1)
-        print(f"Using local checkout: {src}", flush=True)
-        total, errors = populate_from_clone(
-            src, tag, flavor=resolved_flavor, strict=strict, check_hashes=resolved_check_hashes,
-        )
+    Registries named with ``--registry`` are populated too, file by file through
+    pooch — they have no git-clone shortcut. This is the only command that
+    downloads; ``cache ir-build`` parses whatever is already on disk.
+
+    ``flavor='none'`` skips the McCode side entirely — no tag resolution, no
+    clone, no checkout — so populating only ``--registry`` extras costs nothing
+    else.
+    """
+    import os
+    import tempfile
+    import subprocess
+    import sys
+
+    from mccode_antlr import Flavor
+
+    skip_mccode = bool(flavor) and flavor.lower() == 'none'
+    resolved_flavor = None
+    if flavor and flavor.lower() not in ('both', 'none'):
+        resolved_flavor = Flavor[flavor.upper()]
+
+    # check_hashes defaults to following --strict/--no-strict when not given explicitly.
+    resolved_check_hashes = strict if check_hashes is None else check_hashes
+
+    total = errors = 0
+
+    if skip_mccode:
+        if registry_dir is not None:
+            print(
+                'WARNING: --registry-dir seeds McCode registry manifests, which '
+                '--flavor none skips — ignoring it.',
+                flush=True,
+            )
+        if not registry:
+            print(
+                'Nothing to do: --flavor none skips McCode and no --registry was given.',
+                flush=True,
+            )
     else:
-        with tempfile.TemporaryDirectory() as tmp:
-            dest = Path(tmp) / 'McCode'
-            print(f"Cloning {clone_url} at {tag} …", flush=True)
-            subprocess.run(
-                ['git', 'clone', '--depth=1', '-c', 'core.autocrlf=false',
-                 '--branch', tag, '--', clone_url, str(dest)],
-                check=True,
-            )
+        tag = _resolve_mccode_tag(tag)
+        print(f"Populating pooch caches for McCode {tag} …", flush=True)
+
+        if registry_dir is not None:
+            registry_dir_path = Path(registry_dir).resolve()
+            if not registry_dir_path.is_dir():
+                print(f"ERROR: --registry-dir {registry_dir_path} does not exist or is not a directory.", flush=True)
+                sys.exit(1)
+            from mccode_antlr.reader.registry import default_registry_names
+            flavors_for_names = (Flavor.MCSTAS, Flavor.MCXTRACE) if resolved_flavor is None else (resolved_flavor,)
+            names = []
+            for flv in flavors_for_names:
+                for n in default_registry_names(flv):
+                    if n not in names:
+                        names.append(n)
+            seed_registry_manifests(names, tag, registry_dir_path)
+
+        if from_path is not None:
+            src = Path(from_path).resolve()
+            if not src.is_dir():
+                print(f"ERROR: --from-path {src} does not exist or is not a directory.", flush=True)
+                sys.exit(1)
+            print(f"Using local checkout: {src}", flush=True)
             total, errors = populate_from_clone(
-                dest, tag, flavor=resolved_flavor, strict=strict, check_hashes=resolved_check_hashes,
+                src, tag, flavor=resolved_flavor, strict=strict, check_hashes=resolved_check_hashes,
             )
+        else:
+            with tempfile.TemporaryDirectory() as tmp:
+                dest = Path(tmp) / 'McCode'
+                print(f"Cloning {clone_url} at {tag} …", flush=True)
+                subprocess.run(
+                    ['git', 'clone', '--depth=1', '-c', 'core.autocrlf=false',
+                     '--branch', tag, '--', clone_url, str(dest)],
+                    check=True,
+                )
+                total, errors = populate_from_clone(
+                    dest, tag, flavor=resolved_flavor, strict=strict, check_hashes=resolved_check_hashes,
+                )
+
+    for extra in _registries_from_specs(registry):
+        if getattr(extra, 'pooch', None) is None:
+            print(f"  [{extra.name}] local registry — nothing to download", flush=True)
+            continue
+        t, e = warm_registries_via_pooch([extra])
+        total += t
+        errors += e
 
     print(f"\nDone. {total} files cached, {errors} errors.", flush=True)
     if errors and strict:
@@ -444,6 +516,30 @@ def cache_ir_clean(stale: bool, force: bool):
 # Component IR cache build
 # ---------------------------------------------------------------------------
 
+# Per-process Reader used to resolve INHERIT/COPY parents while building IR.
+# A component defined as `DEFINE COMPONENT b INHERIT a` cannot be parsed without
+# something able to find `a`, so every worker needs a Reader over the same
+# registries the paths were collected from.  Set by :func:`_ir_worker_init`,
+# which runs once per pool worker (and once directly in the serial path).
+_IR_READER = None
+
+
+def _ir_worker_init(registries, flavor, tag=None) -> None:
+    """Build this process's Reader once, for INHERIT/COPY parent lookups.
+
+    *tag* is re-applied here rather than inherited: a worker started by the
+    ``spawn`` or ``forkserver`` methods does not carry the parent's later
+    ``os.environ`` edits, and a parent resolved against the wrong McCode version
+    would silently write sidecars into the wrong cached tree.
+    """
+    global _IR_READER
+    import os
+    from mccode_antlr.reader.reader import Reader
+    if tag is not None:
+        os.environ['MCCODEANTLR_MCCODE_POOCH__TAG'] = tag
+    _IR_READER = Reader(registries=list(registries), flavor=flavor)
+
+
 def _build_one_ir(comp_path_str: str, force: bool) -> tuple[str, str]:
     """Parse one ``.comp`` file and write its ``.comp.json``.
 
@@ -474,26 +570,71 @@ def _build_one_ir(comp_path_str: str, force: bool) -> tuple[str, str]:
         error_listener = make_reader_error_listener(
             McComp_ErrorListener, 'Component', comp_path.stem, source
         )
-        comp = Comp.from_source(None, error_listener, source, str(comp_path), str(comp_path))
+        comp = Comp.from_source(_IR_READER, error_listener, source, str(comp_path), str(comp_path))
         component_cache.put(comp_path, comp)
         return (comp_path_str, 'built')
     except Exception as exc:
         return (comp_path_str, f'error: {exc}')
 
 
-def _collect_comp_paths(registries) -> list[Path]:
-    """Return deduplicated absolute paths to all locally-present ``.comp`` files in *registries*.
+_REGISTRY_SPEC_FORMS = (
+    'Expected one of:\n'
+    '  /path/to/dir\n'
+    '  name /path/to/dir [non-recursive]\n'
+    '  name url /path/to/pooch-registry.txt\n'
+    '  name url version registry-file-name\n'
+    '  owner/repo@version[#registry-file]\n'
+    '  git+url@version[#registry-file]\n'
+    'The compact git forms need an explicit @version (e.g. @main or @v1.2.3).'
+)
 
-    Only files that are already present on disk are returned.  Call
-    :func:`cache_populate` first when you want to download remote files.
+
+def _registries_from_specs(specs) -> list:
+    """Build Registry objects from ``--registry`` specification strings.
+
+    An unparsable spec is reported with the accepted forms and skipped, rather
+    than aborting a run that may still have useful work to do.
+    """
+    from mccode_antlr.reader.registry import registry_from_specification
+
+    out = []
+    for spec in (specs or []):
+        try:
+            extra = registry_from_specification(spec)
+        except Exception as exc:
+            print(f'WARNING: could not parse registry spec {spec!r}: {exc} — skipping.', flush=True)
+            continue
+        if extra is None:
+            indented = '\n'.join(f'         {line}' for line in _REGISTRY_SPEC_FORMS.split('\n'))
+            print(
+                f'WARNING: could not parse registry spec {spec!r} — skipping.\n{indented}',
+                flush=True,
+            )
+            continue
+        out.append(extra)
+    return out
+
+
+def _collect_comp_paths(registries) -> tuple[list[Path], int]:
+    """Find every locally-present ``.comp`` file in *registries*.
+
+    Only files already on disk can be parsed, so a registry whose files have not
+    been downloaded contributes nothing.  ``cache populate`` is what downloads
+    them; the count of not-yet-present files is returned so the caller can say so
+    rather than silently building a fraction of the registry.
 
     Parameters
     ----------
     registries:
         An iterable of :class:`~mccode_antlr.reader.registry.Registry` objects.
+
+    Returns
+    -------
+    (deduplicated absolute paths, number of registered .comp files not on disk)
     """
     seen: set[Path] = set()
     paths: list[Path] = []
+    missing = 0
 
     for reg in registries:
         if getattr(reg, 'pooch', None) is not None:
@@ -507,6 +648,8 @@ def _collect_comp_paths(registries) -> list[Path]:
                     if key not in seen:
                         seen.add(key)
                         paths.append(key)
+                else:
+                    missing += 1
         else:
             # Local registry
             root = getattr(reg, 'root', None)
@@ -519,60 +662,73 @@ def _collect_comp_paths(registries) -> list[Path]:
                     seen.add(key)
                     paths.append(key)
 
-    return paths
+    return paths, missing
 
 
-def cache_ir_build(flavor: str, jobs: int, force: bool, download: bool,
-                   registry: list[str] | None):
-    """Pre-build component IR (``.comp.json``) files for all known registries."""
-    import os
-    from concurrent.futures import ProcessPoolExecutor, as_completed
-    from functools import partial
+def _registries_for_flavors(flavor: str, registry: list[str] | None) -> tuple[list, list]:
+    """Default registries for *flavor* plus any ``--registry`` extras.
+
+    Returns ``(flavors, registries)``; both ``populate`` and ``ir-build`` need the
+    same set, so they resolve it the same way.
+    """
     from mccode_antlr import Flavor
-    from mccode_antlr.reader.registry import default_registries, registry_from_specification
+    from mccode_antlr.reader.registry import default_registries
 
-    # Resolve target flavors
-    if flavor == 'both':
+    if flavor == 'none':
+        flavors = []
+    elif flavor == 'both':
         flavors = [Flavor.MCSTAS, Flavor.MCXTRACE]
     else:
         flavors = [Flavor[flavor.upper()]]
 
-    # Collect registries: defaults for each flavor + any user-supplied extras
-    all_registries = []
+    registries = []
     seen_regs: set = set()
     for flv in flavors:
         for reg in default_registries(flv):
             if id(reg) not in seen_regs:
                 seen_regs.add(id(reg))
-                all_registries.append(reg)
+                registries.append(reg)
 
-    for spec in (registry or []):
-        try:
-            extra = registry_from_specification(spec)
-        except Exception as exc:
-            print(f'WARNING: could not parse registry spec {spec!r}: {exc} — skipping.', flush=True)
-            continue
-        if extra is None:
-            print(f'WARNING: could not parse registry spec {spec!r} — skipping.', flush=True)
-            continue
-        all_registries.append(extra)
+    registries.extend(_registries_from_specs(registry))
+    return flavors, registries
 
-    # Bulk-populate the default pooch caches via a single git clone when requested.
-    # This is much faster than fetching individual files and is the preferred approach.
-    if download:
-        print('Pre-populating pooch caches via git clone …', flush=True)
-        cache_populate(
-            tag=None,
-            from_path=None,
-            clone_url='https://github.com/mccode-dev/McCode.git',
-            flavor=flavor,
-        )
 
-    # Collect locally-present .comp paths (all default files are present after populate)
+def cache_ir_build(flavor: str, jobs: int, force: bool, registry: list[str] | None,
+                   tag: str | None = None):
+    """Pre-build component IR (``.comp.json``) files for all known registries.
+
+    Builds IR from files already on disk and downloads nothing: ``cache populate``
+    is the command that fills the caches, including any ``--registry`` extras.
+
+    The pooch caches are laid out per McCode version, so *tag* selects which
+    cached tree to build IR for when several have been populated.
+    """
+    import os
+    from concurrent.futures import ProcessPoolExecutor, as_completed
+    from functools import partial
+
+    # Resolve the tag before the registries: it is what decides which versioned
+    # cache directory they point at.
+    resolved_tag = None
+    if flavor != 'none':
+        resolved_tag = _resolve_mccode_tag(tag)
+        print(f'Building IR for McCode {resolved_tag} …', flush=True)
+    elif tag is not None:
+        print('WARNING: --tag selects a McCode version, which --flavor none skips — ignoring it.',
+              flush=True)
+
+    flavors, all_registries = _registries_for_flavors(flavor, registry)
+
     print('Collecting .comp files …', flush=True)
-    comp_paths = _collect_comp_paths(all_registries)
+    comp_paths, missing = _collect_comp_paths(all_registries)
+    if missing:
+        print(
+            f'  {missing} registered .comp file(s) are not downloaded and will be '
+            f'skipped; run `mccode-antlr cache populate` to fetch them.',
+            flush=True,
+        )
     if not comp_paths:
-        print('No .comp files found (use --download to fetch and cache files first).')
+        print('No .comp files found — run `mccode-antlr cache populate` first.')
         return
 
     n = len(comp_paths)
@@ -584,7 +740,28 @@ def cache_ir_build(flavor: str, jobs: int, force: bool, download: bool,
     worker = partial(_build_one_ir, force=force)
     built = hits = errors = 0
 
+    # The Reader that resolves INHERIT/COPY parents is built per process: once
+    # here for the serial path, once per worker via the pool's initializer.
+    #
+    # Under --flavor none it must still see the McCode registries: --flavor
+    # chooses what to build IR *for*, and a --registry component may well
+    # INHERIT a McCode one. Listing a registry is free -- Reader only sorts them
+    # by priority, and a registry builds its pooch index lazily -- so nothing is
+    # fetched unless a parent lookup actually reaches that far.
+    lookup_registries = list(all_registries)
+    if not flavors:
+        from mccode_antlr import Flavor
+        from mccode_antlr.reader.registry import default_registries
+        seen_ids = {id(r) for r in lookup_registries}
+        for flv in (Flavor.MCSTAS, Flavor.MCXTRACE):
+            for reg in default_registries(flv):
+                if id(reg) not in seen_ids:
+                    seen_ids.add(id(reg))
+                    lookup_registries.append(reg)
+    reader_args = (lookup_registries, flavors[0] if flavors else None, resolved_tag)
+
     if jobs == 1:
+        _ir_worker_init(*reader_args)
         for path in comp_paths:
             _, status = worker(str(path))
             if status == 'built':
@@ -595,7 +772,9 @@ def cache_ir_build(flavor: str, jobs: int, force: bool, download: bool,
                 errors += 1
                 print(f'  {path.name}: {status}', flush=True)
     else:
-        with ProcessPoolExecutor(max_workers=jobs) as pool:
+        with ProcessPoolExecutor(
+            max_workers=jobs, initializer=_ir_worker_init, initargs=reader_args,
+        ) as pool:
             futures = {pool.submit(_build_one_ir, str(p), force): p for p in comp_paths}
             for future in as_completed(futures):
                 _, status = future.result()
@@ -649,8 +828,12 @@ def add_cache_management_parser(modes):
         help='Git URL to clone when --from-path is not given',
     )
     p.add_argument(
-        '--flavor', default='both', choices=['mcstas', 'mcxtrace', 'both'],
-        help="Which flavor's registries to populate (default: both)",
+        '--flavor', default='both', choices=['mcstas', 'mcxtrace', 'both', 'none'],
+        help=(
+            "Which flavor's registries to populate (default: both). Use 'none' to "
+            "skip McCode entirely — no tag resolution and no clone — and populate "
+            "only the registries given with --registry."
+        ),
     )
     p.add_argument(
         '--strict', action=argparse.BooleanOptionalAction, default=True,
@@ -675,6 +858,13 @@ def add_cache_management_parser(modes):
             'instead of fetching the manifest from mccode_pooch.registry, and '
             'seed pooch\'s cache so later cache populate / translation calls at '
             'the same tag also use them without any network access.'
+        ),
+    )
+    p.add_argument(
+        '-R', '--registry', action='append', default=None, metavar='SPEC',
+        help=(
+            'Also download this registry (repeatable); file by file, since only the '
+            'McCode registries have a git-clone shortcut. ' + _REGISTRY_SPEC_FORMS.replace('\n', ' ')
         ),
     )
     p.set_defaults(action=cache_populate)
@@ -704,35 +894,41 @@ def add_cache_management_parser(modes):
     # -- ir-build --
     ib = actions.add_parser(
         name='ir-build',
-        help='Pre-build component IR cache sidecars for all known registries',
+        help=(
+            'Pre-build component IR cache sidecars from the .comp files already on '
+            'disk (downloads nothing — see `cache populate`)'
+        ),
     )
     ib.add_argument(
-        '--flavor', default='both', choices=['mcstas', 'mcxtrace', 'both'],
-        help="Which flavor's registries to build IR for (default: both)",
+        '--tag', default=None,
+        help=(
+            'McCode version tag whose cached components to build IR for '
+            '(e.g. v3.5.31, latest); defaults to the currently-configured version. '
+            'The pooch caches are per version, so this picks between them when '
+            'several have been populated.'
+        ),
     )
     ib.add_argument(
-        '-j', '--jobs', type=int, default=None, metavar='N',
-        help='Number of parallel workers (default: os.cpu_count())',
+        '--flavor', default='both', choices=['mcstas', 'mcxtrace', 'both', 'none'],
+        help=(
+            "Which flavor's registries to build IR for (default: both). Use 'none' "
+            "to build only the registries given with --registry."
+        ),
+    )
+    ib.add_argument(
+        '-j', '--jobs', type=int, nargs='?', default=None, const=None, metavar='N',
+        help='Number of parallel workers; bare -j or omitted means os.cpu_count()',
     )
     ib.add_argument(
         '--force', action='store_true',
         help='Rebuild even if the IR sidecar is already up-to-date',
     )
     ib.add_argument(
-        '--download', action='store_true',
-        help=(
-            'Bulk-populate the pooch cache via git clone before building IR. '
-            'Uses the same mechanism as ``cache populate`` — much faster than '
-            'individual file fetches.'
-        ),
-    )
-    ib.add_argument(
         '-R', '--registry', action='append', default=None, metavar='SPEC',
         help=(
-            'Extra registry to include (repeatable). SPEC formats:\n'
-            '  /path/to/dir\n'
-            '  name /path/to/dir\n'
-            '  name url version registry-file-name'
+            'Extra registry to build IR for (repeatable). Only files already on disk '
+            'are built: pass the same specification to `cache populate` first to '
+            'download them. ' + _REGISTRY_SPEC_FORMS.replace('\n', ' ')
         ),
     )
     ib.set_defaults(action=cache_ir_build)

@@ -69,12 +69,19 @@ def rebuild_language(grammar_file,
     if not isinstance(grammar_file, Path):
         grammar_file = Path(grammar_file)
 
+    # ANTLR stamps the grammar path it was handed into a "Generated from ..."
+    # comment at the top of every file it writes.  Hand it a bare filename, from
+    # the grammar directory, so that comment names the grammar and not whichever
+    # machine happened to run the build -- these files are committed, and an
+    # absolute path makes the diff depend on the developer rather than the input.
+    out_dir = Path(output) if output is not None else grammar_file.parent / str(target)
+    work_dir = grammar_file.parent.resolve()
     args =[
         f'-Dlanguage={target}',
         '-visitor' if Feature.visitor in features else '-no-visitor',
         '-listener' if Feature.listener in features else '-no-listener',
-        '-o', output or str(grammar_file.parent / str(target)),
-        str(grammar_file)
+        '-o', str(Path(out_dir).resolve()),
+        grammar_file.name
     ]
 
     if verbose:
@@ -89,7 +96,7 @@ def rebuild_language(grammar_file,
 
     jar, java = install_jre_and_antlr(antlr4_version(version))
     # Call antlr4
-    p = Popen([java, '-cp', jar, 'org.antlr.v4.Tool'] + args, stdout=PIPE, stderr=PIPE)
+    p = Popen([java, '-cp', jar, 'org.antlr.v4.Tool'] + args, stdout=PIPE, stderr=PIPE, cwd=str(work_dir))
     out, err = [x.decode('UTF-8') for x in p.communicate()]
     if err:
         print(err, end='')

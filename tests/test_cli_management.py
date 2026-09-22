@@ -690,7 +690,7 @@ class TestCacheIR:
         from mccode_antlr.cli.cache import cache_ir_build
         assert not list(comp_dir.glob('*.comp*.json'))
         cache_ir_build(
-            flavor='mcstas', jobs=1, force=False, download=False,
+            flavor='mcstas', jobs=1, force=False,
             registry=[str(comp_dir)],
         )
         assert list(comp_dir.glob('*.comp*.json'))
@@ -698,11 +698,11 @@ class TestCacheIR:
     def test_ir_build_hits_on_second_run(self, comp_dir, capsys, mock_default_registries):
         from mccode_antlr.cli.cache import cache_ir_build
         # First run builds
-        cache_ir_build(flavor='mcstas', jobs=1, force=False, download=False,
+        cache_ir_build(flavor='mcstas', jobs=1, force=False,
                        registry=[str(comp_dir)])
         capsys.readouterr()
         # Second run should report hits
-        cache_ir_build(flavor='mcstas', jobs=1, force=False, download=False,
+        cache_ir_build(flavor='mcstas', jobs=1, force=False,
                        registry=[str(comp_dir)])
         out = capsys.readouterr().out
         assert 'already up-to-date' in out
@@ -710,10 +710,10 @@ class TestCacheIR:
     def test_ir_build_force_rebuilds(self, comp_dir, capsys, mock_default_registries):
         from mccode_antlr.cli.cache import cache_ir_build
         # Build once, then force rebuild
-        cache_ir_build(flavor='mcstas', jobs=1, force=False, download=False,
+        cache_ir_build(flavor='mcstas', jobs=1, force=False,
                        registry=[str(comp_dir)])
         capsys.readouterr()
-        cache_ir_build(flavor='mcstas', jobs=1, force=True, download=False,
+        cache_ir_build(flavor='mcstas', jobs=1, force=True,
                        registry=[str(comp_dir)])
         out = capsys.readouterr().out
         assert '0 already up-to-date' in out or 'built' in out
@@ -721,7 +721,7 @@ class TestCacheIR:
     def test_ir_build_registry_spec_local_dir(self, comp_dir, capsys, mock_default_registries):
         """--registry accepts a bare local path."""
         from mccode_antlr.cli.cache import cache_ir_build
-        cache_ir_build(flavor='mcstas', jobs=1, force=False, download=False,
+        cache_ir_build(flavor='mcstas', jobs=1, force=False,
                        registry=[str(comp_dir)])
         out = capsys.readouterr().out
         assert 'built' in out or 'already up-to-date' in out
@@ -729,16 +729,16 @@ class TestCacheIR:
     def test_ir_build_bad_registry_spec_warns(self, comp_dir, capsys, mock_default_registries):
         """An un-parseable registry spec should warn and continue."""
         from mccode_antlr.cli.cache import cache_ir_build
-        cache_ir_build(flavor='mcstas', jobs=1, force=False, download=False,
+        cache_ir_build(flavor='mcstas', jobs=1, force=False,
                        registry=['not-a-valid-spec://xyz'])
         out = capsys.readouterr().out
         assert 'WARNING' in out or 'warning' in out.lower() or 'No .comp files found' in out
 
-    def test_ir_build_no_comps_without_download(self, tmp_path, capsys, mock_default_registries):
-        """With no locally-cached files and --download off, nothing is built."""
+    def test_ir_build_no_comps_when_nothing_on_disk(self, tmp_path, capsys, mock_default_registries):
+        """ir-build downloads nothing, so an empty registry builds nothing."""
         from mccode_antlr.cli.cache import cache_ir_build
         # Empty local dir → no .comp files → should print "No .comp files found"
-        cache_ir_build(flavor='mcstas', jobs=1, force=False, download=False,
+        cache_ir_build(flavor='mcstas', jobs=1, force=False,
                        registry=[str(tmp_path)])
         out = capsys.readouterr().out
         assert 'No .comp files found' in out

@@ -21,7 +21,7 @@ jobs:
           # Pinned-tag control job: if this fails alongside the latest-tag jobs,
           # the breakage is ours, not upstream's.
           - platform: ubuntu-latest
-            tag: "v3.5.31"
+            tag: "v3.8.7"
             python-version: "3.13"
             strategy: ".[test,hdf5,mcpl]"
 
