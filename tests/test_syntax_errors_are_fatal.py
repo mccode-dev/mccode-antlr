@@ -6,7 +6,8 @@ this was made fatal:
 
   - `vector N[4]={1000.0}` dropped the default, leaving N an unset vector;
   - a parameter named `vector` came back named `<missing Identifier>`;
-  - Test_Mono.instr, 17 components long, parsed as 5 with no error raised.
+  - an instrument with a removed McStas 1.x keyword in it parsed as its first
+    component alone, with no error raised.
 
 Recovery is still worth having -- one parse reports every error in a file rather
 than only the first -- but the result has to be rejected afterwards.
@@ -88,13 +89,19 @@ COMPONENT b = Thing() AT (0, 0, 1) RELATIVE a
 END
 """
 
-# `%` starts nothing outside a %{ %} block. This is the Test_Mono.instr shape:
-# everything after the stray line was silently dropped, and the parse "succeeded".
+# `STATE PARAMETERS` is McStas 1.x, removed in 3.x -- classic mcstas answers it
+# with "mcstas 3.8.5 does NOT support this keyword". Everything after it is
+# silently dropped: without a listener this instrument yields one component, not
+# three, and the parse "succeeds".
+#
+# This used to use a stray `% ...` line, which was the Test_Mono.instr shape. That
+# is a *valid* McCode comment -- see tests/test_percent_comments.py -- so it is no
+# longer an example of anything.
 TRUNCATING_INSTR = """DEFINE INSTRUMENT trunc()
 TRACE
 COMPONENT a = Thing() AT (0, 0, 0) ABSOLUTE
 
-% a comment written the wrong way
+STATE PARAMETERS (x,y,z,vx,vy,vz,t,s1,s2,p)
 
 COMPONENT b = Thing() AT (0, 0, 1) RELATIVE a
 COMPONENT c = Thing() AT (0, 0, 2) RELATIVE a
@@ -145,3 +152,25 @@ def test_all_errors_are_reported_not_just_the_first():
     assert len(errors) == 3
     assert [line for line, _, _ in errors] == [4, 5, 6]
     assert str(info.value).startswith('3 syntax errors parsing Component T:')
+
+
+def test_the_truncating_instrument_really_does_truncate():
+    """Guards the fixture itself.
+
+    If the construct in TRUNCATING_INSTR ever becomes valid, this fails loudly
+    instead of the suite quietly testing nothing. That is exactly how the previous
+    fixture rotted: it used a `% ...` line, which later became a valid McCode
+    comment, and two tests above started passing for the wrong reason.
+    """
+    from antlr4 import InputStream
+    from mccode_antlr.grammar import McInstr_parse
+    from mccode_antlr.instr import InstrVisitor
+    from mccode_antlr.reader import Reader
+
+    # parse the way the loader used to: no error listener at all
+    reader = Reader(registries=[_registry()])
+    instr = InstrVisitor(reader, '<test>').visitProg(
+        McInstr_parse(InputStream(TRUNCATING_INSTR), 'prog')
+    )
+    assert TRUNCATING_INSTR.count('\nCOMPONENT ') == 3
+    assert len(instr.components) == 1, 'fixture no longer truncates'
