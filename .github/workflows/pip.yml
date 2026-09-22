@@ -11,7 +11,7 @@ concurrency:
 env:
   # Pin the McCode version whose component and library files are used in tests.
   # Bump this when a new McCode release should be adopted.
-  MCCODE_VERSION: v3.5.31
+  MCCODE_VERSION: v3.8.7
 
 jobs:
   build:
