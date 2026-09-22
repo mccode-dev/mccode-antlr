@@ -63,6 +63,10 @@ class Comp(Struct):
         from mccode_antlr.reader.reader import make_reader_error_listener
         stream = InputStream(source)
         tree = McComp_parse(stream, 'prog', error_listener)
+        # ANTLR recovers and returns a tree even for input it could not parse, so
+        # the tree is only trustworthy once the listener reports no errors.
+        if hasattr(error_listener, 'raise_for_errors'):
+            error_listener.raise_for_errors()
         visitor = CompVisitor(reader, filename or '<source>')
         comp = visitor.visitProg(tree)
         if comp.category is None and (filename is not None or fullname is not None):

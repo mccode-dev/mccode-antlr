@@ -8,12 +8,28 @@ from mccode_antlr.reader import Registry
 from mccode_antlr.reader.registry import ensure_registries
 
 
+def _instr_error_listener(contents: str, source: str):
+    """Collecting listener for the loader's parses.
+
+    Without one ANTLR falls back to ConsoleErrorListener, which prints to stderr
+    and lets a failed parse through as a structurally wrong Instr.
+    """
+    from mccode_antlr.grammar import McInstr_ErrorListener
+    from mccode_antlr.reader.reader import make_reader_error_listener
+    return make_reader_error_listener(
+        McInstr_ErrorListener, 'Instrument', source, contents
+    )
+
+
 def parse_mccode_instr_parameters(contents: str):
     from antlr4 import InputStream
     from mccode_antlr.grammar import McInstr_parse
     from mccode_antlr.instr import InstrParametersVisitor
+    listener = _instr_error_listener(contents, '<string>')
+    tree = McInstr_parse(InputStream(contents), 'prog', listener)
+    listener.raise_for_errors()
     visitor = InstrParametersVisitor()
-    return visitor.visitProg(McInstr_parse(InputStream(contents), 'prog'))
+    return visitor.visitProg(tree)
 
 
 def parse_mccode_instr(contents: str, registries: list[Registry], source: str | None = None) -> Instr:
@@ -30,8 +46,11 @@ def parse_mccode_instr(contents: str, registries: list[Registry], source: str | 
         if reg.name not in known_names:
             reader.append_registry(reg)
             known_names.add(reg.name)
+    listener = _instr_error_listener(contents, source or '<string>')
+    tree = McInstr_parse(InputStream(contents), 'prog', listener)
+    listener.raise_for_errors()
     visitor = InstrVisitor(reader, source or '<string>')
-    instr = visitor.visitProg(McInstr_parse(InputStream(contents), 'prog'))
+    instr = visitor.visitProg(tree)
     instr.registries += tuple(registries)
     return instr
 
