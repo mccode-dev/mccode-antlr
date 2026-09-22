@@ -1,4 +1,4 @@
-# Generated from /home/g/Code/mccode-tidy/src/grammar/McDoc.g4 by ANTLR 4.13.2
+# Generated from McDoc.g4 by ANTLR 4.13.2
 from antlr4 import *
 if "." in __name__:
     from .McDocParser import McDocParser
@@ -41,16 +41,6 @@ class McDocVisitor(ParseTreeVisitor):
 
     # Visit a parse tree produced by McDocParser#OtherSection.
     def visitOtherSection(self, ctx:McDocParser.OtherSectionContext):
-        return self.visitChildren(ctx)
-
-
-    # Visit a parse tree produced by McDocParser#OrphanLine.
-    def visitOrphanLine(self, ctx:McDocParser.OrphanLineContext):
-        return self.visitChildren(ctx)
-
-
-    # Visit a parse tree produced by McDocParser#BlankLine.
-    def visitBlankLine(self, ctx:McDocParser.BlankLineContext):
         return self.visitChildren(ctx)
 
 
