@@ -109,6 +109,26 @@ class CFunctionCall(Function):
         return result
 
 
+class CCast(Function):
+    """A C cast, ``(type)value``, carried through opaquely.
+
+    ``args[0]`` is the type name as a :class:`sympy.Symbol`; ``args[1]`` is the
+    value. Classic McCode never interprets a cast -- its instrument expressions
+    are token soup copied verbatim into the generated C -- so neither does this.
+    The node exists to reproduce the cast on output, not to model C's conversion
+    semantics, and it deliberately does not fold: an expression containing one
+    stays symbolic.
+    """
+    @classmethod
+    def eval(cls, *args):
+        return None
+
+    @property
+    def free_symbols(self):
+        # args[0] is the type name, a fixed identifier rather than a variable.
+        return set(self.args[1].free_symbols)
+
+
 class CInitializerList(Function):
     """C initializer list ``{a, b, c}`` used for array/vector literals."""
     @classmethod

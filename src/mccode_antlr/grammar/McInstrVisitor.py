@@ -229,6 +229,11 @@ class McInstrVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
+    # Visit a parse tree produced by McInstrParser#cast_type.
+    def visitCast_type(self, ctx:McInstrParser.Cast_typeContext):
+        return self.visitChildren(ctx)
+
+
     # Visit a parse tree produced by McInstrParser#initializerlist.
     def visitInitializerlist(self, ctx:McInstrParser.InitializerlistContext):
         return self.visitChildren(ctx)
@@ -346,6 +351,11 @@ class McInstrVisitor(ParseTreeVisitor):
 
     # Visit a parse tree produced by McInstrParser#ExpressionBinaryGreaterEqual.
     def visitExpressionBinaryGreaterEqual(self, ctx:McInstrParser.ExpressionBinaryGreaterEqualContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by McInstrParser#ExpressionCast.
+    def visitExpressionCast(self, ctx:McInstrParser.ExpressionCastContext):
         return self.visitChildren(ctx)
 
 

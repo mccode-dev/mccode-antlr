@@ -1,7 +1,7 @@
 """ANTLR visitor functions that build SymPy-backed Expr objects from parse trees."""
 from .expression import Expr, ObjectType, ShapeType, DataType
 from .expression.sympy_classes import (
-    CPointerAccess, CStructAccess, CArrayIndex, CFunctionCall,
+    CPointerAccess, CStructAccess, CArrayIndex, CCast, CFunctionCall,
     CLeftShift, CRightShift, CTernary, CAnd, COr, CNot,
     CBitwiseAnd, CBitwiseOr, CBitwiseXor, CBitwiseNot,
 )
@@ -98,6 +98,20 @@ def visitExpressionZero(obj, ctx):
 def visitExpressionBinaryPM(obj, ctx):
     left, right = [obj.visit(ex) for ex in ctx.expr()]
     return left + right if ctx.Minus() is None else left - right
+
+def visitExpressionCast(obj, ctx):
+    """A C cast, carried through without being interpreted.
+
+    Classic McCode copies instrument expressions into the generated C verbatim,
+    so a cast has never had meaning to the translator -- only to the C compiler
+    that eventually sees it. Model it the same way: CCast reproduces the cast on
+    output and blocks folding, rather than committing to C conversion semantics
+    that would have to match whatever the generated code does.
+    """
+    type_name = ctx.cast_type().getText()
+    value = obj.visit(ctx.expr())
+    inner = value._exprs[0] if isinstance(value, Expr) else sympy.sympify(value)
+    return Expr(CCast(sympy.Symbol(type_name), inner), DataType.undefined)
 
 def visitExpressionFunctionCall(obj, ctx):
     name = str(ctx.Identifier())
@@ -222,6 +236,7 @@ common_visitors = (
     ('visitExpressionInteger', visitExpressionInteger),
     ('visitExpressionZero', visitExpressionZero),
     ('visitExpressionBinaryPM', visitExpressionBinaryPM),
+    ('visitExpressionCast', visitExpressionCast),
     ('visitExpressionFunctionCall', visitExpressionFunctionCall),
     ('visitExpressionBinaryMD', visitExpressionBinaryMD),
     ('visitExpressionBinaryMod', visitExpressionBinaryMod),
