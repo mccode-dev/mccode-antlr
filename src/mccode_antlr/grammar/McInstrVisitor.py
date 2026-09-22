@@ -1,4 +1,4 @@
-# Generated from /home/g/PycharmProjects/mccode-antlr/src/grammar/McInstr.g4 by ANTLR 4.13.2
+# Generated from McInstr.g4 by ANTLR 4.13.2
 from antlr4 import *
 if "." in __name__:
     from .McInstrParser import McInstrParser
