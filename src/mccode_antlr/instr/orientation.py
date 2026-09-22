@@ -1,5 +1,6 @@
 from msgspec import Struct, field
 from ..common import Expr, unary_expr, binary_expr
+from ..utils import deprecated
 from typing import TypeVar,Union
 from loguru import logger
 
@@ -481,6 +482,10 @@ def sqrt_value(v: Expr):
     return unary_expr(sqrt, 'sqrt', v)
 
 
+@deprecated(since='0.30.0',
+            replacement="sin_value/cos_value with degrees=False, which take the angle's unit "
+                        "directly and do not leave a symbolic PI in the result",
+            remove_in=None)
 def degree_to_radian(v: Expr):
     from math import pi
     if v.is_id:
@@ -488,22 +493,6 @@ def degree_to_radian(v: Expr):
             raise RuntimeError(f'Convert {v} to radian')
         return v * (Expr.id('PI') / Expr.float(180))
     return v * Expr.float(pi / 180)
-
-
-def _rotation_angles_to_axes_coordinates(rotated: Angles, degrees=True):
-    cx, cy, cz = [cos_value(r if degrees else degree_to_radian(r), degrees=degrees) for r in rotated]
-    sx, sy, sz = [sin_value(r if degrees else degree_to_radian(r), degrees=degrees) for r in rotated]
-    # Rotation matrices following the McCode first x then y then z method of applying rotations.
-    # The 3x3 rotation matrix part (which rotates the *axes* of a coordinate system):
-    axes = (cy * cz, sx * sy * cz + cx * sz, sx * sz - cx * sy * cz,
-            -cy * sz, cx * cz - sx * sy * sz, sx * cz + cx * sy * sz,
-            sy, -sx * cy, cx * cy)
-    # The coordinates of the same system rotate the opposite way, but still in the same order
-    # (All sin terms gain a negative sign)
-    coordinates = (cy * cz, sx * sy * cz - cx * sz, sx * sz + cx * sy * cz,
-                   cy * sz, cx * cz + sx * sy * sz, -sx * cz + cx * sy * sz,
-                   -sy, sx * cy, cx * cy)
-    return axes, coordinates
 
 
 def axes_euler_angles(m: Rotation, degrees) -> Angles:

@@ -59,3 +59,20 @@ def test_radian_symbolic_angle_gets_no_conversion_factor(cls):
 
 # The mirror case -- a symbolic angle in *degrees* -- is #350's territory rather
 # than this fix's, and is covered by tests/instr/test_symbolic_rotation.py there.
+
+
+def test_degree_to_radian_is_deprecated_but_still_correct():
+    """Its last caller went away with this fix, so it is deprecated rather than
+    removed -- it is importable from a public module and may have outside users."""
+    import warnings
+
+    from mccode_antlr.instr.orientation import degree_to_radian
+    from mccode_antlr.utils import McCodeAntlrDeprecationWarning
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        result = degree_to_radian(Expr.float(180))
+
+    assert float(str(result)) == pytest.approx(math.pi)
+    assert len(caught) == 1
+    assert issubclass(caught[0].category, McCodeAntlrDeprecationWarning)

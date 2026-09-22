@@ -131,15 +131,17 @@ class TestOrientation(TestCase):
         self.assertAlmostEqual(v.length(), Expr.float(sqrt(sum([x * x for x in raw_v]))))
 
     def test_rotation_matrix(self):
-        from mccode_antlr.instr.orientation import Rotation, Angles, _rotation_angles_to_axes_coordinates
+        from mccode_antlr.instr.orientation import Rotation, Angles
         from mccode_antlr.common import Expr
         from numpy import random, pi
         from itertools import zip_longest
         a = Angles(*[Expr.float(random.rand() * 2 * pi - pi) for _ in range(3)])
         while a.is_null():
             a = Angles(*[Expr.float(random.rand() * 2 * pi - pi) for _ in range(3)])
-        axes, coordinates = _rotation_angles_to_axes_coordinates(a, degrees=False)
-        r = Rotation(*axes)
+        # Rotation.from_angles is the implementation actually used; the parallel
+        # _rotation_angles_to_axes_coordinates this test once called had no other
+        # caller and was removed.
+        r = Rotation.from_angles(a, degrees=False)
         inv_r = r.inverse()
         one = r * inv_r
         identity = Rotation()
