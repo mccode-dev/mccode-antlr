@@ -119,4 +119,18 @@ Symbol: 'symbol';  // McCode ???? type ????!?!?!
 UnparsedBlock: '%{' (.)*? '%}'; // Used for raw C code blocks and metadata, etc.
 Include: '%include';
 
+// McCode's own comment form -- not a C construct, which is why it lives here
+// rather than in the imported c99 grammar. From instrument.l:
+//     "%"{EOL}         /* Ignore comment. */
+//     "% "[^\n]*{EOL}  /* Ignore comment. */
+// The space after '%' is required, which is what keeps `n%3` and `n %3` as
+// modulo (c99's Mod token). `n % 3` and `n% 3` are comments to classic McCode
+// too -- verified against the mcstas 3.8.5 binary -- so spaced modulo is
+// unusable outside a %{ %} block in either implementation.
+// Declared above UnparsedBlock and Include would be wrong; below them is also
+// safe, since neither '%{' nor '%include' is followed by a space or a newline
+// and so no longest-match tie arises. Being in the importing grammar puts this
+// ahead of c99's Mod, which is what we want for the ties that do arise.
+PercentComment: '%' (' ' ~[\r\n]*)? ('\r' '\n'? | '\n') -> channel(HIDDEN);
+
 Null: 'NULL'; // remove if we switch to underlying C grammar?
