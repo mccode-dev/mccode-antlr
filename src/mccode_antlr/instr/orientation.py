@@ -1,5 +1,6 @@
 from msgspec import Struct, field
 from ..common import Expr, unary_expr, binary_expr
+from ..utils import deprecated
 from typing import TypeVar,Union
 from loguru import logger
 
@@ -481,6 +482,10 @@ def sqrt_value(v: Expr):
     return unary_expr(sqrt, 'sqrt', v)
 
 
+@deprecated(since='0.30.0',
+            replacement="sin_value/cos_value with degrees=False, which take the angle's unit "
+                        "directly and do not leave a symbolic PI in the result",
+            remove_in=None)
 def degree_to_radian(v: Expr):
     from math import pi
     if v.is_id:
@@ -488,22 +493,6 @@ def degree_to_radian(v: Expr):
             raise RuntimeError(f'Convert {v} to radian')
         return v * (Expr.id('PI') / Expr.float(180))
     return v * Expr.float(pi / 180)
-
-
-def _rotation_angles_to_axes_coordinates(rotated: Angles, degrees=True):
-    cx, cy, cz = [cos_value(r if degrees else degree_to_radian(r), degrees=degrees) for r in rotated]
-    sx, sy, sz = [sin_value(r if degrees else degree_to_radian(r), degrees=degrees) for r in rotated]
-    # Rotation matrices following the McCode first x then y then z method of applying rotations.
-    # The 3x3 rotation matrix part (which rotates the *axes* of a coordinate system):
-    axes = (cy * cz, sx * sy * cz + cx * sz, sx * sz - cx * sy * cz,
-            -cy * sz, cx * cz - sx * sy * sz, sx * cz + cx * sy * sz,
-            sy, -sx * cy, cx * cy)
-    # The coordinates of the same system rotate the opposite way, but still in the same order
-    # (All sin terms gain a negative sign)
-    coordinates = (cy * cz, sx * sy * cz - cx * sz, sx * sz + cx * sy * cz,
-                   cy * sz, cx * cz + sx * sy * sz, -sx * cz + cx * sy * sz,
-                   -sy, sx * cy, cx * cy)
-    return axes, coordinates
 
 
 def axes_euler_angles(m: Rotation, degrees) -> Angles:
@@ -750,8 +739,13 @@ class RotationPart(Part):
         return self.rotation_axis, self.v, 'degrees' if self.degrees else 'radian'
 
     def _cos_sin_one_zero(self):
-        r = self.v if self.degrees else degree_to_radian(self.v)
-        return cos_value(r), sin_value(r), Expr.integer(1), Expr.integer(0)
+        # `degrees` says what unit `v` is already in, so it is what cos_value and
+        # sin_value have to be told. Converting v and then leaving them on their
+        # degrees=True default ran the conversion twice, in the wrong direction:
+        # a v of pi/6 radians gave cos 0.99999 where 30 degrees is cos 0.86603.
+        return (cos_value(self.v, degrees=self.degrees),
+                sin_value(self.v, degrees=self.degrees),
+                Expr.integer(1), Expr.integer(0))
 
     def position(self, which=None) -> Vector:
         z = Expr.float(0)
