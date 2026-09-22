@@ -62,8 +62,18 @@ class Instance(Struct):
         return f'Instance({self.name}, {self.type.name})'
 
     def to_file(self, output, wrapper=None, full=True):
+        # McInstr.g4 fixes the order of the clauses preceding COMPONENT:
+        #   Removable? Cpu? split? Component ...
+        # so these three have to be emitted in that order to re-parse.
+        if self.removable:
+            print(wrapper.line('REMOVABLE', []), file=output, end='')
         if self.cpu:
             print(wrapper.line('CPU', []), file=output, end='')
+        if self.split is not None:
+            # `line` only leaves a trailing space when it has no items to join,
+            # which is why REMOVABLE and CPU above need no separator of their own.
+            print(wrapper.line('SPLIT', [wrapper.escape(str(self.split))]) + ' ',
+                  file=output, end='')
 
         instance_parameters = wrapper.hide(', '.join(p.to_string(wrapper=wrapper) for p in self.parameters))
         line = wrapper.bold('COMPONENT') + f' {self.name} = {self.type.name}({instance_parameters}) '
