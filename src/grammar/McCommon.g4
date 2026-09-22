@@ -22,6 +22,8 @@ metadata: MetaData mime=(Identifier | StringLiteral) name=(Identifier | StringLi
 
 category: Category (Identifier | StringLiteral);
 
+cast_type: (Int | Double | Char | String | Long | Unsigned | Void) Star*;
+
 initializerlist: '{' values+=expr (Comma values+=expr)* '}';
 
 assignment: Identifier Assign expr; // Not used in McCode, but *could* be used to enable, e.g., loops or other simple control
@@ -36,6 +38,12 @@ expr
   | Identifier '[' expr ']'                         #ExpressionArrayAccess
   | Identifier '(' args+=expr (',' args+=expr)* ')' #ExpressionFunctionCall
   | '(' expr ')'                                    #ExpressionGrouping
+  // A C cast. Classic McCode accepts one because its instrument expressions are
+  // token soup copied verbatim into the generated C (instrument.y's topatexp),
+  // never interpreted. This carries the cast through opaquely for the same
+  // reason. No ambiguity with ExpressionGrouping above: the type names are their
+  // own tokens, not Identifier.
+  | '(' cast_type ')' expr                          #ExpressionCast
   | ('+' | '-') expr                                #ExpressionUnaryPM
   | Tilde expr                                      #ExpressionBitwiseNot
   | left=expr ('*' | '/') right=expr                #ExpressionBinaryMD

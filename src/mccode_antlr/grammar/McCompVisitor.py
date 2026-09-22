@@ -159,6 +159,11 @@ class McCompVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
+    # Visit a parse tree produced by McCompParser#cast_type.
+    def visitCast_type(self, ctx:McCompParser.Cast_typeContext):
+        return self.visitChildren(ctx)
+
+
     # Visit a parse tree produced by McCompParser#initializerlist.
     def visitInitializerlist(self, ctx:McCompParser.InitializerlistContext):
         return self.visitChildren(ctx)
@@ -276,6 +281,11 @@ class McCompVisitor(ParseTreeVisitor):
 
     # Visit a parse tree produced by McCompParser#ExpressionBinaryGreaterEqual.
     def visitExpressionBinaryGreaterEqual(self, ctx:McCompParser.ExpressionBinaryGreaterEqualContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by McCompParser#ExpressionCast.
+    def visitExpressionCast(self, ctx:McCompParser.ExpressionCastContext):
         return self.visitChildren(ctx)
 
 

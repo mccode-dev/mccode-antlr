@@ -7,7 +7,7 @@ from sympy.printing.pycode import PythonCodePrinter
 
 from .sympy_classes import (
     McCodeParameter, CStructAccess, CPointerAccess, CTernary,
-    CArrayIndex, CIntDiv, CLeftShift, CRightShift, CRound,
+    CArrayIndex, CCast, CIntDiv, CLeftShift, CRightShift, CRound,
     CFunctionCall, CInitializerList, CAnd, COr, CNot,
     CBitwiseAnd, CBitwiseOr, CBitwiseXor, CBitwiseNot, UNSET_SYMPY,
 )
@@ -69,6 +69,14 @@ class McCodeCPrinter(C99CodePrinter):
         func_name = expr.args[0].name
         call_args = ', '.join(self._print(a) for a in expr.args[1:])
         return f'{func_name}({call_args})'
+
+    def _print_CCast(self, expr):
+        # A cast binds tighter than any binary operator, so a compound operand
+        # has to keep its parentheses: (int)(a*b) is not (int)a*b.
+        inner = self._print(expr.args[1])
+        if not expr.args[1].is_Atom:
+            inner = f'({inner})'
+        return f'(({expr.args[0].name}){inner})'
 
     def _print_CInitializerList(self, expr):
         items = ', '.join(self._print(a) for a in expr.args)
@@ -197,6 +205,13 @@ class McCodePyPrinter(PythonCodePrinter):
         func_name = expr.args[0].name
         call_args = ', '.join(self._print(a) for a in expr.args[1:])
         return f'{func_name}({call_args})'
+
+    def _print_CCast(self, expr):
+        # Python has no cast syntax; the C types McCode uses map onto builtins.
+        builtin = {'int': 'int', 'long': 'int', 'char': 'int',
+                   'double': 'float', 'float': 'float'}.get(expr.args[0].name)
+        inner = self._print(expr.args[1])
+        return f'{builtin}({inner})' if builtin else inner
 
     def _print_CInitializerList(self, expr):
         items = ', '.join(self._print(a) for a in expr.args)
