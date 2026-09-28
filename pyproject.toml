@@ -13,7 +13,7 @@ dependencies = [
     'antlr4-python3-runtime>=4.13.2',
     'numpy>=2',
     'pooch>=1.7.0',
-    'confuse==2.2.1',
+    'confuse==2.3.0',
     'loguru>=0.7.2',
     'rich>=13',
     'gitpython>=3.1.43',
@@ -51,7 +51,7 @@ brep = ["build123d"]
 scipp = ["scipp"]
 docs = [
     # Zensical is pre-1.0 and ships weekly; pin exactly and bump deliberately.
-    "zensical==0.0.59",
+    "zensical==0.0.65",
     "mkdocstrings-python>=2.0",
     # Renders the example notebooks to Markdown; see docs/examples/build.py
     "nbconvert>=7.0",
