@@ -62,16 +62,22 @@ def declarations_pre_libraries(source, typedefs: list, component_declared_parame
         return '\n'.join(lines)
 
     def instrument_parameters_table():
-        def nps(x):
-            """`None`-protected (single) double-quoted string"""
+        from ..common.utilities import escape_str_for_c
+
+        def nps(x, is_literal=None):
+            """`None`-protected (single) double-quoted string
+
+            Text that is already one C string literal is used as-is; anything else,
+            e.g. the default-value expression strlen("ab"), is escaped and quoted.
+            """
             z = '' if x is None else f'{x}'
-            if z == '"':
-                logger.info('single double-quote found in parameter value -- escaping to avoid C syntax error')
-                z = '\"'
-            return z if len(z) and z[0] == '"' and z[-1] == '"' else f'"{z}"'
+            if is_literal is None:
+                is_literal = len(z) > 1 and z[0] == '"' and z[-1] == '"'
+            return z if is_literal else f'"{escape_str_for_c(z)}"'
 
         def one_line(name, typename, value, unit):
-            return f'  {{"{name}", &(_instrument_var._parameters.{name}), {typename}, {nps(value)}, {nps(unit)}}},'
+            value = nps(value, value.is_str and value.has_value)
+            return f'  {{"{name}", &(_instrument_var._parameters.{name}), {typename}, {value}, {nps(unit)}}},'
 
         lines = [f'int numipar = {len(source.parameters)};', 'struct mcinputtable_struct mcinputtable[] = {']
         lines.extend([one_line(p.name, p.value.mccode_c_type_name, p.value, p.unit) for p in source.parameters])

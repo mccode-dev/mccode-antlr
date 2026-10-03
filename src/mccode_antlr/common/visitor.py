@@ -220,7 +220,9 @@ def visitExpressionBinaryGreater(obj, ctx):
     return left.gt(right)
 
 def visitExpressionString(obj, ctx):
-    strings = ''.join(str(sl).strip('"') for sl in ctx.StringLiteral())
+    # Drop exactly one quote from each end: strip('"') would also eat the quote of
+    # a trailing escape, turning "a \"q\"" into the unterminated "a \"q\".
+    strings = ''.join(str(sl)[1:-1] for sl in ctx.StringLiteral())
     return Expr.string(f'"{strings}"')
 
 def _c_char_code(literal: str) -> int:
