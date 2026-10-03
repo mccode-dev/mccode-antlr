@@ -157,6 +157,7 @@ def cogen_comp_setpos(
         return '\n'.join(pl)
 
     def nexus_lines():
+        from ..common.utilities import escape_str_for_c
         # If NeXus output is requested, add a group for this instance,
         # and loop over its parameter values, adding them to the group:
         gstr = f'"{index:04d}_{comp.name}"'
@@ -176,7 +177,9 @@ def cogen_comp_setpos(
             vstr = f'{p.value:p}'
             tstr = f'"{default.value.mccode_c_type}"'
             if not (default.value.is_str or p.value.is_str):
-                dstr, vstr = [f'"{x}"' for x in (dstr, vstr)]
+                # Record the expression's text, which may itself contain string
+                # literals, e.g. f("my choice", x) -- so escape it, don't just quote it.
+                dstr, vstr = [f'"{escape_str_for_c(x)}"' for x in (dstr, vstr)]
             if len(dstr) == 0:
                 dstr = '"NONE"'
             if len(vstr) == 0:
