@@ -9,7 +9,7 @@ mccode-antlr does not parse char literals in expressions correctly.
 
 def test_char_parsing():
     from mccode_antlr.common.expression import Expr
-    for i, c in enumerate(("'a'", "'\n'", "'\''", "'\\'")):
+    for i, c in enumerate((r"'a'", r"'\n'", r"'\''", r"'\\'")):
         orig = f'{c}=={i}'
         # orig = "'a'==1"
         a = Expr.parse(orig)

@@ -129,6 +129,27 @@ class CCast(Function):
         return set(self.args[1].free_symbols)
 
 
+class CChar(Function):
+    """A C character literal, ``'a'``, carried through opaquely.
+
+    ``args[0]`` is the character's code point as a :class:`sympy.Integer`.
+    In C a character literal *is* an ``int``, but folding it to its code point
+    would print ``97`` where the user wrote ``'a'``; like :class:`CCast` this
+    node exists to reproduce the literal on output, so it never folds.
+    """
+    @classmethod
+    def eval(cls, code):
+        return None
+
+    @property
+    def free_symbols(self):
+        return set()
+
+    @property
+    def char(self) -> str:
+        return chr(int(self.args[0]))
+
+
 class CInitializerList(Function):
     """C initializer list ``{a, b, c}`` used for array/vector literals."""
     @classmethod
@@ -208,6 +229,8 @@ SYMPY_NAMESPACE: dict = {
     'CRightShift': CRightShift,
     'CRound': CRound,
     'CFunctionCall': CFunctionCall,
+    'CCast': CCast,
+    'CChar': CChar,
     'CInitializerList': CInitializerList,
     'CAnd': CAnd,
     'COr': COr,

@@ -193,8 +193,9 @@ class Expr(msgspec.Struct, dict=True, eq=False):
             return cls(value._exprs, DataType.chr, value.shape_type, value.object_type)
         if value is None:
             return cls(UNSET_SYMPY, DataType.chr)
-        # sym = sympy.Symbol(str(value), commutative=False)
-        return cls(value, DataType.chr, ShapeType.scalar, ObjectType.value)
+        from .sympy_classes import CChar
+        code = ord(value) if isinstance(value, str) else int(value)
+        return cls(CChar(sympy.Integer(code)), DataType.chr, ShapeType.scalar, ObjectType.value)
 
     @classmethod
     def id(cls, value, data_type: DataType = DataType.undefined,
