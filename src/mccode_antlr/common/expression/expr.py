@@ -27,6 +27,17 @@ def _infer_data_type(sym: sympy.Basic, hint: DataType = DataType.undefined) -> D
     return DataType.undefined
 
 
+def _char_codes(sym: sympy.Basic) -> sympy.Basic:
+    """Replace each C character literal by its code point, so the result folds.
+
+    A char is an int in C; CChar only stays opaque to preserve the spelling for
+    output, so evaluation to a value goes through this substitution instead.
+    """
+    from .sympy_classes import CChar
+    chars = sym.atoms(CChar)
+    return sym.xreplace({c: c.args[0] for c in chars}).doit() if chars else sym
+
+
 def _promote(a: DataType, b: DataType, op: str) -> DataType:
     if op in ('/', 'truediv'):
         return DataType.float
@@ -399,7 +410,7 @@ class Expr(msgspec.Struct, dict=True, eq=False):
         if self.is_vector and not self.is_singular:
             # Return list of Python values for each element
             result = []
-            for e in self._exprs:
+            for e in map(_char_codes, self._exprs):
                 if e.is_number:
                     result.append(int(e) if (e.is_integer is True) else float(e))
                 else:
@@ -413,9 +424,10 @@ class Expr(msgspec.Struct, dict=True, eq=False):
             return None
         if self.data_type == DataType.str:
             return e.name
+        e = _char_codes(e)
         if isinstance(e, sympy.logic.boolalg.BooleanAtom):
             return int(bool(e))
-        if self.data_type == DataType.int or (e.is_integer is True):
+        if self.data_type in (DataType.int, DataType.chr) or (e.is_integer is True):
             return int(e)
         return float(e)
 

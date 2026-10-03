@@ -119,7 +119,7 @@ class DataType(IntEnum):
             return cls.float
         if 'int' in name:
             return cls.int
-        if 'char' in name and '*' not in name:
+        if 'char' in name and '*' not in name and '[' not in name:
             return cls.chr
         if 'char' in name or 'string' in name or 'str' in name:
             return cls.str
