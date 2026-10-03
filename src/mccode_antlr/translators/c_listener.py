@@ -590,10 +590,24 @@ def evaluate_c_defined_variables(
     return {v: get_found(v, data_type) for v, data_type in variables.items()}
 
 
-def _get_expr(type_name: str, initial_value: str) -> Expr:
+def _declared_data_type(declarator: CDeclarator):
+    """The DataType of a declared variable, accounting for its declarator.
+
+    The parser splits ``char *p`` and ``char s[16]`` into ``dtype='char'`` plus a
+    pointer or array extent, so the type name alone would say char; a pointer to,
+    or array of, char is a McCode string.
+    """
     from ..common import DataType
-    expr = Expr._null() if initial_value is None else Expr.parse(initial_value)
-    expr.data_type = DataType.from_name(type_name)
+    data_type = DataType.from_name(declarator.dtype)
+    if data_type == DataType.chr and (declarator.is_pointer or declarator.is_array):
+        return DataType.str
+    return data_type
+
+
+def _get_expr(declarator: CDeclarator) -> Expr:
+    init = declarator.init
+    expr = Expr._null() if init is None else Expr.parse(init)
+    expr.data_type = _declared_data_type(declarator)
     return expr
 
 
@@ -601,7 +615,7 @@ def extract_c_declared_expressions(
         block: str, user_types: list = None, verbose=False
 ) -> dict[CDeclarator, Expr]:
     variables = extract_c_declared_variables(block, user_types, verbose=verbose)
-    return {d: _get_expr(d.dtype, d.init) for d in variables}
+    return {d: _get_expr(d) for d in variables}
 
 
 def evaluate_c_defined_expressions(

@@ -7,10 +7,25 @@ from sympy.printing.pycode import PythonCodePrinter
 
 from .sympy_classes import (
     McCodeParameter, CStructAccess, CPointerAccess, CTernary,
-    CArrayIndex, CCast, CIntDiv, CLeftShift, CRightShift, CRound,
+    CArrayIndex, CCast, CChar, CIntDiv, CLeftShift, CRightShift, CRound,
     CFunctionCall, CInitializerList, CAnd, COr, CNot,
     CBitwiseAnd, CBitwiseOr, CBitwiseXor, CBitwiseNot, UNSET_SYMPY,
 )
+
+
+_C_SIMPLE_ESCAPES = {
+    0x07: 'a', 0x08: 'b', 0x0c: 'f', 0x0a: 'n', 0x0d: 'r', 0x09: 't', 0x0b: 'v',
+    ord("'"): "'", ord('\\'): '\\',
+}
+
+
+def c_char_literal(code: int) -> str:
+    """Spell a code point as a valid C character literal."""
+    if code in _C_SIMPLE_ESCAPES:
+        return f"'\\{_C_SIMPLE_ESCAPES[code]}'"
+    if 0x20 <= code < 0x7f:
+        return f"'{chr(code)}'"
+    return f"'\\{code:03o}'" if code < 0x100 else f"'\\x{code:x}'"
 
 
 class McCodeCPrinter(C99CodePrinter):
@@ -26,9 +41,6 @@ class McCodeCPrinter(C99CodePrinter):
         self._parameter_prefix = parameter_prefix
         self._prefix = prefix
 
-    # def _print(self, expr):
-    #     super()._print(expr)
-
     # --- McCode-specific symbols ---
 
     def _print_McCodeParameter(self, expr):
@@ -39,7 +51,6 @@ class McCodeCPrinter(C99CodePrinter):
     def _print_Symbol(self, expr):
         if expr is UNSET_SYMPY:
             return ''
-        print(f'print symbol for {type(expr)} = {expr}')
         return expr.name
 
     # --- C-specific constructs ---
@@ -78,9 +89,12 @@ class McCodeCPrinter(C99CodePrinter):
         # A cast binds tighter than any binary operator, so a compound operand
         # has to keep its parentheses: (int)(a*b) is not (int)a*b.
         inner = self._print(expr.args[1])
-        if not expr.args[1].is_Atom:
+        if not (expr.args[1].is_Atom or isinstance(expr.args[1], CChar)):
             inner = f'({inner})'
         return f'(({expr.args[0].name}){inner})'
+
+    def _print_CChar(self, expr):
+        return c_char_literal(int(expr.args[0]))
 
     def _print_CInitializerList(self, expr):
         items = ', '.join(self._print(a) for a in expr.args)
@@ -216,6 +230,10 @@ class McCodePyPrinter(PythonCodePrinter):
                    'double': 'float', 'float': 'float'}.get(expr.args[0].name)
         inner = self._print(expr.args[1])
         return f'{builtin}({inner})' if builtin else inner
+
+    def _print_CChar(self, expr):
+        # A C char is an int; ord() keeps the original character visible.
+        return f'ord({expr.char!r})'
 
     def _print_CInitializerList(self, expr):
         items = ', '.join(self._print(a) for a in expr.args)

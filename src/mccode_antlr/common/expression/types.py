@@ -92,7 +92,11 @@ class DataType(IntEnum):
             return other
         if other == DataType.undefined:
             return self
-        if self == other and self != DataType.chr:
+        if self == DataType.chr:  # C integer promotion: char arithmetic is int arithmetic
+            return DataType.int + other
+        if other == DataType.chr:
+            return self + DataType.int
+        if self == other:
             return self
         if (self == DataType.float and other == DataType.int) or (self == DataType.int and other == DataType.float):
             return DataType.float
@@ -115,7 +119,7 @@ class DataType(IntEnum):
             return cls.float
         if 'int' in name:
             return cls.int
-        if 'char' in name and '*' not in name:
+        if 'char' in name and '*' not in name and '[' not in name:
             return cls.chr
         if 'char' in name or 'string' in name or 'str' in name:
             return cls.str
@@ -158,7 +162,7 @@ class DataType(IntEnum):
         if self == DataType.str:
             return "char *"
         if self == DataType.chr:
-            return "chr"
+            return "char"
         raise RuntimeError(f"No known conversion from non-enumerated data type {self}")
 
 
