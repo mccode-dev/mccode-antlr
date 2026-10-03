@@ -26,6 +26,9 @@ class McCodeCPrinter(C99CodePrinter):
         self._parameter_prefix = parameter_prefix
         self._prefix = prefix
 
+    # def _print(self, expr):
+    #     super()._print(expr)
+
     # --- McCode-specific symbols ---
 
     def _print_McCodeParameter(self, expr):
@@ -36,6 +39,7 @@ class McCodeCPrinter(C99CodePrinter):
     def _print_Symbol(self, expr):
         if expr is UNSET_SYMPY:
             return ''
+        print(f'print symbol for {type(expr)} = {expr}')
         return expr.name
 
     # --- C-specific constructs ---

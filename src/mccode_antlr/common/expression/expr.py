@@ -188,6 +188,15 @@ class Expr(msgspec.Struct, dict=True, eq=False):
         return cls(sym, DataType.str, ShapeType.scalar, ObjectType.value)
 
     @classmethod
+    def char(cls, value) -> 'Expr':
+        if isinstance(value, cls):
+            return cls(value._exprs, DataType.chr, value.shape_type, value.object_type)
+        if value is None:
+            return cls(UNSET_SYMPY, DataType.chr)
+        # sym = sympy.Symbol(str(value), commutative=False)
+        return cls(value, DataType.chr, ShapeType.scalar, ObjectType.value)
+
+    @classmethod
     def id(cls, value, data_type: DataType = DataType.undefined,
            shape_type: ShapeType = ShapeType.scalar) -> 'Expr':
         if isinstance(value, cls):

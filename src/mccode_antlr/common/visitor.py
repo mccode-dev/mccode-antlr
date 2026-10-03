@@ -223,6 +223,10 @@ def visitExpressionString(obj, ctx):
     strings = ''.join(str(sl).strip('"') for sl in ctx.StringLiteral())
     return Expr.string(f'"{strings}"')
 
+def visitExpressionChar(obj, ctx):
+    char = ctx.CharacterLiteral()
+    char = chr(ord(str(char).strip("'")))
+    return Expr.char(char)
 
 common_visitors = (
     ('getExpr', getExpr),
@@ -257,6 +261,7 @@ common_visitors = (
     ('visitExpressionBinaryLess', visitExpressionBinaryLess),
     ('visitExpressionBinaryGreater', visitExpressionBinaryGreater),
     ('visitExpressionString', visitExpressionString),
+    ('visitExpressionChar', visitExpressionChar),
 )
 
 def add_common_visitors(grammar_visitor):
