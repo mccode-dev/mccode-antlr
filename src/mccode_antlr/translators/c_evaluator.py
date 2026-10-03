@@ -79,6 +79,33 @@ _MAX_UNROLL = 1024
 
 
 # ---------------------------------------------------------------------------
+# Brace initializers
+# ---------------------------------------------------------------------------
+
+class CInitializer(dict):
+    """The values of a C brace initializer, keyed by array index or field name."""
+
+    def flat(self) -> list:
+        """Leaf values in row-major order, ignoring keys -- for nested arrays."""
+        out = []
+        for _, v in sorted(((k, v) for k, v in self.items() if isinstance(k, int)), key=lambda kv: kv[0]):
+            out.extend(v.flat() if isinstance(v, CInitializer) else [v])
+        return out
+
+    def elements(self, extent: int | None = None) -> dict[int, Expr]:
+        """Array elements by index; unlisted elements up to *extent* are zero, as in C."""
+        if any(isinstance(v, CInitializer) for v in self.values()):
+            # a multidimensional array initialized row by row (no designators tracked)
+            values = dict(enumerate(self.flat()))
+        else:
+            values = {k: v for k, v in self.items() if isinstance(k, int) and v is not None}
+        if extent is not None:
+            for i in range(extent):
+                values.setdefault(i, Expr.integer(0))
+        return dict(sorted(values.items()))
+
+
+# ---------------------------------------------------------------------------
 # Flow-control sentinels (raised by jump statements, caught by loop handlers)
 # ---------------------------------------------------------------------------
 
@@ -153,6 +180,10 @@ class CBlockEvaluator(CVisitor):
         self.state: dict[str, Expr] = dict(known)
         self.array_state: dict[str, dict[int, Expr]] = {}
         self.struct_state: dict[str, dict[str, Expr]] = {}
+        # a known array (e.g. from a DECLARE initializer) can be indexed and updated
+        for name, value in self.state.items():
+            if isinstance(value, Expr) and value.vector_known:
+                self.array_state[name] = {i: Expr(e) for i, e in enumerate(value._exprs)}
         self.instrument_params: dict[str, Expr] = {}
         for p in instrument_parameters:
             name = p.name if hasattr(p, 'name') else str(p)
@@ -382,7 +413,7 @@ class CBlockEvaluator(CVisitor):
             if init_decl.initializer() is not None:
                 try:
                     value = self.visit(init_decl.initializer())
-                    if value is not None and not isinstance(value, list):
+                    if value is not None and not isinstance(value, CInitializer):
                         self._write(name, value)
                 except Exception as e:
                     logger.debug(f'CBlockEvaluator: skip for-init for {name}: {e}')
@@ -548,12 +579,11 @@ class CBlockEvaluator(CVisitor):
             if init_decl.initializer() is not None:
                 try:
                     value = self.visit(init_decl.initializer())
-                    if isinstance(value, list):
-                        arr: dict[int, Expr] = {}
-                        for i, v in enumerate(value):
-                            if v is not None and not isinstance(v, list):
-                                arr[i] = v
-                        self.array_state[name] = arr
+                    if isinstance(value, CInitializer):
+                        if is_array:
+                            self.array_state[name] = value.elements(self._array_extent(dd))
+                        else:
+                            self._store_aggregate(name, value)
                     elif value is not None:
                         self._write(name, value)
                 except Exception as e:
@@ -561,8 +591,39 @@ class CBlockEvaluator(CVisitor):
             elif not is_array:
                 self.state.setdefault(name, Expr.id(name))
 
+    def _array_extent(self, dd: CParser.DirectDeclaratorContext) -> int | None:
+        """The declared length of an array's outermost dimension, if a known constant.
+
+        ``a[2][3]`` nests as ``(a[2])[3]``, so the outermost ``[2]`` is on the inner
+        directDeclarator; the flattened element count is the product of all extents.
+        """
+        extents = []
+        while dd is not None and dd.LeftBracket() is not None:
+            size = dd.assignmentExpression()
+            extents.append(self._to_int(self.visit(size)) if size is not None else None)
+            dd = dd.directDeclarator()
+        if not extents or any(e is None for e in extents):
+            return None
+        total = 1
+        for e in extents:
+            total *= e
+        return total
+
+    def _store_aggregate(self, name: str, value: 'CInitializer'):
+        """A brace initializer for a non-array: designated fields go to struct_state.
+
+        Positional members cannot be named without the struct's definition, so
+        they keep their position in array_state as before.
+        """
+        fields = {k: v for k, v in value.items() if isinstance(k, str) and not isinstance(v, CInitializer)}
+        if fields:
+            self.struct_state[name] = fields
+        positional = {k: v for k, v in value.items() if isinstance(k, int) and not isinstance(v, CInitializer)}
+        if positional:
+            self.array_state[name] = positional
+
     # ------------------------------------------------------------------
-    # Initializer (Phase 3: list → Python list of Expr)
+    # Initializer (Phase 3: list → CInitializer of designator -> Expr)
     # ------------------------------------------------------------------
 
     def visitInitializer(self, ctx: CParser.InitializerContext):
@@ -573,14 +634,44 @@ class CBlockEvaluator(CVisitor):
         return None
 
     def visitInitializerList(self, ctx: CParser.InitializerListContext):
-        values = []
-        for init in ctx.initializer():
-            val = self.visit(init)
-            if isinstance(val, list):
-                values.extend(val)
+        """Brace-enclosed values keyed by position or designator, in C99 order.
+
+        An undesignated value follows the previous one: ``{[3]=7, 8}`` sets
+        elements 3 and 4. A ``.field`` designator keys by name. Nested
+        designators (``[1][2]=``, ``.a.b=``) are not tracked; their values are
+        skipped rather than misplaced.
+        """
+        result = CInitializer()
+        position = 0
+        designation = None
+        for child in ctx.getChildren():
+            if isinstance(child, CParser.DesignationContext):
+                designation = child
+                continue
+            if not isinstance(child, CParser.InitializerContext):
+                continue
+            key = position
+            if designation is not None:
+                designators = designation.designatorList().designator()
+                designation = None
+                if len(designators) != 1:
+                    logger.debug('CBlockEvaluator: nested designators are not tracked')
+                    position += 1
+                    continue
+                d = designators[0]
+                if d.Identifier() is not None:
+                    key = d.Identifier().getText()
+                else:
+                    key = self._to_int(self.visit(d.constantExpression()))
+                    if key is None:
+                        logger.debug('CBlockEvaluator: non-constant array designator')
+                        continue
+            result[key] = self.visit(child)
+            if isinstance(key, int):
+                position = key + 1
             else:
-                values.append(val)
-        return values
+                position += 1
+        return result
 
     # ------------------------------------------------------------------
     # LabeledStatement constant expression (for switch case values)
@@ -922,6 +1013,9 @@ class CBlockEvaluator(CVisitor):
         # Track the base identifier name for postfix ++/-- side effects.
         # Cleared as soon as any suffix ([], (), ->, .) is consumed.
         base_name: str | None = pe.Identifier().getText() if pe.Identifier() is not None else None
+        if base_name in self.array_state:
+            # a tracked array is indexed by name, whatever its scalar binding holds
+            base = Expr.id(base_name)
 
         children = ctx.children or []
         i = 1  # skip primaryExpression
@@ -1038,6 +1132,29 @@ class CBlockEvaluator(CVisitor):
 # Public API
 # ---------------------------------------------------------------------------
 
+def _parse(text: str, rule: str):
+    from antlr4 import InputStream, CommonTokenStream
+    from antlr4.error.ErrorListener import ErrorListener
+    from ..grammar import CLexer
+    from .c_listener import make_error_listener
+    parser = CParser(CommonTokenStream(CLexer(InputStream(text))))
+    parser.addErrorListener(make_error_listener(ErrorListener, text))
+    return getattr(parser, rule)()
+
+
+def evaluate_c_block_evaluator(
+    block: str,
+    known: dict[str, Expr] | None = None,
+    instrument_parameters=(),
+    verbose: bool = False,
+) -> CBlockEvaluator:
+    """Evaluate a C compound statement and return the evaluator, with all of its state."""
+    text = block if block.lstrip().startswith('{') else f'{{\n{block}\n}}'
+    evaluator = CBlockEvaluator({} if known is None else known, instrument_parameters, verbose=verbose)
+    evaluator.visit(_parse(text, 'compoundStatement'))
+    return evaluator
+
+
 def evaluate_c_block(
     block: str,
     known: dict[str, Expr] | None = None,
@@ -1058,25 +1175,30 @@ def evaluate_c_block(
         dict mapping scalar variable names to their final symbolic ``Expr`` values.
         Array and struct state are tracked internally and visible through
         ``evaluator.array_state`` / ``evaluator.struct_state`` if you need them
-        (use ``CBlockEvaluator`` directly in that case).
+        (use :func:`evaluate_c_block_evaluator` in that case).
     """
-    from antlr4 import InputStream, CommonTokenStream
-    from antlr4.error.ErrorListener import ErrorListener
-    from ..grammar import CLexer
-    from .c_listener import make_error_listener
+    return evaluate_c_block_evaluator(block, known, instrument_parameters, verbose).state
 
-    if known is None:
-        known = {}
 
-    text = block if block.lstrip().startswith('{') else f'{{\n{block}\n}}'
+def array_expr(elements: dict[int, Expr], data_type: DataType = DataType.undefined) -> Expr | None:
+    """A vector Expr from array_state elements, or None unless they are exactly 0..n-1."""
+    from ..common.expression.types import ShapeType, ObjectType
+    if not elements or sorted(elements) != list(range(len(elements))):
+        return None
+    if data_type == DataType.undefined:
+        data_type = DataType.float
+    syms = [elements[i]._exprs[0] for i in range(len(elements))]
+    return Expr(syms, data_type, ShapeType.vector, ObjectType.initializer_list)
 
-    stream = InputStream(text)
-    lexer = CLexer(stream)
-    tokens = CommonTokenStream(lexer)
-    parser = CParser(tokens)
-    parser.addErrorListener(make_error_listener(ErrorListener, text))
-    tree = parser.compoundStatement()
 
-    evaluator = CBlockEvaluator(known, instrument_parameters, verbose=verbose)
-    evaluator.visit(tree)
-    return evaluator.state
+def evaluate_c_initializer(initializer: str, extent: int | None = None,
+                           data_type: DataType = DataType.undefined) -> Expr | None:
+    """The vector Expr of a C array initializer, e.g. ``{1.0, [3]=4.0}``.
+
+    Handles C99 designators, and zero-fills up to *extent* (the declared length).
+    Returns None if the initializer is not a brace list of known positions.
+    """
+    value = CBlockEvaluator({}).visit(_parse(initializer, 'initializer'))
+    if not isinstance(value, CInitializer):
+        return None
+    return array_expr(value.elements(extent), data_type)

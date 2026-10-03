@@ -605,7 +605,19 @@ def _declared_data_type(declarator: CDeclarator):
 
 
 def _get_expr(declarator: CDeclarator) -> Expr:
+    from ..common import DataType
     init = declarator.init
+    if init is not None and declarator.is_array and init.lstrip().startswith('{'):
+        # A brace initializer is C, not a McCode expression: evaluate it as C so
+        # designators and the zero-fill up to the declared length are honoured.
+        # The vector's data type is its elements', so {'a', 'b'} stays chr, not str.
+        from .c_evaluator import evaluate_c_initializer
+        extent = 1
+        for e in declarator.elements or ():
+            extent = extent * e if isinstance(e, int) and e > 0 and extent is not None else None
+        vector = evaluate_c_initializer(init, extent, DataType.from_name(declarator.dtype))
+        if vector is not None:
+            return vector
     expr = Expr._null() if init is None else Expr.parse(init)
     expr.data_type = _declared_data_type(declarator)
     return expr
@@ -627,13 +639,20 @@ def evaluate_c_defined_expressions(
     C constructs are handled correctly (unlike the old McInstr-assignment-rule
     approach, which only handled simple ``name = expr;`` statements).
     """
-    from .c_evaluator import evaluate_c_block
-    state = evaluate_c_block(initialized_in, known=dict(variables), verbose=verbose)
+    from .c_evaluator import evaluate_c_block_evaluator, array_expr
+    evaluator = evaluate_c_block_evaluator(initialized_in, known=dict(variables), verbose=verbose)
+    state = evaluator.state
     # Return only the variables that were originally requested, with fallback to
     # their declared value if the block didn't assign them.
     from ..common import DataType
     result = {}
     for name, declared in variables.items():
+        if name in evaluator.array_state:
+            # seeded from the declared vector, then updated by element assignments
+            vector = array_expr(evaluator.array_state[name], declared.data_type)
+            if vector is not None:
+                result[name] = vector
+                continue
         expr = state.get(name, declared).simplify()
         if expr.is_singular and declared.data_type != DataType.undefined:
             expr.data_type = declared.data_type

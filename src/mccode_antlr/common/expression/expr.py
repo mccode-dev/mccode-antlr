@@ -159,6 +159,10 @@ class Expr(msgspec.Struct, dict=True, eq=False):
         from ...grammar import McInstr_parse
         from ...instr import InstrVisitor
         visitor = InstrVisitor(None, None)
+        if s.lstrip().startswith('{'):
+            # The 'expr' rule has no brace list: error recovery would drop the '{'
+            # and silently keep only the first element.
+            return visitor.visit(McInstr_parse(InputStream(s), 'initializerlist'))
         return visitor.getExpr(McInstr_parse(InputStream(s), 'expr'))
 
     @classmethod
@@ -765,17 +769,34 @@ class Expr(msgspec.Struct, dict=True, eq=False):
         return result
 
     def evaluate(self, known: dict) -> 'Expr':
+        from .sympy_classes import CArrayIndex
         sub_map = {}
+        arrays = {}
         for name, val in known.items():
             if isinstance(val, Expr) and val.is_singular:
                 substitution = val._exprs[0]
             elif isinstance(val, (int, float)):
                 substitution = sympy.sympify(val)
+            elif isinstance(val, Expr) and val.vector_known:
+                arrays[name] = val
+                continue
             else:
                 continue
             for sym in (sympy.Symbol(name), McCodeParameter(name)):
                 sub_map[sym] = substitution
+        if arrays and self.is_singular:
+            e = self._exprs[0]
+            if isinstance(e, sympy.Symbol) and e.name in arrays:
+                # a bare reference to a known array, e.g. a vector component parameter
+                return arrays[e.name].copy()
         result = [e.subs(sub_map) for e in self._exprs]
+        if arrays:
+            def element(arr, idx):
+                values = arrays[arr.name]._exprs if isinstance(arr, sympy.Symbol) and arr.name in arrays else None
+                if values is not None and idx.is_integer and idx.is_number and 0 <= int(idx) < len(values):
+                    return values[int(idx)]
+                return CArrayIndex(arr, idx)
+            result = [e.replace(CArrayIndex, element) if e.has(CArrayIndex) else e for e in result]
         evaluated = Expr(result, self.data_type, self.shape_type, self.object_type).simplify()
         # After evaluation, if all free symbols are gone, it's now a value
         if (evaluated.object_type in (ObjectType.identifier, ObjectType.parameter)
