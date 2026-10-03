@@ -225,6 +225,23 @@ def visitExpressionString(obj, ctx):
     strings = ''.join(str(sl)[1:-1] for sl in ctx.StringLiteral())
     return Expr.string(f'"{strings}"')
 
+def _c_char_code(literal: str) -> int:
+    """Code point of a C character literal's source text, e.g. ``'\\n'`` -> 10."""
+    body = literal[1:-1]  # the lexer guarantees exactly one (possibly escaped) char
+    if not body.startswith('\\'):
+        return ord(body)
+    esc = body[1:]
+    simple = {'a': 7, 'b': 8, 'f': 12, 'n': 10, 'r': 13, 't': 9, 'v': 11,
+              "'": 39, '"': 34, '?': 63, '\\': 92}
+    if esc in simple:
+        return simple[esc]
+    if esc[0] == 'x':
+        return int(esc[1:], 16)
+    return int(esc, 8)
+
+
+def visitExpressionChar(obj, ctx):
+    return Expr.char(_c_char_code(str(ctx.CharacterLiteral())))
 
 common_visitors = (
     ('getExpr', getExpr),
@@ -259,6 +276,7 @@ common_visitors = (
     ('visitExpressionBinaryLess', visitExpressionBinaryLess),
     ('visitExpressionBinaryGreater', visitExpressionBinaryGreater),
     ('visitExpressionString', visitExpressionString),
+    ('visitExpressionChar', visitExpressionChar),
 )
 
 def add_common_visitors(grammar_visitor):
