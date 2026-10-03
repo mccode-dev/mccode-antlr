@@ -294,6 +294,11 @@ class McInstrVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
+    # Visit a parse tree produced by McInstrParser#ExpressionChar.
+    def visitExpressionChar(self, ctx:McInstrParser.ExpressionCharContext):
+        return self.visitChildren(ctx)
+
+
     # Visit a parse tree produced by McInstrParser#ExpressionBinaryRightShift.
     def visitExpressionBinaryRightShift(self, ctx:McInstrParser.ExpressionBinaryRightShiftContext):
         return self.visitChildren(ctx)

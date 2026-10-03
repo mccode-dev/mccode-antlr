@@ -77,6 +77,7 @@ class DataType(IntEnum):
     float = 1
     int = 2
     str = 3
+    chr = 4
 
     def compatible(self, other):
         if self == DataType.undefined or other == DataType.undefined or self == other:
@@ -91,6 +92,10 @@ class DataType(IntEnum):
             return other
         if other == DataType.undefined:
             return self
+        if self == DataType.chr:  # C integer promotion: char arithmetic is int arithmetic
+            return DataType.int + other
+        if other == DataType.chr:
+            return self + DataType.int
         if self == other:
             return self
         if (self == DataType.float and other == DataType.int) or (self == DataType.int and other == DataType.float):
@@ -114,6 +119,8 @@ class DataType(IntEnum):
             return cls.float
         if 'int' in name:
             return cls.int
+        if 'char' in name and '*' not in name and '[' not in name:
+            return cls.chr
         if 'char' in name or 'string' in name or 'str' in name:
             return cls.str
         return cls.undefined
@@ -126,6 +133,8 @@ class DataType(IntEnum):
             return 'float'
         if self == DataType.str:
             return 'str'
+        if self == DataType.chr:
+            return 'chr'
         return 'undefined'
 
     @property
@@ -141,6 +150,10 @@ class DataType(IntEnum):
         return self == DataType.str
 
     @property
+    def is_chr(self):
+        return self == DataType.chr
+
+    @property
     def mccode_c_type(self):
         if self == DataType.float:
             return "double"
@@ -148,6 +161,8 @@ class DataType(IntEnum):
             return "int"
         if self == DataType.str:
             return "char *"
+        if self == DataType.chr:
+            return "char"
         raise RuntimeError(f"No known conversion from non-enumerated data type {self}")
 
 

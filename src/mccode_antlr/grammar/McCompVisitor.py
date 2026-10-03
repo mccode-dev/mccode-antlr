@@ -224,6 +224,11 @@ class McCompVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
+    # Visit a parse tree produced by McCompParser#ExpressionChar.
+    def visitExpressionChar(self, ctx:McCompParser.ExpressionCharContext):
+        return self.visitChildren(ctx)
+
+
     # Visit a parse tree produced by McCompParser#ExpressionBinaryRightShift.
     def visitExpressionBinaryRightShift(self, ctx:McCompParser.ExpressionBinaryRightShiftContext):
         return self.visitChildren(ctx)
