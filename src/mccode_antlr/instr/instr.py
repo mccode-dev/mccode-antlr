@@ -230,7 +230,7 @@ class Instr(Struct):
         directory = Path(directory)
         directory.mkdir(parents=True, exist_ok=True)
         for name, content in self.to_strings(wrapper).items():
-            (directory / name).write_text(content)
+            (directory / name).write_text(content, encoding='utf-8')
         return directory / f'{self.name}.instr'
 
     def to_string(self, wrapper):

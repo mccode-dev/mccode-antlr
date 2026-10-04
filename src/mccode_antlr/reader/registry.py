@@ -199,7 +199,8 @@ class Registry:
 
     def contents(self, *args, **kwargs):
         """Return the text contents of a Registry file"""
-        return self.path(*args, **kwargs).read_text()
+        from mccode_antlr.common.encoding import read_source_text
+        return read_source_text(self.path(*args, **kwargs))
 
 
 def _name_plus_suffix(name: str, suffix: str = None):
@@ -395,7 +396,7 @@ class GitHubRegistry(RemoteRegistry):
         cache_path = pooch.os_cache(f'mccodeantlr/{safe_name}')
         registry_file_path = cache_path.joinpath(safe_version, safe_file)
         if registry_file_path.exists() and registry_file_path.is_file() and access(registry_file_path, R_OK):
-            with registry_file_path.open('r') as file:
+            with registry_file_path.open('r', encoding='utf-8') as file:
                 registry = {k: v for k, v in [x.strip().split(maxsplit=1) for x in file.readlines() if len(x)]}
         else:
             # We allow a full-dictionary to be provided, otherwise we expect the registry file to be available from the
@@ -413,7 +414,7 @@ class GitHubRegistry(RemoteRegistry):
             # check is now a directory that exists, it may be the root of the filesystem
             if access(check, W_OK):
                 registry_file_path.parent.mkdir(parents=True, exist_ok=True)
-                with registry_file_path.open('w') as file:
+                with registry_file_path.open('w', encoding='utf-8') as file:
                     file.writelines('\n'.join([f'{k} {v}' for k, v in registry.items()]))
             else:
                 logger.warning(f'Can not output {registry_file_path}, you lack write permissions for {check}')
@@ -1083,7 +1084,7 @@ def _cached_remote_repository_version_tags(url: str, force_refresh: bool = False
     entry = None
     if cache_file is not None and cache_file.exists():
         try:
-            with open(cache_file, 'r') as f:
+            with open(cache_file, 'r', encoding='utf-8') as f:
                 loaded = json.load(f)
             if loaded.get('url') == url:
                 entry = loaded
@@ -1098,7 +1099,7 @@ def _cached_remote_repository_version_tags(url: str, force_refresh: bool = False
     if cache_file is not None:
         try:
             tmp_file = cache_file.with_suffix(f'.json.tmp{os.getpid()}')
-            with open(tmp_file, 'w') as f:
+            with open(tmp_file, 'w', encoding='utf-8') as f:
                 json.dump({'url': url, 'time': time(), 'tags': [str(t) for t in tags]}, f)
             tmp_file.replace(cache_file)  # atomic on POSIX -- safe under concurrent writers
         except OSError:

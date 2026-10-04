@@ -203,7 +203,8 @@ def linux_compile(compiler, compiler_flags, target, linker_flags, source):
     # The solitary '-' specifies *where* the stdin source should be processed, which is critical for getting
     # linking flags right on (some) Linux systems
     command = [compiler, *compiler_flags, '-o', str(target), '-', *linker_flags]
-    result = run(command, input=source, text=True, capture_output=True)
+    # gcc/clang read UTF-8 source; their messages are decoded leniently as they may use the locale
+    result = run(command, input=source, encoding='utf-8', errors='replace', capture_output=True)
     return command, result
 
 
@@ -213,7 +214,7 @@ def windows_compile(compiler, compiler_flags, target, linker_flags, source):
     if not parent.is_dir():
         parent.mkdir(parents=True)
     write_to = target.with_suffix('.c')
-    with write_to.open('w') as file:
+    with write_to.open('w', encoding='utf-8') as file:
         file.writelines(source)
     if '/link' not in linker_flags:
         linker_flags = ['/link'] + linker_flags
@@ -274,7 +275,7 @@ def _compile_instrument(
     if source_file or ('Windows' != system() and dump_source):
         source_file = source_file or Path(strip_target_tag(Path(output.parts[-1]).stem) + '.c')
         logger.info(f'Source written in {source_file}')
-        with open(source_file, 'w') as cfile:
+        with open(source_file, 'w', encoding='utf-8') as cfile:
             cfile.write(source)
 
     _compile = windows_compile if 'Windows' == system() else linux_compile
@@ -423,7 +424,8 @@ def compile_c_file(
     from platform import system
 
     c_file = Path(c_file)
-    source = c_file.read_text()
+    from mccode_antlr.common.encoding import read_source_text
+    source = read_source_text(c_file)
     name = c_file.stem
 
     # strip_target_tag inside binary_path keeps 'foo.mpi.c' compiled for OpenACC

@@ -890,7 +890,7 @@ def make_clang_formatter(
         # else: no --style flag → clang-format searches for .clang-format upward
         try:
             result = subprocess.run(
-                cmd, input=content, capture_output=True, text=True, check=True,
+                cmd, input=content, capture_output=True, encoding='utf-8', check=True,
             )
             return result.stdout
         except subprocess.CalledProcessError as exc:

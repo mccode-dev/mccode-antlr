@@ -301,8 +301,8 @@ def header_post_runtime(source, flavor: Flavor, config: dict, include_path, data
             return 'Instrument source code is not embedded in this executable.'
         path = Path(source.source)
         if config.get('embed_instrument_file') and path.exists() and access(path, R_OK):
-            with path.open('r') as file:
-                return escape_str_for_c(file.read())
+            from mccode_antlr.common.encoding import read_source_text
+            return escape_str_for_c(read_source_text(path))
         message = f"Instrument {source.name} source code "
         message += f"from {escape_str_for_c(source.source)} is not embedded in this executable.\\n"
         message += f"Use --source option when running {config.get('flavor')}"

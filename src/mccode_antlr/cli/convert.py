@@ -65,7 +65,7 @@ def convert(
     elif target == 'instr':
         if optimize:
             raise ValueError('--optimize is only supported when --to python')
-        with destination.open('w') as f:
+        with destination.open('w', encoding='utf-8') as f:
             instr.to_file(output=f)
     else:
         raise ValueError(f'No output logic for target {target!r}')
