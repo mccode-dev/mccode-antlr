@@ -605,7 +605,17 @@ def _declared_data_type(declarator: CDeclarator):
 
 
 def _get_expr(declarator: CDeclarator) -> Expr:
+    from ..common import DataType
     init = declarator.init
+    if init is not None and declarator.is_array and init.lstrip().startswith('{'):
+        # A brace initializer is C, not a McCode expression: evaluate it as C so
+        # designators and the zero-fill up to the declared length are honoured.
+        # The vector's data type is its elements', so {'a', 'b'} stays chr, not str.
+        from .c_evaluator import evaluate_c_initializer
+        extents = [e if isinstance(e, int) and e > 0 else None for e in declarator.elements]
+        vector = evaluate_c_initializer(init, extents, DataType.from_name(declarator.dtype))
+        if vector is not None:
+            return vector
     expr = Expr._null() if init is None else Expr.parse(init)
     expr.data_type = _declared_data_type(declarator)
     return expr
@@ -619,21 +629,49 @@ def extract_c_declared_expressions(
 
 
 def evaluate_c_defined_expressions(
-        variables: dict[str, Expr], initialized_in: str, verbose=False
+        variables: dict[str | CDeclarator, Expr], initialized_in: str, verbose=False
 ) -> dict[str, Expr]:
     """Evaluate a C block to determine the end values of the named identifiers.
 
     Uses the ANTLR C grammar evaluator so if/else, function calls, and other
     C constructs are handled correctly (unlike the old McInstr-assignment-rule
     approach, which only handled simple ``name = expr;`` statements).
+
+    *variables* may be keyed by name or, as :func:`extract_c_declared_expressions`
+    returns them, by declarator; a declarator also supplies an array's dimensions,
+    without which a multidimensional array cannot be indexed element by element
+    (writes to it then make its value unknown rather than wrong). The result is
+    keyed by name either way.
     """
-    from .c_evaluator import evaluate_c_block
-    state = evaluate_c_block(initialized_in, known=dict(variables), verbose=verbose)
+    from .c_evaluator import evaluate_c_block_evaluator, array_expr
+    from ..common.expression.types import ShapeType
+    array_dims = {}
+    named = {}
+    for key, value in variables.items():
+        if isinstance(key, CDeclarator):
+            if key.is_array and key.elements:
+                array_dims[key.name] = [e if isinstance(e, int) and e > 0 else None for e in key.elements]
+            key = key.name
+        named[key] = value
+    variables = named
+    evaluator = evaluate_c_block_evaluator(initialized_in, known=dict(variables), verbose=verbose,
+                                           array_dims=array_dims)
+    state = evaluator.state
     # Return only the variables that were originally requested, with fallback to
     # their declared value if the block didn't assign them.
     from ..common import DataType
     result = {}
     for name, declared in variables.items():
+        if name in evaluator.unknown_arrays:
+            # written somewhere the evaluator could not resolve: no value is known
+            result[name] = Expr.id(name, declared.data_type, ShapeType.vector)
+            continue
+        if name in evaluator.array_state:
+            # seeded from the declared vector, then updated by element assignments
+            vector = array_expr(evaluator.array_state[name], declared.data_type)
+            if vector is not None:
+                result[name] = vector
+                continue
         expr = state.get(name, declared).simplify()
         if expr.is_singular and declared.data_type != DataType.undefined:
             expr.data_type = declared.data_type
