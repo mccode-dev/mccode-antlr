@@ -322,7 +322,7 @@ class TargetVisitor:
     def save(self, filename=None, close=True, reprocess=True):
         self.translate(reprocess=reprocess)
         if filename:
-            with open(filename, 'w') as file:
+            with open(filename, 'w', encoding='utf-8') as file:
                 file.write(self.output.getvalue())
         if close:
             self.output.close()

@@ -146,7 +146,7 @@ def language_missing_or_outdated(grammar_file, newest, features, path,
     # others (all?) have a comment string on their first line with ANTLR {version}
     r_antlr_version = r'ANTLR (?P<version>[0-9]+\.[0-9]+\.[0-9]+)'
     for file in generated_files:
-        with file.open('r') as f:
+        with file.open('r', encoding='utf-8') as f:
             contents = f.read()
             checkversion_matches = re.findall(r_checkversion, contents, re.MULTILINE)
             antlr_version_matches = re.findall(r_antlr_version, contents, re.MULTILINE)

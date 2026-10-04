@@ -359,14 +359,14 @@ class SimFile:
             source = Path(source)
         if not source.is_file():
             raise FileNotFoundError(f"Could not find file {source}")
-        with source.open('r') as f:
+        with source.open('r', encoding='utf-8', errors='replace') as f:
             contents = f.read()
         return SimFile.parse(contents)
 
     def save(self, filename: Union[str, Path]):
         if not isinstance(filename, Path):
             filename = Path(filename)
-        with filename.open('w') as f:
+        with filename.open('w', encoding='utf-8') as f:
             self.to_file(f)
 
     @staticmethod

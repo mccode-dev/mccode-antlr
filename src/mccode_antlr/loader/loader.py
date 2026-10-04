@@ -64,7 +64,8 @@ def parse_mcxtrace_instr(contents: str, registries: list[Registry] | None = None
 
 
 def load_mccode_instr(filename: Union[str, Path], registries: list[Registry]) -> Instr:
-    return parse_mccode_instr(Path(filename).read_text(), registries, source=str(filename))
+    from mccode_antlr.common.encoding import read_source_text
+    return parse_mccode_instr(read_source_text(filename), registries, source=str(filename))
 
 
 def load_mcstas_instr(filename: Union[str, Path], registries: list[Registry] | None = None) -> Instr:

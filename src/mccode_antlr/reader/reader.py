@@ -22,7 +22,9 @@ from mccode_antlr.utils import McCodeSyntaxError
 # trusted (e.g. the #321 INHERIT block-override fix). Combined with the package
 # version into the sidecar filename, so an upgrade -- or a working-tree change
 # during development -- transparently re-parses the .comp file exactly once.
-_COMPONENT_CACHE_FORMAT = 2
+# 3: .comp files are decoded as UTF-8, not the locale encoding (#364), so
+#    sidecars parsed on e.g. a cp1252 Windows system may hold garbled text.
+_COMPONENT_CACHE_FORMAT = 3
 
 
 @lru_cache(maxsize=1)
@@ -403,7 +405,8 @@ class Reader(Struct):
         if path.suffix != '.instr':
             path = path.with_suffix(f'{path.suffix}.instr')
         if path.exists() and path.is_file():
-            source = path.read_text()
+            from mccode_antlr.common.encoding import read_source_text
+            source = read_source_text(path)
         else:
             path = self.locate(path.name)  # include the .instr for the search
             source = self.contents(path.name)

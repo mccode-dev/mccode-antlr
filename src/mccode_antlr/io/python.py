@@ -407,4 +407,4 @@ def instr_to_python(instr: Instr, optimize: bool = False) -> str:
 
 
 def save_instr_as_python(instr: Instr, filename: str | Path, optimize: bool = False) -> None:
-    Path(filename).write_text(instr_to_python(instr, optimize=optimize))
+    Path(filename).write_text(instr_to_python(instr, optimize=optimize), encoding='utf-8')

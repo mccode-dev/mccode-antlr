@@ -22,7 +22,7 @@ def _platform_defaults():
         raise RuntimeError(f"Can not locate platforms.yaml in module files (looking for {platforms_file}")
 
     with as_file(platforms_file) as file:
-        with open(file, 'r') as data:
+        with open(file, 'r', encoding='utf-8') as data:
             platform_configs = yaml.safe_load(data)
 
     system = platform.system()  # "Linux", "Darwin", "Windows", ...
@@ -40,7 +40,7 @@ def _common_defaults():
     if not common_file.is_file():
         raise RuntimeError(f"Can not locate config_default.yaml in module files (looking for {common_file})")
     with as_file(common_file) as file:
-        with open(file, 'r') as data:
+        with open(file, 'r', encoding='utf-8') as data:
             common_configs = yaml.safe_load(data)
 
     return common_configs
