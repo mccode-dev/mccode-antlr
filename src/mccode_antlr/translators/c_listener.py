@@ -446,7 +446,7 @@ class _TypedefsCache:
         try:
             if cache_file.exists():
                 import json
-                with open(cache_file, 'r') as f:
+                with open(cache_file, 'r', encoding='utf-8') as f:
                     payload = json.load(f)
                 result = ([CDeclarator.from_dict(d) for d in payload['declares']], payload['typedefs'])
                 self._memory[key] = result
@@ -467,7 +467,7 @@ class _TypedefsCache:
             declares, typedefs = result
             payload = {'declares': [d.to_dict() for d in declares], 'typedefs': typedefs}
             tmp_file = cache_file.with_suffix(f'.json.tmp{os.getpid()}')
-            with open(tmp_file, 'w') as f:
+            with open(tmp_file, 'w', encoding='utf-8') as f:
                 json.dump(payload, f)
             tmp_file.replace(cache_file)  # atomic on POSIX -- safe under concurrent writers
         except OSError:

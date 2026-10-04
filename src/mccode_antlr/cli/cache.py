@@ -455,7 +455,7 @@ def cache_register(
 
     out_path = Path(out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(''.join(f'{name} {hashes[name]}\n' for name in sorted(hashes)))
+    out_path.write_text(''.join(f'{name} {hashes[name]}\n' for name in sorted(hashes)), encoding='utf-8')
 
     print(f"Wrote {len(hashes)} entries to {out_path}", flush=True)
 
@@ -586,7 +586,8 @@ def _build_one_ir(comp_path_str: str, force: bool) -> tuple[str, str]:
             pass
 
     try:
-        source = comp_path.read_text()
+        from mccode_antlr.common.encoding import read_source_text
+        source = read_source_text(comp_path)
         error_listener = make_reader_error_listener(
             McComp_ErrorListener, 'Component', comp_path.stem, source
         )

@@ -43,7 +43,7 @@ def _get_config_yaml(path: str | None = None):
 
     config_file = Path(path or config.config_dir()) / 'config.yaml'
     if config_file.exists():
-        with config_file.open('r') as f:
+        with config_file.open('r', encoding='utf-8') as f:
             return safe_load(f) or {}
     return {}
 
@@ -54,7 +54,7 @@ def _save_config_yaml(config_dict, path: str | None = None):
 
     config_file = Path(path or config.config_dir()) / 'config.yaml'
     config_file.parent.mkdir(parents=True, exist_ok=True)
-    with config_file.open('w') as f:
+    with config_file.open('w', encoding='utf-8') as f:
         f.write(config_dump(config_dict))
 
 
@@ -138,7 +138,7 @@ def config_save(path: str | None = None, verbose: bool = False):
     config_dir = Path(path or c.config_dir())
     d = {k: c[k].get() for k in list(c)}
     config_file = config_dir.joinpath('config.yaml')
-    with config_file.open('w') as file:
+    with config_file.open('w', encoding='utf-8') as file:
         file.write(config_dump(d))
     if verbose:
         print(f'Configuration written to {config_file}')

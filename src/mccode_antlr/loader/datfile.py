@@ -31,7 +31,8 @@ def _parse_file(filename: str | Path) -> tuple:
         raise RuntimeError('Source filename does not exist')
     if not source.is_file():
         raise RuntimeError(f'{filename} does not name a valid file')
-    with source.open('r') as file:
+    # The McCode runtime copies UTF-8 instrument text into the header, but paths may be in the locale encoding
+    with source.open('r', encoding='utf-8', errors='replace') as file:
         lines = file.readlines()
     header = [x.strip(' #\n') for x in filter(lambda x: x[0] == '#', lines)]
     meta = {k.strip(): v.strip() for k, v in
@@ -165,7 +166,7 @@ class DatFileCommon:
         if sink.exists():
             raise RuntimeError(f'{filename} already exists')
         first, second = self.parts()
-        with sink.open('w') as file:
+        with sink.open('w', encoding='utf-8') as file:
             for item in first:
                 print(f'# {item}: {self.metadata[item]}', file=file)
             for param in self.parameters:
