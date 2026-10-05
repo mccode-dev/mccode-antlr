@@ -113,3 +113,67 @@ def test_non_ascii_sources_round_trip_under_a_legacy_locale(tmp_path):
                             env=env, capture_output=True, encoding='utf-8', errors='replace')
     assert result.returncode == 0, result.stderr
     assert 'Ørsted' in (tmp_path / 'out' / 'probe.instr').read_text(encoding='utf-8')
+
+
+def test_decode_source_translates_newlines():
+    """Bytes are decoded without text-mode newline translation, so it is done explicitly."""
+    assert decode_source(b'a\r\nb\rc\n') == 'a\nb\nc\n'
+    assert decode_source(b'\xef\xbb\xbf' + COMP.replace('\n', '\r\n').encode('utf-8')) == COMP
+
+
+# A library header with a backslash-continued macro, as in mcstas-chopper-lib's
+# chopper-lib.h. Git on Windows checks such files out with CRLF line endings.
+CONTINUED_H = """\
+#define CONTINUED_MAJOR 4
+#define CONTINUED_MINOR 2
+#define CONTINUED_VERSION (CONTINUED_MAJOR * 100 \\
+                           + CONTINUED_MINOR)
+"""
+CONTINUED_C = """\
+int continued_version(void) {
+  return CONTINUED_VERSION;
+}
+"""
+
+CONTINUED_COMP = """\
+DEFINE COMPONENT Continued
+SHARE
+%{
+%include "continued-lib"
+%}
+TRACE
+%{
+  double version = CONTINUED_VERSION;
+%}
+END
+"""
+
+CONTINUED_INSTR = """\
+DEFINE INSTRUMENT continued(dummy=1)
+TRACE
+COMPONENT origin = Continued() AT (0, 0, 0) ABSOLUTE
+END
+"""
+
+
+def test_crlf_sources_do_not_leak_carriage_returns_into_generated_c(tmp_path):
+    """CRLF files read from disk must not leave a carriage return in the generated C.
+
+    Windows' text-mode write turns each remaining ``\\r\\n`` into ``\\r\\r\\n``, and MSVC
+    then no longer sees the backslash of a continued macro line as a line splice.
+    """
+    from mccode_antlr import Flavor
+    from mccode_antlr.compiler.c import instrument_source
+    from mccode_antlr.loader.loader import load_mccode_instr
+    from mccode_antlr.reader.registry import LocalRegistry
+
+    for name, text in (('continued-lib.h', CONTINUED_H), ('continued-lib.c', CONTINUED_C),
+                       ('Continued.comp', CONTINUED_COMP),
+                       ('continued.instr', CONTINUED_INSTR)):
+        (tmp_path / name).write_bytes(text.replace('\n', '\r\n').encode('utf-8'))
+    instr = load_mccode_instr(tmp_path / 'continued.instr', [LocalRegistry('local', str(tmp_path))])
+    config = dict(default_main=True, enable_trace=False, portable=False, include_runtime=True,
+                  embed_instrument_file=False, verbose=False, output='continued.c')
+    source = instrument_source(instr, flavor=Flavor.MCSTAS, config=config)
+    assert 'CONTINUED_MAJOR * 100 \\\n' in source
+    assert '\r' not in source

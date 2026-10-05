@@ -24,7 +24,9 @@ from mccode_antlr.utils import McCodeSyntaxError
 # during development -- transparently re-parses the .comp file exactly once.
 # 3: .comp files are decoded as UTF-8, not the locale encoding (#364), so
 #    sidecars parsed on e.g. a cp1252 Windows system may hold garbled text.
-_COMPONENT_CACHE_FORMAT = 3
+# 4: that decoding also kept CRLF line endings, so sidecars parsed from a CRLF
+#    checkout hold carriage returns in their C blocks.
+_COMPONENT_CACHE_FORMAT = 4
 
 
 @lru_cache(maxsize=1)
