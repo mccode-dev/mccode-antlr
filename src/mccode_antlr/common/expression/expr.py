@@ -820,10 +820,13 @@ class Expr(msgspec.Struct, dict=True, eq=False):
             for name in instrument_parameter_names:
                 plain = sympy.Symbol(name)
                 if plain in e.free_symbols:
-                    cache[i] = e.subs(plain, McCodeParameter(name))
-                    if isinstance(cache[i], McCodeParameter):
-                        self.object_type = ObjectType.parameter
+                    # into the expression as it now stands: substituting into the one from
+                    # before the loop would undo every earlier name's substitution
+                    e = e.subs(plain, McCodeParameter(name))
                     changed = True
+            cache[i] = e
+            if isinstance(e, McCodeParameter):
+                self.object_type = ObjectType.parameter
         if changed:
             self.exprs = [sympy.srepr(e) for e in cache]
 
