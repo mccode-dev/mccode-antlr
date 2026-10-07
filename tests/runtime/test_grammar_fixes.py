@@ -64,17 +64,18 @@ ITERATE_PREVIOUS = """\
 
 @compiled_test
 def test_jump_previous_iterate():
-    # PREVIOUS from c is b, which is after the counter: b three times, a once
-    lines = run_lines(ITERATE_PREVIOUS.format(jump='JUMP PREVIOUS ITERATE iter'), '-n 1 -y iter=3')
-    assert lines.count('visited b') == 3
+    # PREVIOUS from c is b, which is after the counter: b 'iter' times, a once
+    # (no -y: McCode v3.8.7's runtime resets given parameters to their defaults with it)
+    lines = run_lines(ITERATE_PREVIOUS.format(jump='JUMP PREVIOUS ITERATE iter'), '-n 1 iter=4')
+    assert lines.count('visited b') == 4
     assert 'passes=1' in lines
 
 
 @compiled_test
 def test_jump_previous_n_iterate():
     # PREVIOUS(2) from c is a: the counter is passed 'iter' times
-    lines = run_lines(ITERATE_PREVIOUS.format(jump='JUMP PREVIOUS(2) ITERATE iter'), '-n 1 -y iter=3')
-    assert 'passes=3' in lines
+    lines = run_lines(ITERATE_PREVIOUS.format(jump='JUMP PREVIOUS(2) ITERATE iter'), '-n 1 iter=4')
+    assert 'passes=4' in lines
 
 
 # ADR items 2, 3, 5 and the instrument-parameter type message: must fail with a
@@ -257,6 +258,6 @@ def test_vector_elements_with_instrument_parameter():
         COMPONENT a = print_vector(v={1, 3.2*0.0219, par, 2*par}, n=4) AT (0,0,0) ABSOLUTE
         END
         """), registries=[registry])
-    output, _ = compile_and_run(instr, '-n 0 -y par=0.25')
+    output, _ = compile_and_run(instr, '-n 0 par=0.25')  # no -y, see test_jump_previous_iterate
     lines = [line.strip() for line in output.decode('utf-8').splitlines()]
     assert ['v[0]=1', 'v[1]=0.07008', 'v[2]=0.25', 'v[3]=0.5'] == [x for x in lines if x.startswith('v[')]
