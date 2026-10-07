@@ -8,6 +8,12 @@ from .jump import Jump
 from loguru import logger
 
 
+def raise_myself_error(filename, ctx):
+    line = None if ctx.start is None else ctx.start.line
+    raise RuntimeError(f'{filename}: {line} -- MYSELF can not be used here, it is only available '
+                       f'after the component parameters (WHEN, AT, ROTATED, JUMP, ...)')
+
+
 def literal_string(ctx):
     start_token, stop_token = ctx.start, ctx.stop
     stream = start_token.getInputStream()
@@ -110,7 +116,11 @@ class InstrVisitor(McInstrVisitor):
         # Construct a new instance, possibly copying values from an existing instance:
         instance = Instance.from_instance(name, comp, at, rotate) if is_ref else Instance(name, comp, at, rotate)
         if ctx.instance_parameters() is not None:
-            for param_name, param_value in self.visit(ctx.instance_parameters()):
+            # MYSELF is not valid in the instance's own parameters, only from WHEN onwards
+            self.current_instance_name = None
+            parameters = self.visit(ctx.instance_parameters())
+            self.current_instance_name = name
+            for param_name, param_value in parameters:
                 instance.set_parameter(param_name, param_value, overwrite=is_ref)
         if ctx.Removable() is not None:
             instance.REMOVABLE()
@@ -335,7 +345,9 @@ class InstrVisitor(McInstrVisitor):
 
     def visitExpressionMyself(self, ctx: McInstrParser.ExpressionMyselfContext):
         # The even-worse expression use of MYSELF to refer to the current being-constructed component's name
-        return Expr.string(self.current_instance.name)
+        if self.current_instance_name is None:
+            raise_myself_error(self.filename, ctx)
+        return Expr.string(self.current_instance_name)
 
     def multi_block(self, part: str, ctx: McInstrParser.Multi_blockContext):
         """Common visitor for {part} unparsed_block? ((INHERIT identifier)|(EXTEND unparsed_block))*
@@ -404,8 +416,7 @@ class InstrParametersVisitor(McInstrVisitor):
         raise RuntimeError('PREVIOUS keyword used in expression before any components defined')
 
     def visitExpressionMyself(self, ctx: McInstrParser.ExpressionMyselfContext):
-        # The even-worse expression use of MYSELF to refer to the current being-constructed component's name
-        return Expr.string(self.current_instance.name)
+        raise_myself_error('instrument parameters', ctx)
 
 
 

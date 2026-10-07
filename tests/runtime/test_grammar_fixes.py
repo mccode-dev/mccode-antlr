@@ -101,8 +101,11 @@ def test_jump_previous_n_iterate():
         DEFINE INSTRUMENT bad() TRACE
         COMPONENT a = Arm() AT (0,0,0) ABSOLUTE
         COMPONENT b = Slit(xwidth=MYSELF, yheight=0.1) AT (0,0,1) RELATIVE a
-        END""", 'MYSELF', id='myself-in-parameters',
-                 marks=pytest.mark.xfail(strict=True, reason='visitExpressionMyself uses a missing current_instance')),
+        END""", 'MYSELF', id='myself-in-parameters'),
+    pytest.param("""\
+        DEFINE INSTRUMENT bad(p=MYSELF) TRACE
+        COMPONENT a = Arm() AT (0,0,0) ABSOLUTE
+        END""", 'MYSELF', id='myself-in-instrument-parameters'),
     pytest.param("""\
         DEFINE INSTRUMENT bad() TRACE
         COMPONENT a = COPY(PREVIOUS) AT (0,0,0) ABSOLUTE
@@ -123,8 +126,6 @@ def test_rejected(contents, match):
 
 
 # ADR item 3: MYSELF stays valid from WHEN onwards
-@pytest.mark.xfail(strict=True, raises=AttributeError,
-                   reason='visitExpressionMyself uses a missing current_instance')
 def test_myself_in_when():
     instr = parse_mcstas_instr(dedent("""\
         DEFINE INSTRUMENT m() TRACE
@@ -181,3 +182,9 @@ def test_int_uservar_through_getvar():
         """)
     assert 'wsum=2.5 0' in lines
     assert 'flag=3 0' in lines
+
+
+def test_myself_in_instrument_parameters_only():
+    from mccode_antlr.loader.loader import parse_mccode_instr_parameters
+    with pytest.raises(RuntimeError, match='MYSELF'):
+        parse_mccode_instr_parameters('DEFINE INSTRUMENT bad(p=MYSELF) TRACE END')
