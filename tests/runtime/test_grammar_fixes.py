@@ -1,6 +1,5 @@
 """Behaviour fixed in the classic McCode code generator by ADR_20261007_GRAMMAR_FIXES
-(McCode branch cogen-improve-comments-review). These pin the same behaviour here;
-the xfail(strict) cases are where mccode-antlr does not (yet) agree."""
+(McCode branch cogen-improve-comments-review). These pin the same behaviour here."""
 from textwrap import dedent
 
 import pytest

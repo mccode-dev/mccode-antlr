@@ -302,24 +302,8 @@ class Instr(Struct):
 
     def finalize_flow_edges(self) -> None:
         """Add JUMP edges to ``flow_edges`` (deferred because forward targets are unknown during parsing)."""
-        from .flow import FlowEdgeRecord, JumpEdge
-        components = self.components
-        n = len(components)
-        name_to_idx = {inst.name: idx for idx, inst in enumerate(components)}
-        for inst in components:
-            for jmp in inst.jump:
-                target_idx = jmp.absolute_target
-                if target_idx < 0:
-                    target_idx = name_to_idx.get(jmp.target, -1)
-                if 0 <= target_idx < n:
-                    self.flow_edges += (FlowEdgeRecord(
-                        src=inst.name, dst=components[target_idx].name,
-                        edge=JumpEdge(
-                            condition=jmp.condition,
-                            iterate=jmp.iterate,
-                            absolute_target=target_idx,
-                        ),
-                    ),)
+        from .flow import _jump_edge_records
+        self.flow_edges += _jump_edge_records(self.components)
 
     def build_flow_graph(self):
         """Rebuild ``flow_edges`` from scratch and return the derived :class:`networkx.MultiDiGraph`.
