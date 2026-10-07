@@ -109,8 +109,12 @@ def test_jump_previous_n_iterate():
     pytest.param("""\
         DEFINE INSTRUMENT bad() TRACE
         COMPONENT a = COPY(PREVIOUS) AT (0,0,0) ABSOLUTE
-        END""", '(?i)copy|previous', id='copy-undefined',
-                 marks=pytest.mark.xfail(strict=True, reason="message is 'Undefined component type NoneType'")),
+        END""", 'COPY of an undefined component instance PREVIOUS', id='copy-undefined-previous'),
+    pytest.param("""\
+        DEFINE INSTRUMENT bad() TRACE
+        COMPONENT a = Arm() AT (0,0,0) ABSOLUTE
+        COMPONENT b = COPY(nosuch) AT (0,0,0) ABSOLUTE
+        END""", 'COPY of an undefined component instance nosuch', id='copy-undefined-name'),
     pytest.param("""\
         DEFINE INSTRUMENT bad() TRACE
         COMPONENT a = NoSuchComponent() AT (0,0,0) ABSOLUTE

@@ -160,7 +160,12 @@ class InstrVisitor(McInstrVisitor):
         return str(ctx.Identifier())
 
     def visitComponentTypeCopy(self, ctx: McInstrParser.ComponentTypeCopyContext):
-        return self.visit(ctx.component_ref())
+        source = self.visit(ctx.component_ref())
+        if source is None:
+            line = None if ctx.start is None else ctx.start.line
+            raise RuntimeError(f'{self.filename}: {line} -- COPY of an undefined component instance '
+                               f'{literal_string(ctx.component_ref())}')
+        return source
 
     def visitComponentTypeIdentifier(self, ctx: McInstrParser.ComponentTypeIdentifierContext):
         return self.parent.get_component(str(ctx.Identifier()), current_instance_name=self.current_instance_name)
@@ -255,6 +260,7 @@ class InstrVisitor(McInstrVisitor):
                     return state.last_component(remaining, removable_ok=True)
                 remaining -= len(state.components)
             logger.error(f'Too large PREVIOUS count {count} for the reachable component instances')
+            return None
         name = str(ctx.Identifier())
         for state in (self.state, *self._enclosing_states()):
             if any(inst.name == name for inst in state.components):
