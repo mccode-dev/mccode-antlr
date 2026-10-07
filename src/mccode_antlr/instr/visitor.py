@@ -222,14 +222,14 @@ class InstrVisitor(McInstrVisitor):
 
     def visitJumpPrevious(self, ctx: McInstrParser.JumpPreviousContext):
         i = ctx.IntegerLiteral()
-        return ("PREVIOUS", -1) if i is None else (f"PREVIOUS_{i}", -int(i))
+        return ("PREVIOUS", -1) if i is None else (f"PREVIOUS_{i}", -int(str(i)))
 
     def visitJumpMyself(self, ctx: McInstrParser.JumpMyselfContext):
         return "MYSELF", 0
 
     def visitJumpNext(self, ctx: McInstrParser.JumpNextContext):
         i = ctx.IntegerLiteral()
-        return ("NEXT", 1) if i is None else (f"NEXT_{i}", int(i))
+        return ("NEXT", 1) if i is None else (f"NEXT_{i}", int(str(i)))
 
     def visitJumpIdentifier(self, ctx: McInstrParser.JumpIdentifierContext):
         return str(ctx.Identifier()), 0

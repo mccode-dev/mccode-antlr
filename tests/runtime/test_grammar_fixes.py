@@ -42,8 +42,6 @@ def test_jump_next_skips_one():
     assert lines.count('visited d') == 1
 
 
-@pytest.mark.xfail(strict=True, raises=TypeError,
-                   reason='visitJumpNext calls int() on the TerminalNode, not its text')
 @compiled_test
 def test_jump_next_n_is_relative():
     lines = run_lines(SKIP_NEXT.format(n=2, jump='JUMP NEXT(2) WHEN (1)'))
@@ -73,8 +71,6 @@ def test_jump_previous_iterate():
     assert 'passes=1' in lines
 
 
-@pytest.mark.xfail(strict=True, raises=TypeError,
-                   reason='visitJumpPrevious calls int() on the TerminalNode, not its text')
 @compiled_test
 def test_jump_previous_n_iterate():
     # PREVIOUS(2) from c is a: the counter is passed 'iter' times
@@ -89,21 +85,18 @@ def test_jump_previous_n_iterate():
         DEFINE INSTRUMENT bad() TRACE
         COMPONENT a = Arm() AT (0,0,0) ABSOLUTE
         COMPONENT b = Arm() AT (0,0,1) RELATIVE a JUMP nosuch WHEN (0)
-        END""", 'nosuch', id='jump-unknown-name',
-                 marks=pytest.mark.xfail(strict=True, reason='bare [0] on an empty list')),
+        END""", 'nosuch', id='jump-unknown-name'),
     pytest.param("""\
         DEFINE INSTRUMENT bad() TRACE
         COMPONENT a = Arm() AT (0,0,0) ABSOLUTE
         COMPONENT b = Arm() AT (0,0,1) RELATIVE a JUMP NEXT(2) WHEN (0)
         COMPONENT c = Arm() AT (0,0,1) RELATIVE b
-        END""", 'NEXT', id='jump-next-out-of-range',
-                 marks=pytest.mark.xfail(strict=True, reason='JUMP NEXT(n) crashes')),
+        END""", 'NEXT', id='jump-next-out-of-range'),
     pytest.param("""\
         DEFINE INSTRUMENT bad() TRACE
         COMPONENT a = Arm() AT (0,0,0) ABSOLUTE
         COMPONENT b = Arm() AT (0,0,1) RELATIVE a JUMP PREVIOUS(3) WHEN (0)
-        END""", 'PREVIOUS', id='jump-previous-out-of-range',
-                 marks=pytest.mark.xfail(strict=True, reason='JUMP PREVIOUS(n) crashes')),
+        END""", 'PREVIOUS', id='jump-previous-out-of-range'),
     pytest.param("""\
         DEFINE INSTRUMENT bad() TRACE
         COMPONENT a = Arm() AT (0,0,0) ABSOLUTE

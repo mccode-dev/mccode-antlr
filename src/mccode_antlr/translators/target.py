@@ -357,6 +357,7 @@ class TargetVisitor:
         self.ok_to_skip = can_skip_transform
 
     def set_jump_absolute_targets(self):
+        names = [c.name for c in self.source.components]
         for index, jump in [(i, j) for i, c in enumerate(self.source.components) for j in c.jump]:
             # jump is a dataclass with 'target', 'index', 'iterate', 'condition', and 'actual_target_index'
             if jump.absolute_target > -1:
@@ -364,10 +365,14 @@ class TargetVisitor:
                 continue
             if jump.relative_target == 0 and jump.target.lower() != 'myself':
                 # the target is another named component:
-                jump.absolute_target = [i for i, c in enumerate(self.source.components) if jump.target == c.name][0]
-                jump.relative_target = jump.absolute_target - index
+                target = names.index(jump.target) if jump.target in names else -1
             else:
-                jump.absolute_target = index + jump.relative_target
+                target = index + jump.relative_target
+            if not 0 <= target < len(names):
+                raise RuntimeError(f'JUMP at component {names[index]}: target {jump.target} '
+                                   f'is not a component of this instrument')
+            jump.absolute_target = target
+            jump.relative_target = target - index
 
     def enter_trace(self):
         pass
