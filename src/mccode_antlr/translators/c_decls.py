@@ -116,10 +116,15 @@ def declarations_pre_libraries(source, typedefs: list, component_declared_parame
             "/* ************************************************************************** */",
             "/*             SHARE user declarations for all components                     */",
             "/* ************************************************************************** */"]
+        emitted = set()  # a class INHERITing another holds the very same SHARE blocks
         for comp in sharers:
+            blocks = [share for share in comp.share if share not in emitted]
+            if not blocks:
+                continue
+            emitted.update(blocks)
             lines.append(f"/* Shared user declarations for all components types '{comp.name}'. */")
             # TODO FIXME to_c includes the `#line` preprocessor directive -- which was removed from McCode3??
-            lines.extend([share.to_c(line_directives) for share in comp.share])
+            lines.extend([share.to_c(line_directives) for share in blocks])
         lines.extend([
             "/* ************************************************************************** */",
             "/*             End of SHARE user declarations for all components              */",

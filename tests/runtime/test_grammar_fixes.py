@@ -153,13 +153,16 @@ def test_diaphragm_absorbs_like_slit():
     assert 'passed' not in run_lines(DIAPHRAGM.format(slit=''))
 
 
-@pytest.mark.xfail(strict=True, raises=RuntimeError,
-                   reason='SHARE of an inherited class is emitted per class: slit_print_if redefined')
 @compiled_test
 def test_diaphragm_with_slit_compiles():
     # x=0.2 is inside the 0.5 m wide Slit
     slit = 'COMPONENT s = Slit(xwidth=0.5, yheight=0.5) AT (0,0,0.1) ABSOLUTE'
     assert 'passed' not in run_lines(DIAPHRAGM.format(slit=slit))
+
+
+def test_inherited_share_emitted_once():
+    source = translate(DIAPHRAGM.format(slit='COMPONENT s = Slit(xwidth=0.5, yheight=0.5) AT (0,0,0.1) ABSOLUTE'))
+    assert source.count('slit_print_if (int condition') == 1
 
 
 # ADR items 7 and 8: several declarations per line, non-double USERVARS via particle_getvar
