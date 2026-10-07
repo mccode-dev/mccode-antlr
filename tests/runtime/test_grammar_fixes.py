@@ -117,6 +117,16 @@ def test_jump_previous_n_iterate():
         END""", 'COPY of an undefined component instance nosuch', id='copy-undefined-name'),
     pytest.param("""\
         DEFINE INSTRUMENT bad() TRACE
+        COMPONENT a = Arm() AT (0,0,0) ABSOLUTE
+        COMPONENT b = Arm() AT (0,0,1) RELATIVE nosuch
+        END""", 'undefined component instance nosuch', id='at-relative-undefined'),
+    pytest.param("""\
+        DEFINE INSTRUMENT bad() TRACE
+        COMPONENT a = Arm() AT (0,0,0) ABSOLUTE
+        COMPONENT b = Arm() AT (0,0,1) RELATIVE a ROTATED (0,0,0) RELATIVE nosuch
+        END""", 'undefined component instance nosuch', id='rotated-relative-undefined'),
+    pytest.param("""\
+        DEFINE INSTRUMENT bad() TRACE
         COMPONENT a = NoSuchComponent() AT (0,0,0) ABSOLUTE
         END""", 'NoSuchComponent', id='unknown-component'),
     pytest.param("""\
@@ -218,3 +228,11 @@ def test_non_numeric_uservars_through_getvar():
     assert 'arr=0 1' in lines
     assert 'count=7 0' in lines
     assert 'small=-2 0' in lines
+
+
+def test_relative_previous_on_first_instance_is_absolute():
+    instr = parse_mcstas_instr(dedent("""\
+        DEFINE INSTRUMENT first() TRACE
+        COMPONENT a = Arm() AT (0,0,1) RELATIVE PREVIOUS
+        END"""))
+    assert instr.components[0].at_relative[1] is None

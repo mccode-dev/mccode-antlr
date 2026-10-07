@@ -279,7 +279,15 @@ class InstrVisitor(McInstrVisitor):
 
     def visitReference(self, ctx: McInstrParser.ReferenceContext):
         # ABSOLUTE or RELATIVE ABSOLUTE -> None
-        return self.visit(ctx.component_ref()) if ctx.Absolute() is None else None
+        if ctx.Absolute() is not None:
+            return None
+        relative = self.visit(ctx.component_ref())
+        # An unreachable PREVIOUS falls back to ABSOLUTE, as in the classic code generator
+        if relative is None and ctx.component_ref().Previous() is None:
+            line = None if ctx.start is None else ctx.start.line
+            raise RuntimeError(f'{self.filename}: {line} -- reference to undefined component instance '
+                               f'{literal_string(ctx.component_ref())}')
+        return relative
 
     def visitDependency(self, ctx: McInstrParser.DependencyContext):
         # store the flag without its surrounding quotes
