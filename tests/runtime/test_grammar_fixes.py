@@ -166,7 +166,6 @@ def test_inherited_share_emitted_once():
 
 
 # ADR items 7 and 8: several declarations per line, non-double USERVARS via particle_getvar
-@pytest.mark.xfail(strict=True, reason='particle_getvar reads the int memory as a double')
 @compiled_test
 def test_int_uservar_through_getvar():
     lines = run_lines("""\
@@ -191,3 +190,27 @@ def test_myself_in_instrument_parameters_only():
     from mccode_antlr.loader.loader import parse_mccode_instr_parameters
     with pytest.raises(RuntimeError, match='MYSELF'):
         parse_mccode_instr_parameters('DEFINE INSTRUMENT bad(p=MYSELF) TRACE END')
+
+
+@compiled_test
+def test_non_numeric_uservars_through_getvar():
+    # a struct (whose type name contains 'int') and an array can not be read as a double
+    lines = run_lines("""\
+        DEFINE INSTRUMENT uv_struct(dummy=0)
+        USERVARS %{Coords Point; double arr[2]; unsigned long count; int16_t small;%}
+        TRACE
+        COMPONENT a = Arm() AT (0,0,0) ABSOLUTE EXTEND %{count=7; small=-2;%}
+        COMPONENT b = Arm() AT (0,0,1) ABSOLUTE EXTEND %{
+          int fail;
+          const char *names[] = {"Point", "arr", "count", "small"};
+          for (int i = 0; i < 4; i++) {
+            double v = particle_getvar(_particle, (char *) names[i], &fail);
+            printf("%s=%g %d\\n", names[i], v, fail);
+          }
+        %}
+        END
+        """)
+    assert 'Point=0 1' in lines
+    assert 'arr=0 1' in lines
+    assert 'count=7 0' in lines
+    assert 'small=-2 0' in lines

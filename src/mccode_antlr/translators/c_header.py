@@ -1,7 +1,21 @@
+import re
 from textwrap import dedent
 from .c_listener import CDeclarator
 from ..instr import Instr
 from mccode_antlr import Flavor
+
+
+# C arithmetic type words; a typedef of one (other than these) is not recognised
+_NUMERIC_WORDS = {'char', 'short', 'int', 'long', 'float', 'double', 'signed', 'unsigned',
+                  '_Bool', 'bool', 'const', 'volatile', 'MCNUM', 'size_t'}
+
+
+def is_numeric_scalar(declaration: CDeclarator) -> bool:
+    """Whether a USERVAR can be read as a double, by particle_getvar and particle_getuservar_byid"""
+    if declaration.is_pointer or declaration.is_array or not declaration.dtype:
+        return False
+    return all(w in _NUMERIC_WORDS or re.fullmatch(r'u?int(_least|_fast)?\d+_t', w)
+               for w in declaration.dtype.split())
 
 
 def header_pre_runtime(
@@ -53,9 +67,10 @@ def header_pre_runtime(
     uservar_string += '\n'.join([f'  {x};' for x in uservars])
 
     members = list(accessible_struct_members(flavor)) + [x.name for x in uservars]
-    # Shouldn't we exclude array-valued names here?
+    # Only numeric scalars can be returned as a double; for the rest *suc reports failure
+    readable = list(accessible_struct_members(flavor)) + [x.name for x in uservars if is_numeric_scalar(x)]
     getvar = '\n'.join(
-        [f'  if(!str_comp("{x}",name)){{rval=*((double*)(&(p->{x})));s=0;}}' for x in members]
+        [f'  if(!str_comp("{x}",name)){{rval=(double)(p->{x});s=0;}}' for x in readable]
     )
 
     # Array valued names seem OK here, since a user can type-cast correctly
@@ -81,8 +96,10 @@ def header_pre_runtime(
         [f'  p->{x} = p0->{x};' for x in restorable_struct_members(flavor)]
     )
 
+    # ids count all user vars, readable or not
     getuservar_byid = '\n'.join(
-        [f'  case {i}: {{rval=*( (double *)(&(p->{x.name})) ); s=0; break;}}' for i, x in enumerate(uservars)])
+        [f'  case {i}: {{rval=(double)(p->{x.name}); s=0; break;}}'
+         for i, x in enumerate(uservars) if is_numeric_scalar(x)])
 
     uservar_init = ''
     for x in uservars:
