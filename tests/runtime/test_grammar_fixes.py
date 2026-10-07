@@ -235,3 +235,28 @@ def test_relative_previous_on_first_instance_is_absolute():
         COMPONENT a = Arm() AT (0,0,1) RELATIVE PREVIOUS
         END"""))
     assert instr.components[0].at_relative[1] is None
+
+
+# ADR {...} vector expressions: elements are C expressions, instrument parameters included
+@compiled_test
+def test_vector_elements_with_instrument_parameter():
+    from mccode_antlr.reader.registry import InMemoryRegistry
+    registry = InMemoryRegistry('grammar_fixes_vector')
+    registry.add_comp('print_vector', dedent("""\
+        DEFINE COMPONENT print_vector
+        SETTING PARAMETERS (vector v, int n=4)
+        INITIALIZE
+        %{
+          for (int i = 0; i < n; i++) printf("v[%d]=%g\\n", i, v[i]);
+        %}
+        END
+        """))
+    instr = parse_mcstas_instr(dedent("""\
+        DEFINE INSTRUMENT vector_expressions(par=0.5)
+        TRACE
+        COMPONENT a = print_vector(v={1, 3.2*0.0219, par, 2*par}, n=4) AT (0,0,0) ABSOLUTE
+        END
+        """), registries=[registry])
+    output, _ = compile_and_run(instr, '-n 0 -y par=0.25')
+    lines = [line.strip() for line in output.decode('utf-8').splitlines()]
+    assert ['v[0]=1', 'v[1]=0.07008', 'v[2]=0.25', 'v[3]=0.5'] == [x for x in lines if x.startswith('v[')]
