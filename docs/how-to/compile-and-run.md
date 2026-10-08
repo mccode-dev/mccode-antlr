@@ -32,17 +32,17 @@ instr = parse_mcstas_instr("MyInstrument.instr")
 sim = McStas(instr).compile()
 
 # Run a single simulation point.
-result, out = sim.run({'E_i': 5.0, 'angle': 30.0}, ncount=1_000_000, seed=42)
+result = sim.run({'E_i': 5.0, 'angle': 30.0}, ncount=1_000_000, seed=42)
 
-# `out` is a SimulationOutput — a dict-like object keyed by detector stem.
-print(out['energy'].data.shape)   # e.g. (3, 100) for a 1-D, 100-bin monitor
-print(out.directory)              # Path to the output directory on disk
+# `result` is a RunOutput; monitor data are available by file stem.
+print(result['energy']['I'].shape)   # e.g. (100,) for a 100-bin monitor
+print(result.output.directory)       # Path to the output directory on disk
 ```
 
 Method chaining is supported for compact one-liners:
 
 ```python
-result, out = McStas(instr).compile().run({'E_i': 5.0}, ncount=1_000_000)
+result = McStas(instr).compile().run({'E_i': 5.0}, ncount=1_000_000)
 ```
 
 ### Use default parameter values
@@ -51,7 +51,7 @@ Omit `parameters` (or pass `{}`) to run with the instrument's compiled-in
 defaults, equivalent to `mcrun -y`:
 
 ```python
-result, out = sim.run(ncount=1_000_000)
+result = sim.run(ncount=1_000_000)
 ```
 
 ### Provide a persistent compile directory
@@ -69,15 +69,15 @@ sim2 = McStas(instr).compile(Path("/tmp/my_build"))  # skips compile if binary e
 
 ### Parameter scans
 
-`scan()` iterates over one or more parameter ranges and returns a list of
-`(result, SimulationOutput)` tuples — one per scan point.
+`scan()` iterates over one or more parameter ranges and returns a
+`ScanOutput`, which holds a `RunOutput` for each scan point.
 
 ```python
 # 1-D scan: E_i steps from 1 to 5 in increments of 1 (5 points)
 results = sim.scan({'E_i': '1:1:5', 'angle': 30.0}, ncount=100_000)
 
-for result, out in results:
-    print(out['energy'].data[0].sum())   # total intensity at this scan point
+for result in results:
+    print(result['energy']['I'].sum())   # total intensity at this scan point
 ```
 
 Use an explicit Python list for non-uniform steps:
@@ -103,7 +103,7 @@ existing code that expected a plain `dict` continues to work.  It also exposes
 additional information about everything written to disk:
 
 ```python
-result, out = sim.run({'E_i': 5.0}, ncount=1_000_000)
+out = sim.run({'E_i': 5.0}, ncount=1_000_000).output
 
 # Dict-like access (backward-compatible)
 det = out['energy']      # DatFile1D / DatFile2D / DatFile0D
@@ -113,7 +113,7 @@ print(len(out))          # number of McCode-format detectors found
 
 # All McCode-format files (any extension — catches Monitor_nD output)
 for stem, dat in out.dats.items():
-    print(stem, dat.data.shape)
+    print(stem, dat['I'].shape)
 
 # Files loaded by custom filters (see below)
 print(out.other)
@@ -139,7 +139,7 @@ import h5py
 
 register_output_filter('.h5', h5py.File)
 
-result, out = sim.run({'E_i': 5.0}, ncount=1_000_000)
+out = sim.run({'E_i': 5.0}, ncount=1_000_000).output
 hdf5_data = out.other.get('nexus_output')   # loaded by h5py.File
 ```
 
@@ -295,7 +295,7 @@ result, out = mccode_run_compiled(
 
 # `out` is a SimulationOutput (dict-like, keyed by detector stem)
 for name, det in out.items():
-    print(name, det.data.shape)
+    print(name, det['I'].shape)
 ```
 
 The parameters string is passed directly to the binary as command-line
@@ -362,19 +362,19 @@ a.component("Source", "Source_simple",
 a.component("Det", "E_monitor",
             at=([0, 0, 1], "Source"),
             parameters={"filename": '"energy.dat"', "Emin": 0.0, "Emax": 10.0,
-                        "nchan": 100, "xwidth": 0.1, "yheight": 0.1})
+                        "nE": 100, "xwidth": 0.1, "yheight": 0.1})
 instr = a.instrument
 
 # Compile once, run several times
 sim = McStas(instr).compile()
 
 # Single run at the default parameter values
-result, out = sim.run(ncount=1_000_000)
-print("Default run intensity:", out['energy']['I'].sum())
+result = sim.run(ncount=1_000_000)
+print("Default run intensity:", result['energy']['I'].sum())
 
 # Scan over E_i
-for result, out in sim.scan({'E_i': '1:1:10'}, ncount=100_000):
-    print(out['energy']['I'].sum())
+for result in sim.scan({'E_i': '1:1:10'}, ncount=100_000):
+    print(result['energy']['I'].sum())
 ```
 
 
@@ -541,7 +541,7 @@ a.component("Source", "Source_simple",
 a.component("Det", "E_monitor",
             at=([0, 0, 1], "Source"),
             parameters={"filename": '"energy.dat"', "Emin": 0.0, "Emax": 10.0,
-                        "nchan": 100, "xwidth": 0.1, "yheight": 0.1})
+                        "nE": 100, "xwidth": 0.1, "yheight": 0.1})
 instr = a.instrument
 
 # Compile and run

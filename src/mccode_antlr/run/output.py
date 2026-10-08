@@ -122,7 +122,7 @@ class SimulationOutput(Mapping):
     that existing code written against the old ``dict[str, DatFile]`` return
     value continues to work without modification::
 
-        result, out = sim.run({'x': 1.5}, ncount=1000)
+        out = sim.run({'x': 1.5}, ncount=1000).output
         # Old-style access still works:
         print(out['m0']['I'])
         print(len(out))

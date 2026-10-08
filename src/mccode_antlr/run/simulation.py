@@ -20,7 +20,7 @@ class Simulation:
         sim = McStas(instr).compile('/tmp/build')
 
         # Single point
-        result, dats = sim.run({'x': 1.5, 'y': 2}, ncount=1000)
+        result = sim.run({'x': 1.5, 'y': 2}, ncount=1000)
 
         # Linear parameter scan
         results = sim.scan({'x': '1:0.5:5', 'y': 2}, ncount=1000)
@@ -197,8 +197,9 @@ class Simulation:
         :param capture: What to do with the simulation's output: True/'yes' to
             capture and return it, False/'no' to let it stream to the terminal,
             or 'tee' to do both and save <directory>/mccode.out.
-        :returns: ``(result, dats)`` where *result* is the subprocess result and
-            *dats* is a dict mapping monitor stem names to loaded data objects.
+        :returns: :class:`~mccode_antlr.run.output.RunOutput` with the captured
+            output, the parameter values and the files written; monitor data
+            are available by file stem, as ``result['stem']``.
         :raises ValueError: If any parameter value resolves to more than one point.
         :raises RuntimeError: If :meth:`compile` has not been called first.
         """
