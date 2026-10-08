@@ -311,6 +311,17 @@ def mccode_run_compiled(
     return result, _collect_output(Path(directory), tmpdir=tmpdir)
 
 
+def timestamped_directory(parent, name: str) -> Path:
+    """The path {parent}/{name}{timestamp}, with a number appended if it exists."""
+    from datetime import datetime
+    path = Path(parent) / f'{name}{datetime.now().strftime("%Y%m%d_%H%M%S")}'
+    candidate, number = path, 1
+    while candidate.exists():
+        candidate = path.with_name(f'{path.name}_{number}')
+        number += 1
+    return candidate
+
+
 def mccode_run_scan(name: str, binary, target, parameters, directory, grid: bool, capture: bool | str = True, dry_run: bool = False, use_defaults: bool = False, **r_args):
     from .range import parameters_to_scan
     n_pts, names, scan = parameters_to_scan(parameters, grid=grid)
@@ -319,8 +330,7 @@ def mccode_run_scan(name: str, binary, target, parameters, directory, grid: bool
     args = regular_mccode_runtime_dict(r_args)
 
     if directory is None:
-        from datetime import datetime
-        directory = Path(f'{name}{datetime.now().strftime("%Y%m%d_%H%M%S")}')
+        directory = timestamped_directory('.', name)
     elif not isinstance(directory, Path):
         directory = Path(directory)
 
@@ -370,7 +380,6 @@ def mccode_run(instrument: Instr,
                gravitation: bool | None = None, bufsize: int | None = None, dryrun: bool = False, fmt: str | None = None,
                ):
     from os import access, R_OK
-    from datetime import datetime
     from mccode_antlr.compiler.c import CBinaryTarget, binary_path as target_binary_path
     if not isinstance(directory, Path):
         directory = Path(directory)
@@ -397,7 +406,7 @@ def mccode_run(instrument: Instr,
         dry_run=dryrun,
         capture=capture,
     )
-    out_dir = directory.joinpath(f'{instrument.name}{datetime.now().strftime("%Y%m%d_%H%M%S")}')
+    out_dir = timestamped_directory(directory, instrument.name)
 
     return mccode_run_scan(instrument.name, binary_path, target, parameters, out_dir, mesh, **runtime)
 

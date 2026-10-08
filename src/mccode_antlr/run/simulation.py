@@ -141,11 +141,10 @@ class Simulation:
                 "Instrument has not been compiled. Call compile() before run() or scan()."
             )
 
-    def _default_output_dir(self, suffix: str = '') -> Path:
-        from datetime import datetime
+    def _default_output_dir(self) -> Path:
+        from mccode_antlr.run.runner import timestamped_directory
         base = self.directory if self.directory is not None else Path('.')
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        return base / f'{self.instr.name}{timestamp}{suffix}'
+        return timestamped_directory(base, self.instr.name)
 
     @staticmethod
     def _build_runtime_kwargs(
