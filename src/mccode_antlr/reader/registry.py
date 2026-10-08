@@ -127,7 +127,7 @@ def simple_url_validator(url: str, file_ok=False):
         return False
     if file_ok:
         if result.scheme == 'file':
-            print("Constructing a RemoteRegistry for a file:// URL will likely duplicate files!")
+            logger.warning("Constructing a RemoteRegistry for a file:// URL will likely duplicate files")
         if result.scheme != 'file' and not result.netloc:
             return False
     elif not result.netloc:

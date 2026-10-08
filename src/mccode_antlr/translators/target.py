@@ -316,7 +316,7 @@ class TargetVisitor:
         self.info('visit flags')
         self.visit_flags()
         if self.verbose and self.warnings:
-            print(f"Build of instrument {self.source.name} had {self.warnings} warnings")
+            logger.info(f"Build of instrument {self.source.name} had {self.warnings} warnings")
         return self.output
 
     def save(self, filename=None, close=True, reprocess=True):
