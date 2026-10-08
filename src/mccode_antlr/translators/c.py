@@ -330,7 +330,7 @@ class CTargetVisitor(TargetVisitor, target_language='c'):
             self.embed_file("mccode-r.c")
             self.embed_file(f'{name}-r.c')
             if self.verbose:
-                print(f"Compile with flags '-DUSE_NEXUS -lNeXus' to enable NeXus support")
+                logger.info("Compile with flags '-DUSE_NEXUS -lNeXus' to enable NeXus support")
         else:
             # This only works if the module is *not* a compressed archive
             # If it is, we would need to do some trickery to ... write out the
@@ -338,7 +338,7 @@ class CTargetVisitor(TargetVisitor, target_language='c'):
             path = self.include_path(f"{name}-r.h")
             self.out(f'#include "{path}"')
             libname = f'{name}-r.o'
-            print(f"Dependency: mccode-r.o\nDependency: {libname}")
+            logger.debug(f"Dependency: mccode-r.o, {libname}")
 
         # # TODO insert includes here?
         # if len(self.includes):
@@ -429,7 +429,7 @@ class CTargetVisitor(TargetVisitor, target_language='c'):
                 self.include_source(include)
         else:
             for include in self.includes:
-                print(f'Dependency: {include.name}.o')
+                logger.debug(f'Dependency: {include.name}.o')
 
         self.out("/* User declarations from instrument definition. Can define functions. */")
         self.out('\n'.join([dec.to_c(self.line_directives) for dec in self.source.declare]))
@@ -503,7 +503,7 @@ class CTargetVisitor(TargetVisitor, target_language='c'):
         self.out(f'/* end of generated C code for {self.source.name} */')
 
     def visit_flags(self):
-        """Output compilation flags to STDOUT, so that (e.g.) mcrun can pick them up"""
+        """Log the compilation flags; the generated header records them for mcrun as `* CFLAGS=`"""
         flags = self.source.decoded_flags()
         if len(flags):
-            print(f'CFLAGS= {" ".join(flags)}')
+            logger.debug(f'CFLAGS= {" ".join(flags)}')

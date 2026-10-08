@@ -292,7 +292,7 @@ def cogen_initialize(
             f'  /* Instrument {source.name} INITIALIZE */',
             f'  SIG_MESSAGE("[{source.name} INITIALIZE [{f}:{n}]");'
         ])
-        print(f'The instrument has {len(source.parameters)} parameters')
+        logger.debug(f'The instrument has {len(source.parameters)} parameters')
         for par in source.parameters:
             # ensure there's no conflict of names
             lines.append(f'  #define {par.name} (instrument->_parameters.{par.name})')
@@ -301,7 +301,7 @@ def cogen_initialize(
         for par in source.parameters:
             lines.append(f'  #undef {par.name}')
     else:
-        print("No initialization present?")
+        logger.debug(f"{source.name} has no INITIALIZE section")
 
     for comp in source.components:
         lines.append(f'  _{comp.name}_setpos(); /* type {comp.type.name} */')

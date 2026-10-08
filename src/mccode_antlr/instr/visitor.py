@@ -300,7 +300,7 @@ class InstrVisitor(McInstrVisitor):
         # via `#line {number} "{filename}"` directives, for more expressive error handling
         line_number = None if ctx.start is None else ctx.start.line
         if line_number is None:
-            print(f'Why is line none for {self.filename} {ctx.UnparsedBlock()}')
+            logger.debug(f'No line number for {self.filename} {ctx.UnparsedBlock()}')
         return self.filename, line_number,  str(ctx.UnparsedBlock())[2:-2]
 
     def visitShell(self, ctx: McInstrParser.ShellContext):
