@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 from io import StringIO
+from os import PathLike
 from pathlib import Path
 from msgspec import Struct, field
 from typing import Optional
@@ -109,6 +110,9 @@ class Instr(Struct):
         ))
 
     def to_file(self, output=None, wrapper=None, flat: bool = True):
+        if isinstance(output, (str, PathLike)):
+            with open(output, 'w', encoding='utf-8') as file:
+                return self.to_file(file, wrapper, flat)
         if output is None:
             output = StringIO()
         if wrapper is None:
