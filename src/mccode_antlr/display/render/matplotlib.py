@@ -85,6 +85,8 @@ def plot_geometry(
         for pts in polylines:
             if pts.ndim != 2 or pts.shape[1] != 3 or len(pts) < 2:
                 continue
+            # McCode's y axis is drawn vertically:
+            pts = pts[:, [0, 2, 1]]
             ax.plot3D(pts[:, 0], pts[:, 1], pts[:, 2],
                       color=color, linewidth=linewidth, alpha=alpha)
             centroid_pts.append(pts)
