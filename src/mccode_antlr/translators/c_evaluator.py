@@ -7,7 +7,6 @@ Public API:
 from __future__ import annotations
 
 import sympy
-from loguru import logger
 
 from ..grammar import CParser, CVisitor
 from ..common import Expr
@@ -16,6 +15,10 @@ from ..common.expression.sympy_classes import (
     CFunctionCall, CAnd, COr, CNot, CLeftShift, CRightShift,
 )
 from ..common.expression.types import DataType
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------

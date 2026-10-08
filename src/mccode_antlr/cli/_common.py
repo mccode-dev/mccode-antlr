@@ -21,3 +21,11 @@ def load_instr(path: Path, flavor: str, search_dir: list[Path] | None):
     if not isinstance(instr, Instr):
         raise RuntimeError(f'Input {path} did not resolve to an Instr object')
     return instr
+
+
+def configure_logging(verbose: bool = False):
+    """Log to stderr: warnings from everything, and with *verbose* all of mccode_antlr's messages."""
+    import logging
+    logging.basicConfig(format='%(levelname)s %(name)s: %(message)s')
+    if verbose:
+        logging.getLogger('mccode_antlr').setLevel(logging.DEBUG)

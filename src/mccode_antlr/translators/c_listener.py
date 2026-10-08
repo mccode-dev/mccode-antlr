@@ -3,10 +3,14 @@ import msgspec
 from pathlib import Path
 from typing import TypeVar
 
-from loguru import logger
 from ..grammar import CParser, McInstrParser, CVisitor
 from ..instr import InstrVisitor
 from ..common import Expr
+
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 def string_between_tokens(start_token, stop_token):
     stream = start_token.getInputStream()

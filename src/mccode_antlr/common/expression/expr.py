@@ -3,10 +3,13 @@ from __future__ import annotations
 
 import sympy
 import msgspec
-from loguru import logger
 
 from .sympy_classes import McCodeParameter, UNSET_SYMPY, SYMPY_NAMESPACE
 from .types import DataType, ObjectType, ShapeType
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------

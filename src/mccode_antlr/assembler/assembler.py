@@ -6,9 +6,13 @@ from typing import Union
 from ..common import Expr, InstrumentParameter
 from ..instr import Instr, Instance
 from ..reader import Reader, Registry
-from loguru import logger
 from mccode_antlr import Flavor
 from mccode_antlr.instr.orientation import Vector, Angles
+
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 class Assembler:
     """Interactive instrument assembly"""

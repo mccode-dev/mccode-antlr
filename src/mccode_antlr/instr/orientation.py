@@ -2,7 +2,11 @@ from msgspec import Struct, field
 from ..common import Expr, unary_expr, binary_expr
 from ..utils import deprecated
 from typing import TypeVar,Union
-from loguru import logger
+
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 VectorType = TypeVar('VectorType', bound='Vector')
 AnglesType = TypeVar('AnglesType', bound='Angles')

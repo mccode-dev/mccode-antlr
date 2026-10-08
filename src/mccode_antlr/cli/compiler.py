@@ -62,6 +62,8 @@ def mccode_compile_cmd(flavor, prog: str | None = None):
     if prog is None:
         prog = str(flavor).lower() + 'c'
     args = compile_script_parser(prog).parse_args()
+    from mccode_antlr.cli._common import configure_logging
+    configure_logging(args.verbose)
     filename: Path = args.filename if isinstance(args.filename, Path) else next(iter(args.filename))
     if not isinstance(filename, Path):
         raise ValueError(f'{filename} should be a Path but is {type(filename)}')

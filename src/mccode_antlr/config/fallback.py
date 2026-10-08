@@ -1,7 +1,10 @@
 from __future__ import annotations
 from collections.abc import Callable
 from confuse import LazyConfig, Subview
-from loguru import logger
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def config_fallback(

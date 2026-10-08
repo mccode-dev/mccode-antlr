@@ -1,6 +1,11 @@
 from __future__ import annotations
 from functools import cache
 
+import logging
+
+logger = logging.getLogger(__name__)
+
+
 # Stores the human-readable reason the last compile check failed, keyed by compiler path.
 # Used by the `compiled` decorator to surface a useful error message.
 _compile_check_failure: dict[str, str] = {}
@@ -9,7 +14,6 @@ _compile_check_failure: dict[str, str] = {}
 @cache
 def check_for_mccode_antlr_compiler(path: str) -> bool:
     from shutil import which
-    from loguru import logger
     from ..config import config
     cc = config
     for key in path.split('/'):
@@ -63,7 +67,6 @@ def compiles(compiler: str, instr):
 @cache
 def simple_instr_compiles(which: str) -> bool:
     from subprocess import CalledProcessError
-    from loguru import logger
     if not check_for_mccode_antlr_compiler(which):
         from ..config import config
         cc = config
@@ -109,7 +112,6 @@ def compiled(method, compiler: str | None = None):
 
 
 def gpu_only(method):
-    from loguru import logger
     # GPU compiled instruments need the specific OpenACC compiler
     # **PLUS** they need to _actually_ have the openACC header (macOS and Windows don't use different compilers)
     return compiled(method, 'acc')

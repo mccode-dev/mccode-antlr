@@ -4,12 +4,16 @@ from dataclasses import dataclass, field
 from datetime import timedelta
 from pathlib import Path
 from typing import TypeVar
-from loguru import logger
 
 from numpy import nan
 
 from mccode_antlr import Flavor
 from mccode_antlr.reader import Registry
+
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 NightlyInstrExampleType = TypeVar('NightlyInstrExampleType', bound='NightlyInstrExample')
 
@@ -277,10 +281,9 @@ def _mccode_test(compiler, runner, registry: Registry, search_pattern=None, inst
         skip_non_test: a flag to control whether instr files which do not specify test cases should be compiled and run
     """
     import re
-    from loguru import logger as logging
     import tempfile
     from datetime import datetime
-    logging.info(f"Finding test instruments in: {registry}")
+    logger.info(f"Finding test instruments in: {registry}")
     # we _require_ that all test instr files are in a folder called "examples" ...
     filenames = registry.match(re.compile(r'.*examples/.*\.instr'))
     # allow the user to limit which test cases can be found via a regular expression search
@@ -318,7 +321,7 @@ def _mccode_test(compiler, runner, registry: Registry, search_pattern=None, inst
 
     # Move into a temporary directory to ensure compilation/run times are from scratch
 
-    logging.info("Compiling instruments")
+    logger.info("Compiling instruments")
     for test in tests:
         print(test)
         if test.sourcefile not in binaries and (test.test_number != 0 or not skip_non_test):
@@ -328,19 +331,19 @@ def _mccode_test(compiler, runner, registry: Registry, search_pattern=None, inst
             test.compiled = True
 
             if binaries[test.sourcefile][0]:
-                logging.info(f'%-{test.sourcefile.stem:>{longest_name}s}: {test.compile_time}')
+                logger.info(f'%-{test.sourcefile.stem:>{longest_name}s}: {test.compile_time}')
             else:
-                logging.info(f'%-{test.sourcefile.stem:>{longest_name}s}: COMPILE ERROR')
+                logger.info(f'%-{test.sourcefile.stem:>{longest_name}s}: COMPILE ERROR')
         else:
-            logging.info(f'%-{test.sourcefile.stem:>{longest_name}s}: COMPILE skipped')
+            logger.info(f'%-{test.sourcefile.stem:>{longest_name}s}: COMPILE skipped')
 
-    logging.info("Running tests")
+    logger.info("Running tests")
     for test in tests:
         if not binaries.get(test.sourcefile, (False, None))[0]:
-            logging.info(f'%-{test.sourcefile.stem:>{longest_name}s}: No compile')
+            logger.info(f'%-{test.sourcefile.stem:>{longest_name}s}: No compile')
             continue
         if test.test_number < 1:
-            logging.info(f'%-{test.sourcefile.stem:>{longest_name}s}: No test')
+            logger.info(f'%-{test.sourcefile.stem:>{longest_name}s}: No test')
             continue
 
         t1 = datetime.now()
@@ -350,15 +353,15 @@ def _mccode_test(compiler, runner, registry: Registry, search_pattern=None, inst
         test.stdout = stdout.decode() if isinstance(stdout, bytes) else stdout
 
         if test.ran:
-            logging.info(f'%-{test.sourcefile.stem:>{longest_name}s}: {test.run_time}')
+            logger.info(f'%-{test.sourcefile.stem:>{longest_name}s}: {test.run_time}')
         else:
-            logging.info(f'%-{test.sourcefile.stem:>{longest_name}s}: RUNTIME ERROR')
-            logging.debug(test.stdout)
+            logger.info(f'%-{test.sourcefile.stem:>{longest_name}s}: RUNTIME ERROR')
+            logger.debug(test.stdout)
             test.error_message = test.stdout
             continue
 
         detector_output = _monitor_name_file_name_match(output_dir, test.detector)
-        logging.debug(f'Detector output stored in {detector_output}')
+        logger.debug(f'Detector output stored in {detector_output}')
         test.test_value = - 1
         if detector_output is None or not detector_output.is_file():
             rdet = re.compile(f'{test.detector}_I= ([0-9+-eE.]+)')
@@ -379,7 +382,7 @@ def _mccode_test(compiler, runner, registry: Registry, search_pattern=None, inst
         import shutil
         shutil.rmtree(workdir)
     else:
-        logging.info(f'Test compiled binaries and test case output directories are located under {workdir}.\n'
+        logger.info(f'Test compiled binaries and test case output directories are located under {workdir}.\n'
                      'You may wish to clean-up this directory to recover disk space.')
 
     # Since the output directories may no longer exist, save the test results ... here?
@@ -401,7 +404,6 @@ def ispath(arg: str):
 
 def main(name, program):
     from argparse import ArgumentParser
-    from loguru import logger
     parser = ArgumentParser(name, description=f'Test instrument compilation and runtime for {name}')
     parser.add_argument('-s', '--search', help='Regular expression positive filter for instrument names', default=None)
     parser.add_argument('-c', '--count', type=int, help='Maximum number of instruments to test', default=None)
@@ -412,8 +414,7 @@ def main(name, program):
     parser.add_argument('-d','--dump', action='store_true', help='Output C source to file', default=False)
     parser.add_argument('-w','--workdir', type=ispath, help='Work directory, temporary if None', default=None)
 
-    # logging.basicConfig(level=logging.DEBUG, format='{asctime} {levelname} {message}', style='{')
-    # logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.INFO, format='{asctime} {levelname} {message}', style='{')
 
     args = parser.parse_args()
     results = program(search_pattern=args.search, instr_count=args.count, skip_non_test=args.skip, mpi=args.mpi,

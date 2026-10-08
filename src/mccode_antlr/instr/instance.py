@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from loguru import logger
 from typing import Optional
 from msgspec import Struct, field
 from typing import TypeVar, Union, Optional
@@ -9,6 +8,11 @@ from ..common import Expr
 from ..common import InstrumentParameter, ComponentParameter, MetaData, parameter_name_present, RawC, blocks_to_raw_c
 from .orientation import Vector, Angles
 from .jump import Jump
+
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 InstanceReference = TypeVar('InstanceReference', bound='Instance')
 VectorReference = tuple[Vector, Optional[InstanceReference]]

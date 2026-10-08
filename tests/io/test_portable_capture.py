@@ -106,13 +106,15 @@ class TestUnresolvableIncludes:
     before it is translated, or on the machine that translates it."""
 
     def _warnings(self, call):
-        from loguru import logger
+        import logging
         messages = []
-        sink = logger.add(lambda m: messages.append(str(m)), level='WARNING')
+        handler = logging.Handler(logging.WARNING)
+        handler.emit = lambda record: messages.append(record.getMessage())
+        logging.getLogger('mccode_antlr').addHandler(handler)
         try:
             result = call()
         finally:
-            logger.remove(sink)
+            logging.getLogger('mccode_antlr').removeHandler(handler)
         return result, messages
 
     def _deferred(self, tmp_path):

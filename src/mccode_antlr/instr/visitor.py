@@ -5,7 +5,10 @@ from ..common.visitor import add_common_visitors
 from .instr import Instr
 from .instance import Instance
 from .jump import Jump
-from loguru import logger
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def literal_string(ctx):

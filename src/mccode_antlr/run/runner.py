@@ -3,6 +3,11 @@ from pathlib import Path
 from mccode_antlr import Flavor
 from mccode_antlr.instr import Instr
 
+import logging
+
+logger = logging.getLogger(__name__)
+
+
 def regular_mccode_runtime_dict(args: dict) -> dict:
     def insert_best_of(src: dict, snk: dict, names: tuple):
         def get_best_of():
@@ -75,7 +80,6 @@ def sort_args(args: list[str]) -> list[str]:
 
 
 def si_int(s: str) -> int:
-    from loguru import logger
     suffix_value = {
         'k': 1000, 'M': 10 ** 6, 'G': 10 ** 9, 'T': 10 ** 12, 'P': 10 ** 15,
         'Ki': 2 ** 10, 'Mi': 2 ** 20, 'Gi': 2 ** 30, 'Ti': 2 ** 40, 'Pi': 2 ** 50
@@ -200,6 +204,8 @@ def parse_mccode_run_script(prog: str):
     from .range import parse_scan_parameters
     sys.argv[1:] = sort_args(sys.argv[1:])
     args = mccode_run_script_parser(prog).parse_args()
+    from mccode_antlr.cli._common import configure_logging
+    configure_logging(args.verbose)
     parameters = parse_scan_parameters(args.parameters)
     return args, parameters
 
@@ -228,7 +234,6 @@ def resolve_target_flag(flag: str, name: str, requested, detected, binary) -> bo
     unspecified flag take the binary's value without a value of False -- which the
     user may well have meant -- being silently overridden.
     """
-    from loguru import logger
     if requested is None:
         return bool(detected)
     if detected is None or bool(requested) == bool(detected):
@@ -245,7 +250,6 @@ def resolve_target_flag(flag: str, name: str, requested, detected, binary) -> bo
 
 def mccode_compile(instr, directory, flavor: Flavor, target: dict | None = None, config: dict | None = None, **kwargs):
     from mccode_antlr.compiler.c import compile_instrument, CBinaryTarget
-    from loguru import logger
 
     def_target = CBinaryTarget(mpi=False, acc=False, count=1, nexus=False)
     def_config = dict(default_main=True, enable_trace=False, portable=False, include_runtime=True,
@@ -278,7 +282,6 @@ def resolve_scan_reporter(capture, name: str, n_points: int, dry_run: bool = Fal
     output to summarise. The log file is written either way, so nothing is lost
     by the downgrade.
     """
-    from loguru import logger
     from mccode_antlr.compiler.c import normalise_capture
     if normalise_capture(capture) != 'tui':
         return capture, None
@@ -488,7 +491,6 @@ def mccode_run_cmd(flavor: Flavor):
         binary, target = mccode_compile(instrument, args.output_file, flavor=flavor, target=target, config=config)
 
     if not len(parameters):
-        from loguru import logger
         if args.yes:
             # --yes was given: run with --yes so the binary uses all default values
             pass

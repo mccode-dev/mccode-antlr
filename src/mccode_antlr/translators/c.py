@@ -1,9 +1,12 @@
 """Translates a McComp instrument from its intermediate form to a C runtime source file."""
-from loguru import logger
 from dataclasses import dataclass
 from .target import TargetVisitor, FileReplacement
 from .c_listener import extract_c_declared_variables
 from mccode_antlr import Flavor
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def codegen_header_file_replacement(filename: str) -> FileReplacement | None:

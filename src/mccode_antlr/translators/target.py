@@ -1,9 +1,12 @@
 import re
 from dataclasses import dataclass
-from loguru import logger
 from io import StringIO
 from ..instr import Instr, Instance
 from mccode_antlr import Flavor
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass

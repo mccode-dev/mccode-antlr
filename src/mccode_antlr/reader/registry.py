@@ -5,7 +5,6 @@ import pooch
 from functools import cache
 from pathlib import Path, PurePosixPath
 from re import Pattern
-from loguru import logger
 from typing import Type, Any
 from msgspec import Struct
 import requests
@@ -15,6 +14,11 @@ from packaging.version import Version, InvalidVersion
 from mccode_antlr.version import version as mccode_antlr_version
 from mccode_antlr import Flavor
 from mccode_antlr.common import TextWrapper
+
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 def _decode_stored_bytes(value) -> bytes:
     """Decode one entry of an InMemoryRegistry `files` mapping
