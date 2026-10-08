@@ -150,8 +150,7 @@ class InstrumentDisplay:
             comp_params = dict(p)
             for cp in instance.parameters:
                 try:
-                    val = cp.value.evaluate(p).simplify()
-                    comp_params[cp.name] = float(val)
+                    comp_params[cp.name] = _eval_expr(cp.value, p)
                 except Exception:
                     pass
 
