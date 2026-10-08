@@ -103,13 +103,15 @@ def test_static_when_conditions_emit_c_compatible_literals():
 
 
 def _warnings_from(fn):
-    from loguru import logger
+    import logging
     messages = []
-    sink = logger.add(lambda m: messages.append(str(m)), level='WARNING')
+    handler = logging.Handler(logging.WARNING)
+    handler.emit = lambda record: messages.append(record.getMessage())
+    logging.getLogger('mccode_antlr').addHandler(handler)
     try:
         result = fn()
     finally:
-        logger.remove(sink)
+        logging.getLogger('mccode_antlr').removeHandler(handler)
     return result, messages
 
 

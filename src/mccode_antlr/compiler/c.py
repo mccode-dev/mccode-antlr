@@ -6,9 +6,13 @@ from typing import Union
 from pathlib import Path
 from mccode_antlr.instr import Instr
 from mccode_antlr.translators.c import CTargetVisitor
-from loguru import logger
 from .check import compiled, gpu_only, mpi_only
 from mccode_antlr import Flavor
+
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 class CBinaryTarget:
     class Type(Flag):

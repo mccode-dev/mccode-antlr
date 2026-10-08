@@ -16,13 +16,17 @@ by name and content hash, and copying them would bloat every artifact.
 """
 from __future__ import annotations
 
-from loguru import logger
 
 from mccode_antlr.reader.registry import (
     InMemoryRegistry, LocalRegistry, Registry,
     REGISTRY_PRIORITY_MEDIUM, ordered_registries, origin_label,
 )
 from mccode_antlr.translators.includes import included_names, source_blocks
+
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 EMBEDDED_REGISTRY_NAME = 'embedded'
 

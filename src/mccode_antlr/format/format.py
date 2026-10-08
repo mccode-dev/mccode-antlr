@@ -36,6 +36,10 @@ from io import StringIO
 from pathlib import Path
 from antlr4 import CommonTokenStream, InputStream, Token, TerminalNode
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -795,7 +799,6 @@ def fetch_mccode_clang_format_config() -> Path | None:
 
         response = _fetch_registry_with_retry(url)
         if response is None or not response.ok:
-            from loguru import logger
             logger.debug(
                 f'McCode .clang-format not available at {url} '
                 f'(status {getattr(response, "status_code", "?")})'
@@ -807,7 +810,6 @@ def fetch_mccode_clang_format_config() -> Path | None:
         return cached
 
     except Exception as exc:
-        from loguru import logger
         logger.debug(f'Could not fetch McCode .clang-format config: {exc}')
         return None
 
@@ -857,7 +859,6 @@ def make_clang_formatter(
     import shutil
 
     if shutil.which('clang-format') is None:
-        from loguru import logger
         logger.warning(
             'clang-format not found on PATH; C blocks will not be formatted'
         )
@@ -871,7 +872,6 @@ def make_clang_formatter(
         elif fetch_mccode_config:
             resolved_config = fetch_mccode_clang_format_config()
             if resolved_config is None:
-                from loguru import logger
                 logger.warning(
                     'McCode .clang-format config not yet available; '
                     'C blocks will not be formatted.  '
@@ -894,7 +894,6 @@ def make_clang_formatter(
             )
             return result.stdout
         except subprocess.CalledProcessError as exc:
-            from loguru import logger
             logger.warning(f'clang-format exited with code {exc.returncode}; '
                            'C block left unchanged')
             return content

@@ -22,7 +22,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from loguru import logger
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 #: Name of the metadata entry. Must contain no ':' (the runtime splits keys on it)
 #: and no space (a spaced name is re-quoted upstream, producing invalid C).

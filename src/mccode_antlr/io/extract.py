@@ -26,7 +26,6 @@ from dataclasses import dataclass, replace
 from fnmatch import fnmatch
 from pathlib import Path
 
-from loguru import logger
 
 from mccode_antlr.reader.registry import (
     InMemoryRegistry, LocalRegistry, RemoteRegistry, ordered_registries,
@@ -34,6 +33,10 @@ from mccode_antlr.reader.registry import (
 from mccode_antlr.io.portable import (
     collect_dependency_payloads, resolve_registry_and_path,
 )
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def _is_remote(reg) -> bool:

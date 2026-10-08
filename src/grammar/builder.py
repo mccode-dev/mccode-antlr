@@ -2,9 +2,13 @@ from __future__ import annotations
 
 from importlib.metadata import PackageNotFoundError
 
-from loguru import logger
 from enum import Enum
 from functools import cache
+
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 @cache
 def antlr4_version(version: str | None = None):

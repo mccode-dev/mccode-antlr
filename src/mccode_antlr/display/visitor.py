@@ -28,7 +28,6 @@ from __future__ import annotations
 import re
 from typing import Union
 
-from loguru import logger
 
 from ..grammar import CParser, CVisitor
 from ..common.expression import Expr
@@ -38,6 +37,11 @@ from .primitives import (
     Box, Sphere, Cylinder, Cone, ConditionalBlock, LoopBlock,
     CircleNormal, Disc, Annulus, Polygon, Polyhedron,
 )
+
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 # ---------------------------------------------------------------------------
 # Helpers

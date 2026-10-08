@@ -1,4 +1,7 @@
-from loguru import logger
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 _GETDISTANCE_FCT = """
 double index_getdistance(long first_index, long second_index)

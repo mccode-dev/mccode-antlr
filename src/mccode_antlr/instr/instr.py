@@ -11,7 +11,10 @@ from ..common import InstrumentParameter, MetaData, parameter_name_present, RawC
 from ..reader import Registry
 from .instance import Instance, DepInstance, Comp
 from .group import Group, DependentGroup
-from loguru import logger
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class Instr(Struct):

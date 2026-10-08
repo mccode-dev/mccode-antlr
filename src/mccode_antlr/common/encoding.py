@@ -22,6 +22,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import logging
+
+logger = logging.getLogger(__name__)
+
+
 ENCODING = 'utf-8'
 
 
@@ -52,7 +57,6 @@ def _decode(data: bytes, origin: str | Path | None) -> str:
         return data.decode('utf-8-sig')
     except UnicodeDecodeError as error:
         from codecs import lookup
-        from loguru import logger
         name = origin or '<source>'
         legacy = _legacy_encoding()
         if lookup(legacy).name != 'utf-8':
