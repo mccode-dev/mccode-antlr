@@ -1,4 +1,5 @@
 from __future__ import annotations
+from contextlib import contextmanager
 from functools import cache
 
 import logging
@@ -64,6 +65,21 @@ def compiles(compiler: str, instr):
             raise RuntimeError(f"Compilation produced no executable; check that {target.compiler} works")
 
 
+@contextmanager
+def _quiet():
+    """Hide mccode_antlr's own output: its log messages, and anything printed."""
+    from contextlib import redirect_stdout
+    from io import StringIO
+    package = logging.getLogger('mccode_antlr')
+    level = package.level
+    package.setLevel(logging.CRITICAL + 1)
+    try:
+        with redirect_stdout(StringIO()):
+            yield
+    finally:
+        package.setLevel(level)
+
+
 @cache
 def simple_instr_compiles(which: str) -> bool:
     from subprocess import CalledProcessError
@@ -76,8 +92,10 @@ def simple_instr_compiles(which: str) -> bool:
         return False
     try:
         from mccode_antlr.loader import parse_mcstas_instr
-        instr = parse_mcstas_instr("define instrument check() trace component a = Arm() at (0,0,0) absolute end")
-        compiles(which, instr)
+        # Translating the check instrument says nothing about the user's; only a failure is reported, below
+        with _quiet():
+            instr = parse_mcstas_instr("define instrument check() trace component a = Arm() at (0,0,0) absolute end")
+            compiles(which, instr)
         return True
     except RuntimeError as e:
         _compile_check_failure[which] = str(e)
