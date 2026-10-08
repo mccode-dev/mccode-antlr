@@ -529,12 +529,11 @@ class TestParametersToScan:
         values_list = list(values)
         assert len(values_list) == 2
 
-    def test_names_are_lowercased(self):
-        """Test that parameter names are lowercased."""
+    def test_names_keep_their_case(self):
+        """Instrument parameter names are case-sensitive."""
         params = {'MyParam': MRange(1, 3, 1), 'ANOTHER': EList([1, 2, 3])}
         n_pts, names, values = parameters_to_scan(params)
-        assert 'myparam' in names
-        assert 'another' in names
+        assert names == ['MyParam', 'ANOTHER']
 
     def test_list_input_as_parameter(self):
         """Test parameters_to_scan with plain list as parameter value."""

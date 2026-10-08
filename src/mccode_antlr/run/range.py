@@ -255,7 +255,7 @@ def parameters_to_scan(parameters: dict[str, Union[list, MRange, EList, Singular
             if isinstance(v, Singular):
                 parameters[k] = Singular(v.value, 1)
 
-    names = [x.lower() for x in parameters.keys()]
+    names = list(parameters.keys())
     values = [x if hasattr(x, '__iter__') else [x] for x in parameters.values()]
     if not len(values):
         return 0, names, []
