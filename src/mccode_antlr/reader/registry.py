@@ -61,6 +61,15 @@ def _dedupe_identical_paths(paths: list[Path]) -> Path | None:
     return sorted(paths, key=str)[0]
 
 
+def pooch_fetch(pooch_instance, filename: str) -> Path:
+    """pooch_instance.fetch(filename), safe for parallel downloads into one cache
+    (workaround until https://github.com/fatiando/pooch/pull/554 is released)."""
+    directory = getattr(pooch_instance, 'abspath', None)
+    if directory is not None:
+        Path(directory, filename).parent.mkdir(parents=True, exist_ok=True)
+    return Path(pooch_instance.fetch(filename))
+
+
 def _dedupe_identical_registry_entries(pooch_instance, names: list[str]) -> str | None:
     """Like _dedupe_identical_paths, but for a pooch-backed remote registry: pooch's
     registry index already stores a content hash per file (`pooch_instance.registry`
@@ -342,7 +351,7 @@ class RemoteRegistry(Registry):
         return self.pooch.registry_files(self.fullname(name, ext, exact))
 
     def path(self, name: str, ext: str = None, exact: bool = True) -> Path:
-        return Path(self.pooch.fetch(self.fullname(name, ext, exact)))
+        return pooch_fetch(self.pooch, self.fullname(name, ext, exact))
 
     def filenames(self) -> list[str]:
         return [x for x in self.pooch.registry_files]
