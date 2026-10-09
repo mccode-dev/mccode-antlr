@@ -144,8 +144,9 @@ def cogen_comp_setpos(
                 # hack-in an allocator for the fixed-length allocated array
                 c_type = par.value.mccode_c_type.translate(str.maketrans('', '', ' *'))  # strip the trailing ' *'
                 pl.append(f'  {fullname} = calloc(sizeof({c_type}), {len(p.value.value)});')
-                for i, v in enumerate(p.value.value):
-                    pl.append(f'  {fullname}[{i}] = {v};')
+                # print each element as an expression, so instrument parameters get their prefix
+                for i, e in enumerate(p.value._exprs):
+                    pl.append(f'  {fullname}[{i}] = {Expr(e):p};')
             elif p.value.is_id:
                 pl.append(f'  {fullname} = {value};')
             else:
