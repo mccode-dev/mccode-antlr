@@ -357,10 +357,10 @@ class DisplayVisitor(CVisitor):
         """Handle ``for``/``while`` loops → LoopBlock (body extracted)."""
         loop_text = _literal(ctx).strip()
         # Collect primitives from the loop body (last statement child)
-        stmts = ctx.statement()
+        stmt = ctx.statement()  # a loop has a single body statement
         body_visitor = DisplayVisitor(self._local_vars)
-        if stmts:
-            body_visitor.visit(stmts[-1])
+        if stmt is not None:
+            body_visitor.visit(stmt)
         body = body_visitor.primitives
         if body:
             self._result.append(LoopBlock(loop_text, body))
