@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import sys
 import pooch
 from functools import cache
 from pathlib import Path, PurePosixPath
@@ -154,6 +155,29 @@ def simple_url_validator(url: str, file_ok=False):
     elif not result.netloc:
         return False
     return True
+
+
+def _fetch(pooch_instance, filename: str, name: str) -> Path:
+    """pooch_fetch, optionally reporting downloads on one updating line."""
+    from mccode_antlr.config import config
+    if not config['mccode_pooch']['compact_download_messages'].get(bool):
+        return pooch_fetch(pooch_instance, filename)
+    directory = pooch_instance.abspath
+    cached = Path(directory, filename).exists()
+    pooch_logger = pooch.get_logger()
+    level = pooch_logger.level
+    pooch_logger.setLevel('WARNING')
+    try:
+        path = pooch_fetch(pooch_instance, filename)
+    finally:
+        pooch_logger.setLevel(level)
+    if not cached:
+        # Counted on disk, so no state is kept:
+        n = sum(Path(directory, f).exists() for f in pooch_instance.registry_files)
+        line = f'mccode-antlr: {n} {name} file{"" if n == 1 else "s"} in the local cache'
+        # Padded to cover a longer previous line (e.g. of another registry):
+        print(f'\r{line:66}', end='', file=sys.stderr, flush=True)
+    return path
 
 
 class Registry:
@@ -359,7 +383,7 @@ class RemoteRegistry(Registry):
         return self.pooch.registry_files(self.fullname(name, ext, exact))
 
     def path(self, name: str, ext: str = None, exact: bool = True) -> Path:
-        return pooch_fetch(self.pooch, self.fullname(name, ext, exact))
+        return _fetch(self.pooch, self.fullname(name, ext, exact), self.name)
 
     def filenames(self) -> list[str]:
         return [x for x in self.pooch.registry_files]
