@@ -226,6 +226,7 @@ def warm_registries_via_pooch(registries) -> tuple[int, int]:
     -------
     (total_fetched, error_count)
     """
+    from mccode_antlr.reader.registry import pooch_fetch
     total = errors = 0
     seen: set = set()
 
@@ -243,7 +244,7 @@ def warm_registries_via_pooch(registries) -> tuple[int, int]:
         print(f"  [{reg.name}] downloading {len(files)} files …", flush=True)
         for fname in files:
             try:
-                p.fetch(fname)
+                pooch_fetch(p, fname)
                 total += 1
             except Exception as exc:
                 print(f"    WARNING: could not fetch {fname}: {exc}", flush=True)
