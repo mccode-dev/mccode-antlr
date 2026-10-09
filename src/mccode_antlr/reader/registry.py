@@ -426,9 +426,15 @@ class GitHubRegistry(RemoteRegistry):
                 last, check = check, check.parent
             # check is now a directory that exists, it may be the root of the filesystem
             if access(check, W_OK):
+                from os import getpid
                 registry_file_path.parent.mkdir(parents=True, exist_ok=True)
-                with registry_file_path.open('w', encoding='utf-8') as file:
-                    file.writelines('\n'.join([f'{k} {v}' for k, v in registry.items()]))
+                # Write-then-rename so a concurrent reader never sees a partial file.
+                tmp = registry_file_path.with_name(f'{registry_file_path.name}.{getpid()}.tmp')
+                tmp.write_text('\n'.join([f'{k} {v}' for k, v in registry.items()]), encoding='utf-8')
+                try:
+                    tmp.replace(registry_file_path)
+                except OSError:  # e.g. on Windows, if another process is reading it
+                    tmp.unlink(missing_ok=True)
             else:
                 logger.warning(f'Can not output {registry_file_path}, you lack write permissions for {check}')
 
