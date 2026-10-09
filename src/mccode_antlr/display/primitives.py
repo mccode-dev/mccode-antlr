@@ -40,6 +40,28 @@ def _eval(e: Expr | float, params: dict) -> float:
     return float(e)
 
 
+def _eval_condition(e: Expr | float, params: dict) -> bool:
+    """Truth value of a C condition, also folding ``&&``, ``||`` and ``!``
+    (which Expr keeps symbolic)."""
+    import sympy
+    from ..common.expression.sympy_classes import CAnd, COr, CNot
+
+    def truth(s):
+        if isinstance(s, CAnd):
+            return all(truth(a) for a in s.args)
+        if isinstance(s, COr):
+            return any(truth(a) for a in s.args)
+        if isinstance(s, CNot):
+            return not truth(s.args[0])
+        if isinstance(s, sympy.logic.boolalg.BooleanAtom) or s.is_number:
+            return bool(s)
+        raise ValueError(f"Cannot evaluate condition {e!r} with params {params!r}")
+
+    if not isinstance(e, Expr):
+        return bool(e)
+    return truth(e.evaluate(params).simplify()._exprs[0])
+
+
 def _circle_points(cx, cy, cz, r, plane: str, n: int = 24) -> np.ndarray:
     """Return (n+1, 3) points for a closed circle in the given plane."""
     t = np.linspace(0, 2 * math.pi, n + 1)
@@ -747,7 +769,7 @@ class ConditionalBlock:
     def to_polylines(self, params: dict | None = None) -> list[np.ndarray]:
         p = params or {}
         try:
-            active = bool(_eval(self.condition, p))
+            active = _eval_condition(self.condition, p)
         except Exception:
             active = True  # unknown condition — include by default
         if not active:

@@ -35,6 +35,58 @@ from .primitives import Primitive, ConditionalBlock, LoopBlock
 AnyBlock = Union[Primitive, ConditionalBlock, LoopBlock]
 
 
+def _assigned_names(c_source: str) -> set[str]:
+    """Names assigned (=, op=, ++, --) in a block of C code."""
+    import re
+    from ..grammar import CVisitor
+    from ..translators.c_evaluator import _parse
+
+    names = set()
+
+    def add(lhs):
+        m = re.match(r'[A-Za-z_]\w*', lhs.getText())
+        if m:
+            names.add(m.group(0))
+
+    class Visitor(CVisitor):
+        def visitAssignmentExpression(self, ctx):
+            if ctx.unaryExpression() is not None:
+                add(ctx.unaryExpression())
+            return self.visitChildren(ctx)
+
+        def visitUnaryExpression(self, ctx):
+            if ctx.getChildCount() > 1 and ctx.getChild(0).getText() in ('++', '--'):
+                add(ctx.getChild(1))
+            return self.visitChildren(ctx)
+
+        def visitPostfixExpression(self, ctx):
+            if ctx.getText().endswith(('++', '--')):
+                add(ctx)
+            return self.visitChildren(ctx)
+
+    Visitor().visit(_parse(f'{{\n{c_source}\n}}', 'compoundStatement'))
+    return names
+
+
+def _parameter_values(instance, params: dict) -> dict[str, float]:
+    """The values of the parameters of a component instance: its own, and the
+    component defaults of those which its INITIALIZE code does not change
+    (as INITIALIZE is not run for drawing)."""
+    try:
+        changed = _assigned_names('\n'.join(b.source for b in instance.type.initialize))
+    except Exception:
+        changed = None  # can not tell: use no defaults
+    result = {}
+    for cp in (*instance.type.define, *instance.type.setting):
+        own = instance.defines_parameter(cp.name)
+        if own or (changed is not None and cp.name not in changed):
+            try:
+                result[cp.name] = _eval_expr(instance.get_parameter(cp.name).value, params)
+            except Exception:
+                pass
+    return result
+
+
 def _eval_expr(e: Expr | float, params: dict) -> float:
     """Reduce an expression to a number, given values for its parameters.
 
@@ -146,13 +198,10 @@ class InstrumentDisplay:
             if name not in self._components:
                 continue
 
-            # Build merged parameter dict: instr params + instance overrides
+            # Instrument parameters, and the component parameters as INITIALIZE
+            # leaves them
             comp_params = dict(p)
-            for cp in instance.parameters:
-                try:
-                    comp_params[cp.name] = _eval_expr(cp.value, p)
-                except Exception:
-                    pass
+            comp_params.update(_parameter_values(instance, p))
 
             cd = self._components[name]
             local_polylines = cd.to_polylines(comp_params)
