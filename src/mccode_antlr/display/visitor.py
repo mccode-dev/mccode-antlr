@@ -9,7 +9,7 @@ so it correctly handles:
 - Same calls using the direct ``mcdis_*`` form:
     ``mcdis_circle("xy", 0, 0, 0, r);``
 - Math in arguments:      ``multiline(5, -xw/2, -yh/2, 0, xw/2, yh/2, 0, ...);``
-- ``if``/``else`` guards: ``if (show_guide) { rectangle(...); }``
+- ``if``/``else`` guards: ``if (show_guide) { rectangle(...); } else { ... }``
   → wrapped in :class:`~mccode_antlr.display.primitives.ConditionalBlock`
 - ``for``/``while`` loops (body extracted, loop not yet unrolled)
   → wrapped in :class:`~mccode_antlr.display.primitives.LoopBlock`
@@ -351,7 +351,17 @@ class DisplayVisitor(CVisitor):
         if body:
             self._result.append(ConditionalBlock(cond_expr, body))
 
-        # Ignore else branches for geometry purposes
+        # The else branch (also an else-if chain) applies when cond is false:
+        if ctx.Else() is not None:
+            not_cond = f'!({cond_text})'
+            try:
+                not_expr = Expr.parse(not_cond).evaluate(self._local_vars)
+            except Exception:
+                not_expr = Expr.id(not_cond)
+            else_visitor = DisplayVisitor(self._local_vars)
+            else_visitor.visit(ctx.statement(1))
+            if else_visitor.primitives:
+                self._result.append(ConditionalBlock(not_expr, else_visitor.primitives))
 
     def visitIterationStatement(self, ctx: CParser.IterationStatementContext):
         """Handle ``for``/``while`` loops → LoopBlock (body extracted)."""
