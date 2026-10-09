@@ -1,12 +1,15 @@
 from http.client import UnimplementedFileMode
 
-from loguru import logger
 
 from ..grammar import McCompParser as Parser, McCompVisitor
 from .comp import Comp
 from ..common import ComponentParameter, Expr, MetaData
 from ..common.visitor import add_common_visitors
 from ..grammar.McCompParser import McCompParser
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 # Grammar section rule -> Comp block attribute. A section spelled out in a

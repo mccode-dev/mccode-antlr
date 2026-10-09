@@ -32,6 +32,8 @@ def mccode_script_parse(prog: str):
                         help='Trust local registries from a serialized instrument')
 
     args = parser.parse_args()
+    from mccode_antlr.cli._common import configure_logging
+    configure_logging(args.verbose)
     if args.line_directives is not None:
         from mccode_antlr.utils import McCodeAntlrDeprecationWarning
         import warnings

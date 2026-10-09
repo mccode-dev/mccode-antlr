@@ -47,6 +47,11 @@ from typing import TYPE_CHECKING, Callable
 
 import numpy as np
 
+import logging
+
+logger = logging.getLogger(__name__)
+
+
 if TYPE_CHECKING:
     import build123d as bd
     from ..instrument_display import InstrumentDisplay
@@ -419,7 +424,6 @@ def instrument_to_assembly(
     ``bd.Compound``
     """
     import build123d as bd
-    from loguru import logger
     from ..instrument_display import _eval_expr
 
     p = params or {}

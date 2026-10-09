@@ -1,9 +1,12 @@
 import re
 from dataclasses import dataclass
-from loguru import logger
 from io import StringIO
 from ..instr import Instr, Instance
 from mccode_antlr import Flavor
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -316,7 +319,7 @@ class TargetVisitor:
         self.info('visit flags')
         self.visit_flags()
         if self.verbose and self.warnings:
-            print(f"Build of instrument {self.source.name} had {self.warnings} warnings")
+            logger.info(f"Build of instrument {self.source.name} had {self.warnings} warnings")
         return self.output
 
     def save(self, filename=None, close=True, reprocess=True):

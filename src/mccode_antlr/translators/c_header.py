@@ -1,8 +1,11 @@
 import re
+import logging
 from textwrap import dedent
 from .c_listener import CDeclarator
 from ..instr import Instr
 from mccode_antlr import Flavor
+
+logger = logging.getLogger(__name__)
 
 
 # C arithmetic type words; a typedef of one (other than these) is not recognised
@@ -105,8 +108,8 @@ def header_pre_runtime(
     for x in uservars:
         if (x.dtype not in ('double', 'MCNUM', 'int') and x.init is None) or x.is_pointer or x.is_array:
             array_str = ' array' if x.is_pointer or x.is_array else ''
-            print(f'\nWARNING:\n --> USERVAR {x.name} is of type {x.dtype}{array_str}')
-            print('  --> and may need specific per-particle initialization through an EXTEND block!\n')
+            logger.warning(f'USERVAR {x.name} is of type {x.dtype}{array_str} and may need specific '
+                           'per-particle initialization through an EXTEND block')
         else:
             uservar_init += f'\np->{x.name}={0 if x.init is None else x.init};'
 

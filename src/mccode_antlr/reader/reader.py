@@ -2,7 +2,6 @@ from __future__ import annotations
 import re
 from functools import lru_cache
 from pathlib import Path
-from loguru import logger
 from msgspec import Struct, field
 
 from .registry import (Registry, registries_match, registry_from_specification,
@@ -11,6 +10,10 @@ from ..comp import Comp
 
 from mccode_antlr import Flavor
 from mccode_antlr.utils import McCodeSyntaxError
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------

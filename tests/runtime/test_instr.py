@@ -1,9 +1,12 @@
 from unittest import TestCase
-from loguru import logger
+import logging
 from mccode_antlr.test import compiled_test, mcpl_compiled_test
 from mccode_antlr.utils import compile_and_run
 from mccode_antlr import Flavor
 from mccode_antlr.test import scipp_available
+
+logger = logging.getLogger(__name__)
+
 
 class TestCompiledInstr(TestCase):
     @compiled_test

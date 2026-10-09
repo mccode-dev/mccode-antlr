@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import hashlib
+import sys
 import pooch
 from functools import cache
 from pathlib import Path, PurePosixPath
 from re import Pattern
-from loguru import logger
 from typing import Type, Any
 from msgspec import Struct
 import requests
@@ -15,6 +15,11 @@ from packaging.version import Version, InvalidVersion
 from mccode_antlr.version import version as mccode_antlr_version
 from mccode_antlr import Flavor
 from mccode_antlr.common import TextWrapper
+
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 def _decode_stored_bytes(value) -> bytes:
     """Decode one entry of an InMemoryRegistry `files` mapping
@@ -55,6 +60,15 @@ def _dedupe_identical_paths(paths: list[Path]) -> Path | None:
         if len(hashes) > 1:
             return None
     return sorted(paths, key=str)[0]
+
+
+def pooch_fetch(pooch_instance, filename: str) -> Path:
+    """pooch_instance.fetch(filename), safe for parallel downloads into one cache
+    (workaround until https://github.com/fatiando/pooch/pull/554 is released)."""
+    directory = getattr(pooch_instance, 'abspath', None)
+    if directory is not None:
+        Path(directory, filename).parent.mkdir(parents=True, exist_ok=True)
+    return Path(pooch_instance.fetch(filename))
 
 
 def _dedupe_identical_registry_entries(pooch_instance, names: list[str]) -> str | None:
@@ -127,12 +141,35 @@ def simple_url_validator(url: str, file_ok=False):
         return False
     if file_ok:
         if result.scheme == 'file':
-            print("Constructing a RemoteRegistry for a file:// URL will likely duplicate files!")
+            logger.warning("Constructing a RemoteRegistry for a file:// URL will likely duplicate files")
         if result.scheme != 'file' and not result.netloc:
             return False
     elif not result.netloc:
         return False
     return True
+
+
+def _fetch(pooch_instance, filename: str, name: str) -> Path:
+    """pooch_fetch, optionally reporting downloads on one updating line."""
+    from mccode_antlr.config import config
+    if not config['mccode_pooch']['compact_download_messages'].get(bool):
+        return pooch_fetch(pooch_instance, filename)
+    directory = pooch_instance.abspath
+    cached = Path(directory, filename).exists()
+    pooch_logger = pooch.get_logger()
+    level = pooch_logger.level
+    pooch_logger.setLevel('WARNING')
+    try:
+        path = pooch_fetch(pooch_instance, filename)
+    finally:
+        pooch_logger.setLevel(level)
+    if not cached:
+        # Counted on disk, so no state is kept:
+        n = sum(Path(directory, f).exists() for f in pooch_instance.registry_files)
+        line = f'mccode-antlr: {n} {name} file{"" if n == 1 else "s"} in the local cache'
+        # Padded to cover a longer previous line (e.g. of another registry):
+        print(f'\r{line:66}', end='', file=sys.stderr, flush=True)
+    return path
 
 
 class Registry:
@@ -338,7 +375,7 @@ class RemoteRegistry(Registry):
         return self.pooch.registry_files(self.fullname(name, ext, exact))
 
     def path(self, name: str, ext: str = None, exact: bool = True) -> Path:
-        return Path(self.pooch.fetch(self.fullname(name, ext, exact)))
+        return _fetch(self.pooch, self.fullname(name, ext, exact), self.name)
 
     def filenames(self) -> list[str]:
         return [x for x in self.pooch.registry_files]

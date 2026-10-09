@@ -1,5 +1,11 @@
 from __future__ import annotations
+from contextlib import contextmanager
 from functools import cache
+
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 # Stores the human-readable reason the last compile check failed, keyed by compiler path.
 # Used by the `compiled` decorator to surface a useful error message.
@@ -9,7 +15,6 @@ _compile_check_failure: dict[str, str] = {}
 @cache
 def check_for_mccode_antlr_compiler(path: str) -> bool:
     from shutil import which
-    from loguru import logger
     from ..config import config
     cc = config
     for key in path.split('/'):
@@ -60,10 +65,24 @@ def compiles(compiler: str, instr):
             raise RuntimeError(f"Compilation produced no executable; check that {target.compiler} works")
 
 
+@contextmanager
+def _quiet():
+    """Hide mccode_antlr's own output: its log messages, and anything printed."""
+    from contextlib import redirect_stdout
+    from io import StringIO
+    package = logging.getLogger('mccode_antlr')
+    level = package.level
+    package.setLevel(logging.CRITICAL + 1)
+    try:
+        with redirect_stdout(StringIO()):
+            yield
+    finally:
+        package.setLevel(level)
+
+
 @cache
 def simple_instr_compiles(which: str) -> bool:
     from subprocess import CalledProcessError
-    from loguru import logger
     if not check_for_mccode_antlr_compiler(which):
         from ..config import config
         cc = config
@@ -73,8 +92,10 @@ def simple_instr_compiles(which: str) -> bool:
         return False
     try:
         from mccode_antlr.loader import parse_mcstas_instr
-        instr = parse_mcstas_instr("define instrument check() trace component a = Arm() at (0,0,0) absolute end")
-        compiles(which, instr)
+        # Translating the check instrument says nothing about the user's; only a failure is reported, below
+        with _quiet():
+            instr = parse_mcstas_instr("define instrument check() trace component a = Arm() at (0,0,0) absolute end")
+            compiles(which, instr)
         return True
     except RuntimeError as e:
         _compile_check_failure[which] = str(e)
@@ -109,7 +130,6 @@ def compiled(method, compiler: str | None = None):
 
 
 def gpu_only(method):
-    from loguru import logger
     # GPU compiled instruments need the specific OpenACC compiler
     # **PLUS** they need to _actually_ have the openACC header (macOS and Windows don't use different compilers)
     return compiled(method, 'acc')

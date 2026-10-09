@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 from io import StringIO
+from os import PathLike
 from pathlib import Path
 from msgspec import Struct, field
 from typing import Optional
@@ -10,7 +11,10 @@ from ..common import InstrumentParameter, MetaData, parameter_name_present, RawC
 from ..reader import Registry
 from .instance import Instance, DepInstance, Comp
 from .group import Group, DependentGroup
-from loguru import logger
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class Instr(Struct):
@@ -109,6 +113,9 @@ class Instr(Struct):
         ))
 
     def to_file(self, output=None, wrapper=None, flat: bool = True):
+        if isinstance(output, (str, PathLike)):
+            with open(output, 'w', encoding='utf-8') as file:
+                return self.to_file(file, wrapper, flat)
         if output is None:
             output = StringIO()
         if wrapper is None:
@@ -667,7 +674,6 @@ class Instr(Struct):
         from pathlib import Path
         for registry in self.registries:
             if registry.known(filename, strict=True):
-                print(registry.path(filename))
                 return registry.path(filename).absolute().resolve()
         tab = chr(9)
         checked_registries = tab.join(str(r) for r in self.registries)
@@ -722,8 +728,8 @@ class Instr(Struct):
         if '@NEXUSFLAGS@' in flag:
             flag = sub(r'@NEXUSFLAGS@', config['flags']['nexus'].as_str_expanded(), flag)
         if '@MCCODE_LIB@' in flag:
-            print(f'The instrument {self.name} uses @MCCODE_LIB@ dependencies which no longer work.')
-            print('Expect problems at compilation.')
+            logger.warning(f'The instrument {self.name} uses @MCCODE_LIB@ dependencies which no longer work; '
+                           'expect problems at compilation')
             flag = sub('@MCCODE_LIB@', '.', flag)
         general_re = r'@(\w+)@'
         for replace in findall(general_re, flag):

@@ -1,5 +1,7 @@
 from unittest import TestCase
-from loguru import logger
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class TestInstrInstanceParameters(TestCase):

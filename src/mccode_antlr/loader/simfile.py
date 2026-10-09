@@ -2,6 +2,10 @@ from dataclasses import dataclass, field
 from typing import Union
 from pathlib import Path
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 def read_keywords(lines: list[str], keywords: list[str], delim: str = None):
     if delim is None:
@@ -189,7 +193,6 @@ class SimFileSimulation:
             out = deepcopy(self)
             out.Ncount += other.Ncount
             if other.Seed == self.Seed:
-                from loguru import logger
                 logger.warning('combining two simulations with the same seed is not statistically valid')
             return out
         if other in self:

@@ -1,3 +1,8 @@
+import logging
+
+logger = logging.getLogger(__name__)
+
+
 def cogen_raytrace(source, ok_to_skip):
     lines = [
         "/* *****************************************************************************",
@@ -20,8 +25,7 @@ def cogen_raytrace(source, ok_to_skip):
         "  DEBUG_ENTER();",
         "  DEBUG_STATE();",
     ]
-    print("\n-----------------------------------------------------------")
-    print("\nGenerating single GPU kernel or single CPU section layout:")
+    logger.debug(f"{source.name}: generating single GPU kernel or single CPU section layout")
 
     for name, target in [(c.name, j.target) for c in source.components for j in c.jump if j.iterate]:
         lines.append(f'  _particle->_logic.Jump_{name}_{target}=0;')
@@ -38,7 +42,7 @@ def cogen_raytrace(source, ok_to_skip):
     for index, comp in enumerate(source.components):
         if comp.split is not None:
             # split is a Value, containing a number or expression indicating *how many* split particles to produce
-            print(f'-> SPLIT {comp.split:p} at component {comp.name}')
+            logger.debug(f'-> SPLIT {comp.split:p} at component {comp.name}')
             lines.extend([
                 '#ifndef NOSPLIT',
                 f'    /* start SPLIT at {comp.name} */',
@@ -244,8 +248,7 @@ def cogen_raytrace(source, ok_to_skip):
 
 def cogen_funnel(source, ok_to_skip):
     from ..common.utilities import escape_str_for_c
-    print('\n-----------------------------------------------------------')
-    print('\nGenerating GPU/CPU -DFUNNEL layout:')
+    logger.debug(f'{source.name}: generating GPU/CPU -DFUNNEL layout')
 
     lines = [
         "",
@@ -276,7 +279,7 @@ def cogen_funnel(source, ok_to_skip):
             ' --> JUMPS are not supported in FUNNEL mode and are ignored',
             ' --> Your instrument may give different output with FUNNEL'
         ]
-        print('\n'.join(message))
+        logger.debug('\n'.join(message))
         lines.extend(f'printf("{escape_str_for_c(ml)}\\n");' for ml in message)
 
     lines.extend([
@@ -328,8 +331,7 @@ def cogen_funnel(source, ok_to_skip):
     cpu_last = not source.components[0].cpu if len(source.components) else False
     for index, comp in enumerate(source.components):
         if not comp.type.acc:
-            print(f'Component {comp.name} is NOACC, CPUONLY={comp.cpu}')
-            print('->FUNNEL mode enabled, SPLIT within buffer.')
+            logger.debug(f'Component {comp.name} is NOACC, CPUONLY={comp.cpu}; FUNNEL mode enabled, SPLIT within buffer')
             lines.append('        #define JUMP_FUNNEL')
         if index > 0 and (comp.cpu != cpu_last or comp.split is not None):
             lines.append("    }")
@@ -341,12 +343,12 @@ def cogen_funnel(source, ok_to_skip):
                     f"    livebatchsize = sort_absorb_last(particles, pbuffer, livebatchsize, gpu_innerloop, 1, &mult_{comp.name});",
                     "    //printf(\"livebatchsize: %ld, split: %ld\\n\",  livebatchsize, mult);",
                 ])
-                print(f'-> SPLIT within buffer at component {comp.name}')
+                logger.debug(f'-> SPLIT within buffer at component {comp.name}')
 
         elif comp.cpu:
-            print(f'-> CPU section from component {comp.name}')
+            logger.debug(f'-> CPU section from component {comp.name}')
         else:
-            print(f'-> GPU kernel from component {comp.name}')
+            logger.debug(f'-> GPU kernel from component {comp.name}')
 
         if index == 0 or comp.cpu != cpu_last or comp.split is not None:
             lines.append("")
@@ -392,9 +394,8 @@ def cogen_funnel(source, ok_to_skip):
         if comp.group is not None:
             group = source.groups[comp.group]
             if len(group.ids) < 2:
-                print(f'\n!!! WARNING: GROUP {group.name} seems to include only one COMPONENT:')
-                print(f'!!!   --> {comp.name} <--')
-                print('!!! This may lead to unphysical simulation behaviour!')
+                logger.warning(f'GROUP {group.name} seems to include only one COMPONENT, {comp.name}; '
+                               'this may lead to unphysical simulation behaviour')
             ln = group.last.name
             lid = group.last_id
             lines.extend([
@@ -428,6 +429,5 @@ def cogen_funnel(source, ok_to_skip):
         "",
     ])
 
-    print("\n-----------------------------------------------------------")
 
     return '\n'.join(lines)

@@ -417,13 +417,9 @@ class TestScreenDeserializedRegistries:
     def test_warning_names_the_root_not_only_the_name(self, tmp_path, caplog):
         """`-I .` produces a registry named '', so the root has to be in the text."""
         import mccode_antlr.reader.registry as rm
-        from loguru import logger
-        messages = []
-        sink = logger.add(lambda m: messages.append(str(m)), level='WARNING')
-        try:
+        with caplog.at_level('WARNING'):
             rm.screen_deserialized_registries([rm.LocalRegistry('', str(tmp_path))], 'a test')
-        finally:
-            logger.remove(sink)
+        messages = [r.getMessage() for r in caplog.records]
         assert any(tmp_path.as_posix() in m for m in messages)
         assert any('--trust-local-registries' in m for m in messages)
 

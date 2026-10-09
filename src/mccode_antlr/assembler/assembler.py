@@ -6,9 +6,13 @@ from typing import Union
 from ..common import Expr, InstrumentParameter
 from ..instr import Instr, Instance
 from ..reader import Reader, Registry
-from loguru import logger
 from mccode_antlr import Flavor
 from mccode_antlr.instr.orientation import Vector, Angles
+
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 class Assembler:
     """Interactive instrument assembly"""
@@ -236,7 +240,7 @@ class Assembler:
         if len(variables) == 0:
             raise ValueError(f'The provided input {string} does not specify a C parameter declaration.')
         if len(variables) != 1:
-            print(f'The provided input {string} specifies {len(variables)} C parameter declarations, using only the first')
+            logger.warning(f'The provided input {string} specifies {len(variables)} C parameter declarations, using only the first')
         decl = variables[0]
         name = decl.name
         dtype = decl.dtype
@@ -245,7 +249,7 @@ class Assembler:
             if any(x.dtype == dtype and x.name == name for x in uv_variables):
                 return
             if any(x.name == name for x in uv_variables):
-                print(f'A USERVARS variable with name {name} but type different than {dtype} has already been defined.')
+                logger.warning(f'A USERVARS variable with name {name} but type different than {dtype} has already been defined')
                 return
         return self.user_vars(string, source=source, line=line)
 

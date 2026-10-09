@@ -4,6 +4,11 @@ from typing import Optional
 from msgspec import Struct
 from .utilities import escape_str_for_c
 
+import logging
+
+logger = logging.getLogger(__name__)
+
+
 class RawC(Struct):
     filename: Optional[str]
     line: int
@@ -39,7 +44,6 @@ class RawC(Struct):
     def to_c(self, line_directives: bool = False):
         """Use the preprocessor #line directive to aid in debugging produced C source code."""
         if self.translated is None:
-            from loguru import logger
             logger.error('RawC.to_c() called before translation')
         if line_directives and self.filename and self.line > 0:
             return f'#line {self.line} "{self.filename}"\n{self.translated}'

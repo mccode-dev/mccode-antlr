@@ -1,4 +1,3 @@
-from loguru import logger
 """
 /*******************************************************************************
 * cogen_decls: write the declaration part from the instrument description
@@ -11,6 +10,10 @@ from loguru import logger
 * calls: cogen_comp_declare
 *******************************************************************************/
 """
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def declarations_pre_libraries(source, typedefs: list, component_declared_parameters: dict,
