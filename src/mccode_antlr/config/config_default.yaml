@@ -18,6 +18,7 @@ mccode_pooch:
   source: https://github.com/mccode-dev/McCode
   registry: https://github.com/mccode-dev/mccode-pooch-registries
   tag: latest
+  compact_download_messages: false
 serialization:
   trust_local_registries: false
   embed_local_files: true
