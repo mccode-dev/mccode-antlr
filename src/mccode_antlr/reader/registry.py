@@ -67,7 +67,15 @@ def pooch_fetch(pooch_instance, filename: str) -> Path:
     directory = getattr(pooch_instance, 'abspath', None)
     if directory is not None:
         Path(directory, filename).parent.mkdir(parents=True, exist_ok=True)
-    return Path(pooch_instance.fetch(filename))
+    for attempt in range(5):
+        try:
+            return Path(pooch_instance.fetch(filename))
+        except PermissionError:
+            # On Windows, another process may be moving the same file into place
+            # (not fixed by the pooch PR above):
+            if attempt == 4:
+                raise
+            sleep(0.1 * (attempt + 1))
 
 
 def _dedupe_identical_registry_entries(pooch_instance, names: list[str]) -> str | None:
