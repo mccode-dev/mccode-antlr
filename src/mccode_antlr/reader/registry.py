@@ -68,7 +68,15 @@ def pooch_fetch(pooch_instance, filename: str) -> Path:
     directory = getattr(pooch_instance, 'abspath', None)
     if directory is not None:
         Path(directory, filename).parent.mkdir(parents=True, exist_ok=True)
-    return Path(pooch_instance.fetch(filename))
+    for attempt in range(5):
+        try:
+            return Path(pooch_instance.fetch(filename))
+        except PermissionError:
+            # On Windows, another process may be moving the same file into place
+            # (not fixed by the pooch PR above):
+            if attempt == 4:
+                raise
+            sleep(0.1 * (attempt + 1))
 
 
 def _dedupe_identical_registry_entries(pooch_instance, names: list[str]) -> str | None:
@@ -433,8 +441,15 @@ class GitHubRegistry(RemoteRegistry):
         cache_path = pooch.os_cache(f'mccodeantlr/{safe_name}')
         registry_file_path = cache_path.joinpath(safe_version, safe_file)
         if registry_file_path.exists() and registry_file_path.is_file() and access(registry_file_path, R_OK):
-            with registry_file_path.open('r', encoding='utf-8') as file:
-                registry = {k: v for k, v in [x.strip().split(maxsplit=1) for x in file.readlines() if len(x)]}
+            for attempt in range(5):
+                try:
+                    with registry_file_path.open('r', encoding='utf-8') as file:
+                        registry = {k: v for k, v in [x.strip().split(maxsplit=1) for x in file.readlines() if len(x)]}
+                    break
+                except PermissionError:  # On Windows, while another process replaces it
+                    if attempt == 4:
+                        raise
+                    sleep(0.1 * (attempt + 1))
         else:
             # We allow a full-dictionary to be provided, otherwise we expect the registry file to be available from the
             # base_url where all subsequent files are also expected to be available
@@ -450,9 +465,15 @@ class GitHubRegistry(RemoteRegistry):
                 last, check = check, check.parent
             # check is now a directory that exists, it may be the root of the filesystem
             if access(check, W_OK):
+                from os import getpid
                 registry_file_path.parent.mkdir(parents=True, exist_ok=True)
-                with registry_file_path.open('w', encoding='utf-8') as file:
-                    file.writelines('\n'.join([f'{k} {v}' for k, v in registry.items()]))
+                # Write-then-rename so a concurrent reader never sees a partial file.
+                tmp = registry_file_path.with_name(f'{registry_file_path.name}.{getpid()}.tmp')
+                tmp.write_text('\n'.join([f'{k} {v}' for k, v in registry.items()]), encoding='utf-8')
+                try:
+                    tmp.replace(registry_file_path)
+                except OSError:  # e.g. on Windows, if another process is reading it
+                    tmp.unlink(missing_ok=True)
             else:
                 logger.warning(f'Can not output {registry_file_path}, you lack write permissions for {check}')
 
