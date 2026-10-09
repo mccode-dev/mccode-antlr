@@ -417,8 +417,15 @@ class GitHubRegistry(RemoteRegistry):
         cache_path = pooch.os_cache(f'mccodeantlr/{safe_name}')
         registry_file_path = cache_path.joinpath(safe_version, safe_file)
         if registry_file_path.exists() and registry_file_path.is_file() and access(registry_file_path, R_OK):
-            with registry_file_path.open('r', encoding='utf-8') as file:
-                registry = {k: v for k, v in [x.strip().split(maxsplit=1) for x in file.readlines() if len(x)]}
+            for attempt in range(5):
+                try:
+                    with registry_file_path.open('r', encoding='utf-8') as file:
+                        registry = {k: v for k, v in [x.strip().split(maxsplit=1) for x in file.readlines() if len(x)]}
+                    break
+                except PermissionError:  # On Windows, while another process replaces it
+                    if attempt == 4:
+                        raise
+                    sleep(0.1 * (attempt + 1))
         else:
             # We allow a full-dictionary to be provided, otherwise we expect the registry file to be available from the
             # base_url where all subsequent files are also expected to be available
