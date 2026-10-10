@@ -644,7 +644,7 @@ class LocalRegistry(Registry):
         return self.known(name, ext)
 
     def path(self, name: str, ext: str = None, exact: bool = False) -> Path:
-        return self.root.joinpath(self.fullname(name, ext, exact))
+        return self.fullname(name, ext, exact)  # (which includes root)
 
     def filenames(self) -> list[str]:
         return [str(x) for x in self.root.glob('**' if self.recursive else '*')]
