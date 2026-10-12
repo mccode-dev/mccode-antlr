@@ -1,10 +1,20 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from functools import cache, cached_property
 from typing import Any, Union
 from pathlib import Path
 
 from mccode_antlr.utils import deprecated
+
+
+@cache
+def _scipp_available() -> bool:
+    try:
+        import scipp  # noqa: F401
+    except ImportError:
+        return False
+    return True
 
 
 def _require_scipp():
@@ -71,30 +81,68 @@ def _extract_var_arrays(var: list[str], data_2d, shape: tuple) -> tuple:
     return I_arr, I_err_arr, N_arr, extras
 
 
-@dataclass
+def _combine_values(var: list[str], a, b):
+    """Two files' values, (nv, ...) each, as the values of one longer run.
+
+    Intensity and counts add and the intensity's error adds in quadrature. Every other
+    variable -- the axis column a 1-D file starts with, say ``Mean`` -- must agree,
+    since it describes the bins rather than what landed in them.
+    """
+    import numpy as np
+
+    def index(name, fallback):
+        if name in var:
+            return var.index(name)
+        return fallback if fallback < len(var) else None
+
+    i, e, n = index('I', 0), index('I_err', 1), index('N', 2)
+    out = a.copy()
+    for k in (i, n):
+        if k is not None:
+            out[k] = a[k] + b[k]
+    if e is not None:
+        out[e] = np.sqrt(a[e] ** 2 + b[e] ** 2)
+    for k, name in enumerate(var):
+        if k not in (i, e, n) and not np.array_equal(a[k], b[k]):
+            raise RuntimeError(f'Cannot combine files whose {name!r} values differ')
+    return out
+
+
+@dataclass(eq=False)
 class DatFileCommon:
     """Base class for McCode output data files.
 
-    The *dataset* field is a :class:`scipp.Dataset` whose keys are the signal
-    variable names from the file (conventionally ``'I'`` and ``'N'``; the error
-    ``'I_err'`` is encoded as ``sqrt(dataset['I'].variances)``).  The ``metadata``
-    and ``parameters`` dicts hold the text-format header information exactly as
-    read from the file.
+    ``values`` holds the file's numbers as a numpy array of shape ``(nv, ...)``, one row
+    per entry of :attr:`variables` in the file's order -- conventionally ``I``,
+    ``I_err`` and ``N``, after any axis column. Reading, writing and combining files
+    use only these, so they work without scipp.
+
+    :attr:`dataset` presents the same numbers as a :class:`scipp.Dataset`, with the
+    error as the intensity's variance and the axes as coordinates. It needs scipp,
+    and is built the first time it is used. The ``metadata`` and ``parameters`` dicts
+    hold the text-format header information exactly as read from the file.
     """
 
     source: Path
     metadata: dict = field(default_factory=dict)
     parameters: dict = field(default_factory=dict)
-    dataset: Any = field(default=None)  # sc.Dataset; typed as Any to avoid hard import
-
-    # ------------------------------------------------------------------
-    # Backward-compatible properties (replicate the old fields)
-    # ------------------------------------------------------------------
+    values: Any = field(default=None)  # numpy.ndarray, (nv, ...)
 
     @property
     def variables(self) -> list[str]:
-        """Variable names from the file header (backward compat)."""
+        """Variable names from the file header."""
         return self.metadata.get('variables', '').split()
+
+    @cached_property
+    def dataset(self):
+        """The values as a :class:`scipp.Dataset`; requires scipp."""
+        if self.values is None:
+            return None
+        return self._build_dataset(self.metadata, self.variables, self.values)
+
+    def _row(self, name: str):
+        var = self.variables
+        return self.values[var.index(name)] if name in var else None
 
     @property
     @deprecated(since="0.20.1", replacement="Use {object}['I'] (with variance) or {object}['N'] in place of {object}.data", remove_in=None)
@@ -104,18 +152,14 @@ class DatFileCommon:
         Returns the ``('I', 'I_err', 'N')`` data variable values; shape is ``(3,nx)``
         for 1-D files and ``(3, ny, nx)`` for 2-D files.
         """
-        from numpy import sqrt, stack
-        if self.dataset is None:
+        from numpy import stack, zeros_like
+        if self.values is None:
             return None
-        keys = list(self.dataset.keys())
-        if not keys:
-            return None
-        if 'I' not in keys or 'N' not in keys:
+        intensity, error, counts, _ = _extract_var_arrays(
+            self.variables, self.values, self.values.shape[1:])
+        if intensity is None or counts is None:
             raise ValueError('I and/or N are missing')
-        i_arr = self.dataset['I'].values
-        i_var = self.dataset['I'].variances
-        n_arr = self.dataset['N'].values
-        return stack((i_arr, sqrt(i_var), n_arr))
+        return stack((intensity, zeros_like(intensity) if error is None else error, counts))
 
     # ------------------------------------------------------------------
     # Construction
@@ -132,8 +176,13 @@ class DatFileCommon:
         return read_mccode_dat(filename)
 
     @classmethod
-    def _build_dataset(cls, meta: dict, var: list[str], data) -> Any:
-        """Build a ``sc.Dataset`` from parsed file components.  Override in subclasses."""
+    def _shape_values(cls, meta: dict, var: list[str], data):
+        """The parsed rows of a file as ``(nv, ...)``.  Override in subclasses."""
+        raise NotImplementedError
+
+    @classmethod
+    def _build_dataset(cls, meta: dict, var: list[str], values) -> Any:
+        """Build a ``sc.Dataset`` from ``(nv, ...)`` values.  Override in subclasses."""
         raise NotImplementedError
 
     # ------------------------------------------------------------------
@@ -146,20 +195,6 @@ class DatFileCommon:
 
     def print_data(self, file):
         pass
-
-    def _extract_numpy_rows(self) -> list:
-        """Return a list of 1-D numpy arrays, one per variable, in original order."""
-        import numpy as np
-        rows = []
-        for v in self.variables:
-            if v in self.dataset:
-                rows.append(self.dataset[v].values.ravel())
-            elif v == 'I_err' and 'I' in self.dataset:
-                rows.append(np.sqrt(self.dataset['I'].variances).ravel())
-            else:
-                keys = list(self.dataset.keys())
-                rows.append(np.zeros_like(self.dataset[keys[0]].values).ravel() if keys else np.array([0.0]))
-        return rows
 
     def to_filename(self, filename: str):
         sink = Path(filename).resolve()
@@ -180,14 +215,15 @@ class DatFileCommon:
     # ------------------------------------------------------------------
 
     def __getitem__(self, item: str):
-        if self.dataset is not None and item in self.dataset:
-            return self.dataset[item]
-        # Backward compat: second variable is the standard deviation of the first
-        var_list = self.variables
-        if (var_list and len(var_list) > 1 and item == var_list[1]
-                and self.dataset is not None and var_list[0] in self.dataset):
-            import numpy as np
-            return np.sqrt(self.dataset[var_list[0]].variances)
+        """A variable, parameter or header entry, in that order of precedence.
+
+        With scipp a variable the dataset holds -- ``I``, ``N`` -- is its
+        ``scipp.DataArray``; without scipp, and for ``I_err``, it is the numpy row.
+        """
+        if self.values is not None and item in self.variables:
+            if _scipp_available() and item in self.dataset:
+                return self.dataset[item]
+            return self._row(item)
         if item in self.parameters:
             return self.parameters[item]
         if item in self.metadata:
@@ -198,27 +234,26 @@ class DatFileCommon:
     # Combining / arithmetic
     # ------------------------------------------------------------------
 
+    #: the header entry whose bins two files must share to be combined
+    _limits: str | None = None
+
     def dim_metadata(self) -> list[dict]:
-        """Return dimension metadata derived from scipp coordinates."""
-        if self.dataset is None:
-            return []
-        result = []
-        for dim in self.dataset.dims:
-            coord = self.dataset.coords.get(dim)
-            if coord is not None:
-                result.append({'label': dim, 'values': coord.values, 'unit': str(coord.unit)})
-        return result
+        return []
 
     def safe_to_combine(self, other) -> bool:
-        return False
+        if type(other) is not type(self) or self.variables != other.variables:
+            return False
+        if self.values.shape != other.values.shape:
+            return False
+        return self._limits is None or self.metadata.get(self._limits) == other.metadata.get(self._limits)
 
     def __add__(self, other):
         if not self.safe_to_combine(other):
-            raise RuntimeError('Cannot combine these two dat files')
-        combined = self.dataset + other.dataset
-        combined_meta = combine_scan_dicts(self.metadata, other.metadata)
-        combined_parm = combine_scan_dicts(self.parameters, other.parameters)
-        return type(self)(self.source, combined_meta, combined_parm, combined)
+            raise RuntimeError(f'Cannot combine these two {type(self).__name__} instances')
+        return type(self)(self.source,
+                          combine_scan_dicts(self.metadata, other.metadata),
+                          combine_scan_dicts(self.parameters, other.parameters),
+                          _combine_values(self.variables, self.values, other.values))
 
     # ------------------------------------------------------------------
     # Misc
@@ -255,20 +290,21 @@ def dim_metadata(length, label_unit, lower_limit, upper_limit) -> dict:
 # Concrete subclasses
 # ---------------------------------------------------------------------------
 
-@dataclass
+@dataclass(eq=False)
 class DatFile0D(DatFileCommon):
     """0-dimensional McCode monitor output (single scalar result)."""
 
     @classmethod
-    def _build_dataset(cls, meta: dict, var: list[str], data) -> Any:
-        sc = _require_scipp()
-        import numpy as np
-        # data is shape (1, nv) or (nv,) after parsing
+    def _shape_values(cls, meta: dict, var: list[str], data):
         flat = data.ravel()
-        nv = len(var)
-        if flat.size != nv:
-            raise RuntimeError(f'Unexpected data size {flat.size} for {nv} variables')
-        I_arr, I_err_arr, N_arr, extras = _extract_var_arrays(var, flat, ())
+        if flat.size != len(var):
+            raise RuntimeError(f'Unexpected data size {flat.size} for {len(var)} variables')
+        return flat
+
+    @classmethod
+    def _build_dataset(cls, meta: dict, var: list[str], values) -> Any:
+        sc = _require_scipp()
+        I_arr, I_err_arr, N_arr, extras = _extract_var_arrays(var, values, ())
         I_val = float(I_arr) if I_arr is not None else 0.0
         I_err_val = float(I_err_arr) if I_err_arr is not None else 0.0
         N_val = float(N_arr) if N_arr is not None else 0.0
@@ -280,20 +316,8 @@ class DatFile0D(DatFileCommon):
             ds[name] = sc.DataArray(sc.scalar(float(arr)))
         return ds
 
-    def dim_metadata(self) -> list[dict]:
-        return []
-
     def print_data(self, file):
-        import numpy as np
-        vals = []
-        for v in self.variables:
-            if v in self.dataset:
-                vals.append(float(self.dataset[v].value))
-            elif v == 'I_err' and 'I' in self.dataset:
-                vals.append(float(np.sqrt(self.dataset['I'].variance)))
-            else:
-                vals.append(0.0)
-        print(' '.join(str(x) for x in vals), file=file)
+        print(' '.join(str(x) for x in self.values.ravel()), file=file)
 
     @staticmethod
     def parts():
@@ -302,46 +326,36 @@ class DatFile0D(DatFileCommon):
                   'signal', 'values', 'yvar', 'ylabel', 'xlimits', 'variables')
         return first, second
 
-    def safe_to_combine(self, other) -> bool:
-        if not isinstance(other, DatFile0D):
-            return False
-        if self.variables != other.variables:
-            return False
-        return True
 
-    def __add__(self, other):
-        if not self.safe_to_combine(other):
-            raise RuntimeError('Cannot combine these two DatFile0D instances')
-        combined = self.dataset + other.dataset
-        combined_meta = combine_scan_dicts(self.metadata, other.metadata)
-        combined_parm = combine_scan_dicts(self.parameters, other.parameters)
-        return DatFile0D(self.source, combined_meta, combined_parm, combined)
-
-
-@dataclass
+@dataclass(eq=False)
 class DatFile1D(DatFileCommon):
     """1-dimensional McCode monitor output (histogram)."""
 
+    _limits = 'xlimits'
+
     @classmethod
-    def _build_dataset(cls, meta: dict, var: list[str], data) -> Any:
+    def _shape_values(cls, meta: dict, var: list[str], data):
+        nx = int(meta['type'].split('(', 1)[1].strip(')'))
+        nv = len(var)
+        # the file has one line per bin, (nx, nv)
+        if data.shape == (nx, nv):
+            return data.T
+        if data.shape == (nv, nx):
+            return data
+        raise RuntimeError(f'Unexpected data shape {data.shape} for nx={nx}, nv={nv}')
+
+    @classmethod
+    def _build_dataset(cls, meta: dict, var: list[str], values) -> Any:
         sc = _require_scipp()
         from ._units import parse_mccode_label_unit
         import numpy as np
-        nx = int(meta['type'].split('(', 1)[1].strip(')'))
-        nv = len(var)
-        # raw data shape is (nx, nv); reshape to (nv, nx)
-        if data.shape == (nx, nv):
-            arr = data.T  # → (nv, nx)
-        elif data.shape == (nv, nx):
-            arr = data
-        else:
-            raise RuntimeError(f'Unexpected data shape {data.shape} for nx={nx}, nv={nv}')
+        nx = values.shape[1]
         lower, upper = [float(x) for x in meta['xlimits'].split()]
         bin_centers = np.linspace(lower, upper, nx)
         xlabel = meta.get('xlabel', 'x [1]')
         label, x_unit = parse_mccode_label_unit(xlabel)
         x_coord = sc.array(dims=[label], values=bin_centers, unit=x_unit)
-        I_arr, I_err_arr, N_arr, extras = _extract_var_arrays(var, arr, (nx,))
+        I_arr, I_err_arr, N_arr, extras = _extract_var_arrays(var, values, (nx,))
         I_vals = I_arr if I_arr is not None else np.zeros(nx)
         I_err_vals = I_err_arr if I_err_arr is not None else np.zeros(nx)
         da_I = sc.DataArray(
@@ -363,14 +377,11 @@ class DatFile1D(DatFileCommon):
 
     def dim_metadata(self) -> list[dict]:
         lower_limit, upper_limit = [float(x) for x in self['xlimits'].split()]
-        return [dim_metadata(self.dataset['I'].shape[0], self['xlabel'], lower_limit, upper_limit)]
+        return [dim_metadata(self.values.shape[1], self['xlabel'], lower_limit, upper_limit)]
 
     def print_data(self, file):
-        import numpy as np
-        rows = self._extract_numpy_rows()
-        # each row is (nx,); transpose so we write (nx, nv) — one line per bin
-        data_2d = np.array(rows)  # (nv, nx)
-        for row in data_2d.T:
+        # one line per bin
+        for row in self.values.T:
             print(' '.join(str(x) for x in row), file=file)
 
     @staticmethod
@@ -380,46 +391,30 @@ class DatFile1D(DatFileCommon):
                   'signal', 'values', 'xvar', 'yvar', 'xlabel', 'ylabel', 'xlimits', 'variables')
         return first, second
 
-    def safe_to_combine(self, other) -> bool:
-        if not isinstance(other, DatFile1D):
-            return False
-        if list(self.dataset.keys()) != list(other.dataset.keys()):
-            return False
-        if self.dataset.dims != other.dataset.dims:
-            return False
-        if self.metadata.get('xlimits') != other.metadata.get('xlimits'):
-            return False
-        if self.dataset['I'].shape != other.dataset['I'].shape:
-            return False
-        return True
 
-    def __add__(self, other):
-        if not self.safe_to_combine(other):
-            raise RuntimeError('Cannot combine these two DatFile1D instances')
-        combined = self.dataset + other.dataset
-        combined_meta = combine_scan_dicts(self.metadata, other.metadata)
-        combined_parm = combine_scan_dicts(self.parameters, other.parameters)
-        return DatFile1D(self.source, combined_meta, combined_parm, combined)
-
-
-@dataclass
+@dataclass(eq=False)
 class DatFile2D(DatFileCommon):
     """2-dimensional McCode monitor output (image / matrix)."""
 
+    _limits = 'xylimits'
+
     @classmethod
-    def _build_dataset(cls, meta: dict, var: list[str], data) -> Any:
+    def _shape_values(cls, meta: dict, var: list[str], data):
+        nx, ny = [int(x) for x in meta['type'].split('(', 1)[1].strip(')').split(',')]
+        nv = len(var)
+        # the file has one ny-line block per variable, (ny * nv, nx)
+        if data.shape == (nv, ny, nx):
+            return data
+        if data.shape == (ny * nv, nx):
+            return data.reshape((nv, ny, nx))
+        raise RuntimeError(f'Unexpected data shape {data.shape} for nx={nx}, ny={ny}, nv={nv}')
+
+    @classmethod
+    def _build_dataset(cls, meta: dict, var: list[str], values) -> Any:
         sc = _require_scipp()
         from ._units import parse_mccode_label_unit
         import numpy as np
-        nx, ny = [int(x) for x in meta['type'].split('(', 1)[1].strip(')').split(',')]
-        nv = len(var)
-        # raw data shape is (ny*nv, nx); reshape to (nv, ny, nx)
-        if data.shape == (nv, ny, nx):
-            arr = data
-        elif data.shape == (ny * nv, nx):
-            arr = data.reshape((nv, ny, nx))
-        else:
-            raise RuntimeError(f'Unexpected data shape {data.shape} for nx={nx}, ny={ny}, nv={nv}')
+        ny, nx = values.shape[1:]
         lower_x, upper_x, lower_y, upper_y = [float(x) for x in meta['xylimits'].split()]
         x_centers = np.linspace(lower_x, upper_x, nx)
         y_centers = np.linspace(lower_y, upper_y, ny)
@@ -429,7 +424,7 @@ class DatFile2D(DatFileCommon):
         y_label, y_unit = parse_mccode_label_unit(ylabel)
         x_coord = sc.array(dims=[x_label], values=x_centers, unit=x_unit)
         y_coord = sc.array(dims=[y_label], values=y_centers, unit=y_unit)
-        I_arr, I_err_arr, N_arr, extras = _extract_var_arrays(var, arr, (ny, nx))
+        I_arr, I_err_arr, N_arr, extras = _extract_var_arrays(var, values, (ny, nx))
         I_vals = I_arr if I_arr is not None else np.zeros((ny, nx))
         I_err_vals = I_err_arr if I_err_arr is not None else np.zeros((ny, nx))
         da_I = sc.DataArray(
@@ -451,22 +446,16 @@ class DatFile2D(DatFileCommon):
 
     def dim_metadata(self) -> list[dict]:
         lower_x, upper_x, lower_y, upper_y = [float(x) for x in self['xylimits'].split()]
-        nx = self.dataset['I'].shape[1]
-        ny = self.dataset['I'].shape[0]
+        ny, nx = self.values.shape[1:]
         return [dim_metadata(nx, self['xlabel'], lower_x, upper_x),
                 dim_metadata(ny, self['ylabel'], lower_y, upper_y)]
 
     def print_data(self, file):
-        import numpy as np
         labels = 'Data', 'Errors', 'Events'
-        rows = self._extract_numpy_rows()
-        nv = len(rows)
-        var_list = self.variables
-        for i, name in enumerate(var_list):
+        for i, name in enumerate(self.variables):
             label = labels[i] if i < len(labels) else f'Extra{i}'
             print(f'# {label} [{self.metadata["component"]}/{self.metadata["filename"]}] {name}:', file=file)
-            mat = rows[i].reshape(self.dataset['I'].shape) if i < len(rows) else np.zeros(self.dataset['I'].shape)
-            for row in mat:
+            for row in self.values[i]:
                 print(' '.join(str(x) for x in row), file=file)
 
     @staticmethod
@@ -475,27 +464,6 @@ class DatFile2D(DatFileCommon):
         second = ('Date', 'type', 'Source', 'component', 'position', 'title', 'Ncount', 'filename', 'statistics',
                   'signal', 'values', 'xvar', 'yvar', 'xlabel', 'ylabel', 'zvar', 'zlabel', 'xylimits', 'variables')
         return first, second
-
-    def safe_to_combine(self, other) -> bool:
-        if not isinstance(other, DatFile2D):
-            return False
-        if list(self.dataset.keys()) != list(other.dataset.keys()):
-            return False
-        if self.dataset.dims != other.dataset.dims:
-            return False
-        if self.metadata.get('xylimits') != other.metadata.get('xylimits'):
-            return False
-        if self.dataset['I'].shape != other.dataset['I'].shape:
-            return False
-        return True
-
-    def __add__(self, other):
-        if not self.safe_to_combine(other):
-            raise RuntimeError('Cannot combine these two DatFile2D instances')
-        combined = self.dataset + other.dataset
-        combined_meta = combine_scan_dicts(self.metadata, other.metadata)
-        combined_parm = combine_scan_dicts(self.parameters, other.parameters)
-        return DatFile2D(self.source, combined_meta, combined_parm, combined)
 
 
 # ---------------------------------------------------------------------------
@@ -506,7 +474,8 @@ def read_mccode_dat(filename: str | Path) -> DatFileCommon:
     """Load a McCode ``.dat`` output file, returning the appropriate subclass.
 
     Dispatches to :class:`DatFile0D`, :class:`DatFile1D`, or :class:`DatFile2D`
-    based on the ``type`` metadata key.  Requires **scipp** to be installed.
+    based on the ``type`` metadata key. Needs only numpy; scipp is needed for the
+    returned object's ``dataset``.
     """
     source, meta, parm, var, data = _parse_file(filename)
     array_type = meta.get('type', '')
@@ -518,8 +487,7 @@ def read_mccode_dat(filename: str | Path) -> DatFileCommon:
         cls = DatFile2D
     else:
         raise RuntimeError(f'Unrecognised array type {array_type!r} in {filename}')
-    dataset = cls._build_dataset(meta, var, data)
-    return cls(source, meta, parm, dataset)
+    return cls(source, meta, parm, cls._shape_values(meta, var, data))
 
 
 # ---------------------------------------------------------------------------

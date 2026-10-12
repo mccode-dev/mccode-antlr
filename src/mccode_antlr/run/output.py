@@ -1,10 +1,13 @@
 """Output file collection and loading for a single simulation run."""
 from __future__ import annotations
 
+import logging
 from msgspec import Struct
 from collections.abc import Iterator, Mapping
 from pathlib import Path
 from typing import Any, Callable
+
+logger = logging.getLogger(__name__)
 
 
 def _is_singular(v) -> bool:
@@ -54,6 +57,15 @@ def _load_one(path: Path) -> Any:
     return read_mccode_dat(path)
 
 
+def _declares_mccode_format(path: Path) -> bool:
+    """Whether *path* starts with the McCode text-format header."""
+    try:
+        with path.open('rb') as file:
+            return file.read(64).startswith(b'# Format: McCode')
+    except OSError:
+        return False
+
+
 def _collect_output(directory: Path, tmpdir:Path | None=None) -> 'SimulationOutput':
     """Scan *directory* recursively and return a :class:`SimulationOutput`.
 
@@ -91,7 +103,14 @@ def _collect_output(directory: Path, tmpdir:Path | None=None) -> 'SimulationOutp
 
         try:
             obj = _load_one(path)
-        except Exception:
+        except ImportError:
+            # a missing package is the environment's problem, not the file's: say so
+            raise
+        except Exception as error:
+            # Every file is tried as McCode data, so most failures are files that are
+            # not; one that says it is and still fails should not vanish silently.
+            if _declares_mccode_format(path):
+                logger.warning(f'Could not read McCode output {path}: {error}')
             unrecognized.append(path)
             continue
 
@@ -307,7 +326,8 @@ class ScanOutput(Struct):
 
         Returns a ``scipp.Dataset`` (requires ``scipp`` to be installed).
         """
-        import scipp as sc
+        from mccode_antlr.loader.datfile import _require_scipp
+        sc = _require_scipp()
         per_point = []
         for pt in self.points:
             dat = pt[monitor]
