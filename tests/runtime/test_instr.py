@@ -177,6 +177,10 @@ class TestCompiledInstr(TestCase):
 
         flag_params = tuple(ComponentParameter(k, Expr.string(v)) for k, v in [
             ('userflag', '"flag"'), ('userflagcomment', '"Neutron Id"')])
+        # Double precision, so the split run sees the same neutrons as the whole one. In
+        # single precision a value near a bin edge can round across it: a neutron
+        # changed bins in 2 of 300 runs, enough now and then to fail the comparison.
+        flag_params += (ComponentParameter('doubleprec', Expr.float(1)),)
         # weight_mode=0: use particle weights exactly as stored (avoids deprecated weight_mode=2 scaling)
         weight_mode_param = (ComponentParameter('weight_mode', Expr.float(0)),)
         before, after = instr.mcpl_split('split_point', filename='test_mcpl_split',
