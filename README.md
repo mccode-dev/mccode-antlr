@@ -11,7 +11,8 @@ particle ray-tracing languages.
 **[Documentation](https://mccode-dev.github.io/mccode-antlr/)** ·
 [PyPI](https://pypi.org/project/mccode_antlr/) ·
 [conda-forge](https://anaconda.org/conda-forge/mccode-antlr) ·
-[Issues](https://github.com/mccode-dev/mccode-antlr/issues)
+[Issues](https://github.com/mccode-dev/mccode-antlr/issues) ·
+[Contributing](https://github.com/mccode-dev/mccode-antlr/blob/main/CONTRIBUTING.md)
 
 ## Quick start
 
