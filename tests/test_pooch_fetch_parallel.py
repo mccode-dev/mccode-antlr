@@ -48,3 +48,19 @@ def test_parallel_fetch_into_new_directories(tmp_path):
     assert [f for failed in results for f in failed] == []
     for name in NAMES:
         assert (tmp_path / 'cache' / name).read_text() == name
+
+
+def test_fetch_retried_on_permission_error(tmp_path):
+    class FlakyPooch:
+        abspath = tmp_path
+        calls = 0
+
+        def fetch(self, filename):
+            self.calls += 1
+            if self.calls < 3:
+                raise PermissionError('in use by another process')
+            return str(tmp_path / filename)
+
+    flaky = FlakyPooch()
+    assert pooch_fetch(flaky, 'd/f.txt') == tmp_path / 'd' / 'f.txt'
+    assert flaky.calls == 3

@@ -179,6 +179,38 @@ class TestBuildParticleFlowGraph(TestCase):
         self.assertEqual(len(jump_edges), 1)
         self.assertTrue(jump_edges[0].iterate)
 
+    def test_relative_jump_edges(self):
+        instr = self._parse("""
+            COMPONENT a = Arm() AT (0,0,0) ABSOLUTE
+            COMPONENT b = Arm() AT (0,0,1) RELATIVE a
+            COMPONENT c = Arm() AT (0,0,2) RELATIVE a JUMP PREVIOUS(2) ITERATE (3) JUMP NEXT(2) WHEN (1)
+            COMPONENT d = Arm() AT (0,0,3) RELATIVE a JUMP MYSELF WHEN (0) JUMP PREVIOUS WHEN (0)
+            COMPONENT e = Arm() AT (0,0,4) RELATIVE a
+        """)
+        for G in (build_particle_flow_graph(instr), instr.build_flow_graph()):
+            for u, v, target in (('c', 'a', 0), ('c', 'e', 4), ('d', 'd', 3), ('d', 'c', 2)):
+                jump_edges = [e for e in _flows(G, u, v) if isinstance(e, JumpEdge)]
+                self.assertEqual(len(jump_edges), 1, f'{u} -> {v}')
+                self.assertEqual(jump_edges[0].absolute_target, target)
+
+    def test_parsed_relative_jump_edges(self):
+        # finalize_flow_edges runs at the end of parsing
+        instr = self._parse("""
+            COMPONENT a = Arm() AT (0,0,0) ABSOLUTE
+            COMPONENT b = Arm() AT (0,0,1) RELATIVE a JUMP NEXT WHEN (1)
+            COMPONENT c = Arm() AT (0,0,2) RELATIVE a JUMP PREVIOUS(2) WHEN (1)
+        """)
+        jumps = {(r.src, r.dst) for r in instr.flow_edges if isinstance(r.edge, JumpEdge)}
+        self.assertEqual(jumps, {('b', 'c'), ('c', 'a')})
+
+    def test_out_of_range_jump_has_no_edge(self):
+        instr = self._parse("""
+            COMPONENT a = Arm() AT (0,0,0) ABSOLUTE
+            COMPONENT b = Arm() AT (0,0,1) RELATIVE a JUMP NEXT(2) WHEN (1)
+        """)
+        G = build_particle_flow_graph(instr)
+        self.assertFalse(any(isinstance(d['flow'], JumpEdge) for _, _, d in G.edges(data=True)))
+
     # ------------------------------------------------------------------
     # Serialisation round-trip
     # ------------------------------------------------------------------

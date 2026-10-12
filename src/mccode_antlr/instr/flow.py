@@ -315,12 +315,23 @@ def _build_flow_edge_records(components: tuple) -> tuple:
                 edge=GroupEdge(group_name=group_name, kind=GroupEdgeKind.PASS_THROUGH),
             ))
 
-    # Jump edges — resolve target by name if absolute_target is unset (-1)
+    records.extend(_jump_edge_records(components))
+    return tuple(records)
+
+
+def _jump_edge_records(components: tuple) -> tuple:
+    """JUMP edges, resolved as the translator does when ``absolute_target`` is unset (-1):
+    PREVIOUS[(n)], NEXT[(n)] and MYSELF relative to the jumping instance, anything else by name.
+    Targets outside the instrument give no edge."""
+    n = len(components)
     name_to_idx = {inst.name: idx for idx, inst in enumerate(components)}
-    for inst in components:
+    records = []
+    for index, inst in enumerate(components):
         for jmp in inst.jump:
             target_idx = jmp.absolute_target
-            if target_idx < 0:
+            if target_idx < 0 and (jmp.relative_target != 0 or jmp.target.lower() == 'myself'):
+                target_idx = index + jmp.relative_target
+            elif target_idx < 0:
                 target_idx = name_to_idx.get(jmp.target, -1)
             if 0 <= target_idx < n:
                 records.append(FlowEdgeRecord(
@@ -331,7 +342,6 @@ def _build_flow_edge_records(components: tuple) -> tuple:
                         absolute_target=target_idx,
                     ),
                 ))
-
     return tuple(records)
 
 
