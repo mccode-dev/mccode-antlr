@@ -484,13 +484,13 @@ def atan2_value(va: Expr, vb: Expr, degrees=True):
     zero = Expr.float(0)
     full = Expr.float(180) if degrees else Expr.id('PI')
     half = full / Expr.float(2)
-    if va.is_value(0):
-        if vb.is_op:
-            return [zero, full]
+    # With one argument zero the answer is one of two constants, but which one is the
+    # other argument's sign. A symbolic one has no sign until the instrument runs, so
+    # the choice is left to atan2 there: guessing made a turn about y past 90 degrees,
+    # split out of an instrument, come out as 180 minus the turn.
+    if va.is_value(0) and not _symbolic(vb):
         return [zero if vb > zero else full]
-    if vb.is_value(0):
-        if va.is_op:
-            return [-half, half]
+    if vb.is_value(0) and not _symbolic(va):
         return [half if va > zero else -half]
     if degrees and _symbolic(va, vb):
         return [_to_degrees(binary_expr(atan2, 'atan2', va, vb))]
