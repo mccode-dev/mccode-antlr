@@ -50,21 +50,21 @@ class TestCompiledInstr(TestCase):
         parameters = f'a1={a1} a2={2 * a1} -n 1000000'
 
         std_output, dats = compile_and_run(instr, parameters)
-        if scipp_available():
-            self.assertEqual(len(dats), 5)
-            self.assertEqual(dats['m0'].data.shape, (3, 160, 100))
-            self.assertEqual(dats['m1'].data.shape, (3, 160, 100))
-            self.assertEqual(dats['m3'].data.shape, (3, 160, 100))
-            self.assertEqual(dats['detector'].data.shape, (3, ))
+        # read with or without scipp (#374)
+        self.assertEqual(len(dats), 5)
+        self.assertEqual(dats['m0'].data.shape, (3, 160, 100))
+        self.assertEqual(dats['m1'].data.shape, (3, 160, 100))
+        self.assertEqual(dats['m3'].data.shape, (3, 160, 100))
+        self.assertEqual(dats['detector'].data.shape, (3, ))
 
-            zero =  0 * dats['m0']['I'].data.sum()  # scipp requires equal-units for comparison
-            # Moving farther from the source means less (but finite) intensity in equivalent monitors
-            self.assertTrue(dats['m0']['I'].data.sum() > dats['m1']['I'].data.sum() > dats['m3']['I'].data.sum() > zero)
-            # The detector has been positioned correctly to collect intensity
-            self.assertTrue(dats['detector']['I'].data.sum() > zero)
-        else:
-            # no monitors were loaded without scipp
-            self.assertEqual(len(dats), 0)
+        intensity = {name: dats[name].data[0].sum() for name in ('m0', 'm1', 'm3', 'detector')}
+        # Moving farther from the source means less (but finite) intensity in equivalent monitors
+        self.assertTrue(intensity['m0'] > intensity['m1'] > intensity['m3'] > 0)
+        # The detector has been positioned correctly to collect intensity
+        self.assertTrue(intensity['detector'] > 0)
+        if scipp_available():
+            zero = 0 * dats['m0']['I'].data.sum()  # scipp requires equal-units for comparison
+            self.assertTrue(dats['m0']['I'].data.sum() > zero)
 
     @compiled_test
     def test_assembled_parameters(self):
@@ -177,6 +177,10 @@ class TestCompiledInstr(TestCase):
 
         flag_params = tuple(ComponentParameter(k, Expr.string(v)) for k, v in [
             ('userflag', '"flag"'), ('userflagcomment', '"Neutron Id"')])
+        # Double precision, so the split run sees the same neutrons as the whole one. In
+        # single precision a value near a bin edge can round across it: a neutron
+        # changed bins in 2 of 300 runs, enough now and then to fail the comparison.
+        flag_params += (ComponentParameter('doubleprec', Expr.float(1)),)
         # weight_mode=0: use particle weights exactly as stored (avoids deprecated weight_mode=2 scaling)
         weight_mode_param = (ComponentParameter('weight_mode', Expr.float(0)),)
         before, after = instr.mcpl_split('split_point', filename='test_mcpl_split',
@@ -242,10 +246,6 @@ class TestCompiledInstr(TestCase):
             for file in after_files:
                 self.assertEqual(len([x for x in instr_files if x.name == file.name]), 1)
             instr_files = [[x for x in instr_files if x.name == file.name][0] for file in after_files]
-
-            if not scipp_available():
-                # No scipp, so file-loading is not possible
-                return
 
             for instr_file, after_file in zip(instr_files, after_files):
                 # The files must be the same except for any header information:
