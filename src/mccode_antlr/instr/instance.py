@@ -42,6 +42,10 @@ class Instance(Struct):
     # NB: this is an Instr NAME, not a file path (unlike Instr.source).
     source: Optional[str] = None
 
+    def _check_parameter_name(self, name: str):
+        if not parameter_name_present(self.type.define, name) and not parameter_name_present(self.type.setting, name):
+            raise RuntimeError(f"Unknown parameter {name} for component type {self.type.name}")
+
     def __eq__(self, other: Instance) -> bool:
         if not isinstance(other, Instance):
             return NotImplemented
@@ -133,10 +137,15 @@ class Instance(Struct):
     def __post_init__(self):
         if not self.type.acc:
             self.cpu = True
+        # However an instance is made -- parsed, assembled, inserted, split in, or
+        # decoded -- a parameter its component does not declare is a mistake. The C
+        # translators only read the parameters a component declares, so one by any
+        # other name would be dropped without a word.
+        for parameter in self.parameters:
+            self._check_parameter_name(parameter.name)
 
     def set_parameter(self, name: str, value, overwrite=False, allow_repeated=True):
-        if not parameter_name_present(self.type.define, name) and not parameter_name_present(self.type.setting, name):
-            raise RuntimeError(f"Unknown parameter {name} for component type {self.type.name}")
+        self._check_parameter_name(name)
         if parameter_name_present(self.parameters, name):
             if overwrite:
                 self.parameters = tuple(x for x in self.parameters if name != x.name)
