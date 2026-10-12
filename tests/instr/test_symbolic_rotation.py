@@ -145,3 +145,33 @@ def test_insert_component_keeps_a_symbolic_rotation():
            for x in (angles.x, angles.y, angles.z)]
     # c carries no rotation of its own, so re-expressing must give back TT about y
     assert got == pytest.approx([0.0, 30.0, 0.0], abs=1e-9)
+
+
+SPLIT = """DEFINE INSTRUMENT turned(TT=0)
+TRACE
+COMPONENT base  = Thing() AT (0, 0, 0) ABSOLUTE ROTATED (0, 0.1, 0) ABSOLUTE
+COMPONENT cut   = Thing() AT (0, 0, 0) RELATIVE base
+COMPONENT mount = Thing() AT (0, 0, 0) RELATIVE base ROTATED (0, TT, 0) RELATIVE base
+COMPONENT tip   = Thing() AT (0, 0, 1) RELATIVE mount
+END
+"""
+
+
+@pytest.mark.parametrize('angle', [30.0, 89.0, 91.0, 120.0, 150.0, 179.0, -100.0])
+def test_a_split_keeps_a_symbolic_turn_past_ninety_degrees(angle):
+    """Splitting re-expresses `mount` absolutely, as Euler angles, since `base` is left
+    behind. The y angle of that comes out in [-90, 90], which is right only if the x and
+    z angles become 180 when the turn passes 90 degrees. They were fixed at 0: the
+    atan2(0, cos) that decides it was taken as 0, so a turn of TT came out as 180 - TT,
+    and a scan's sample faced the wrong way for every a3 past 90."""
+    instr = parse_mccode_instr(SPLIT, [_registry()])
+    _, second = instr.split('cut')
+
+    def tip(of):
+        p = of.resolve_orientations()['tip'].position()
+        # .value, not float(str()): a turn past 90 leaves an exact pi in the expression
+        return [c.evaluate({'TT': angle}).simplify().value for c in (p.x, p.y, p.z)]
+
+    turn = math.radians(angle + 0.1)
+    assert tip(instr) == pytest.approx([math.sin(turn), 0.0, math.cos(turn)], abs=1e-9)
+    assert tip(second) == pytest.approx(tip(instr), abs=1e-9)
