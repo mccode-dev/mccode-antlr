@@ -181,11 +181,13 @@ class TestCompiledInstr(TestCase):
         # single precision a value near a bin edge can round across it: a neutron
         # changed bins in 2 of 300 runs, enough now and then to fail the comparison.
         flag_params += (ComponentParameter('doubleprec', Expr.float(1)),)
-        # weight_mode=0: use particle weights exactly as stored (avoids deprecated weight_mode=2 scaling)
-        weight_mode_param = (ComponentParameter('weight_mode', Expr.float(0)),)
+        # weight_mode is MCPL_output's, not MCPL_input's -- given to the input it was
+        # silently dropped. 1 records the ray count for MCPL_input to rescale by; the
+        # default, 2, is deprecated (and 0 is not a mode at all).
+        weight_mode_param = (ComponentParameter('weight_mode', Expr.float(1)),)
+
         before, after = instr.mcpl_split('split_point', filename='test_mcpl_split',
-                                         output_parameters=flag_params,
-                                         input_parameters=weight_mode_param)
+                                         output_parameters=flag_params + weight_mode_param)
         self.assertEqual(before.name, 'Test_MCPL_output_first')
         self.assertEqual(after.name, 'Test_MCPL_output_second')
         self.assertTrue(isinstance(before, Instr))
