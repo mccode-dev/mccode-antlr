@@ -22,3 +22,26 @@ def test_to_file_with_a_file_name_or_path(tmp_path):
     instr.to_file(tmp_path / 'b.instr')
     assert (tmp_path / 'a.instr').read_text(encoding='utf-8') == expected
     assert (tmp_path / 'b.instr').read_text(encoding='utf-8') == expected
+
+
+def test_written_blocks_do_not_grow_when_read_back():
+    """Writing added a blank line inside every block, so each read and write grew it."""
+    instr = parse_mcstas_instr(dedent("""DEFINE INSTRUMENT blocks(a=1)
+    METADATA "text/plain" note %{
+    instrument note
+    %}
+    DECLARE %{
+    double x;
+    %}
+    TRACE
+    COMPONENT origin = Arm() AT (0, 0, 0) ABSOLUTE
+    EXTEND %{
+    x += a;
+    %}
+    METADATA "text/plain" inote %{
+    instance note
+    %}
+    END
+    """))
+    once = instr.to_string(None)
+    assert parse_mcstas_instr(once).to_string(None) == once

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
+import re
 from io import StringIO
 from os import PathLike
 from pathlib import Path
@@ -946,6 +947,10 @@ class Instr(Struct):
         # move the newly added component to the front of the list:
         second.components = (second.components[-1],) + second.components[:-1]
 
+        if remove_unused_parameters:
+            # Only now: the MCPL components' parameters can name particle variables too
+            first.remove_unused_user_vars()
+            second.remove_unused_user_vars()
         return first, second
 
     def parameter_used(self, name: str):
@@ -960,6 +965,41 @@ class Instr(Struct):
                 if name in block:
                     return True
         return False
+
+    def remove_unused_user_vars(self) -> int:
+        """Remove the USERVARS blocks declaring only names nothing else here mentions.
+
+        A split instrument keeps the particle variables of the part it lost, so the same
+        primary spectrometer differs with every sample that declares its own. A name counts
+        as mentioned if it appears anywhere in the instrument or its components' code, as
+        a word: in code, or quoted in a parameter such as ``tof="event_time"``. A block
+        whose declarations can not be read is kept.
+
+        Returns
+        -------
+        int
+            The number of USERVARS blocks removed
+        """
+        if not self.user:
+            return 0
+        user, self.user = self.user, ()
+        text = StringIO()
+        try:
+            self.to_file(text)
+        finally:
+            self.user = user
+        words = set(_WORD.findall(text.getvalue()))
+        for comp in {id(x.type): x.type for x in self.components}.values():
+            for name in _COMP_BLOCKS:
+                for block in getattr(comp, name):
+                    words.update(_WORD.findall(str(block)))
+        kept = tuple(block for block in self.user
+                     if not (names := _declared_names(str(block))) or not names.isdisjoint(words))
+        removed = len(self.user) - len(kept)
+        if removed:
+            logger.info(f'Removed {removed} USERVARS block(s) of {self.name} it does not use')
+            self.user = kept
+        return removed
 
     def check_instrument_parameters(self, remove=False):
         """Check that all instrument parameters are used in the instrument, and optionally remove any that are not
@@ -993,6 +1033,21 @@ class Instr(Struct):
         # We then verify that no as-of-yet undefined identifiers exist, but can't in case they're defined in
         # an initalize or share block
         return expr
+
+
+_WORD = re.compile(r'[A-Za-z_]\w*')
+_COMP_BLOCKS = ('share', 'user', 'declare', 'initialize', 'trace', 'save', 'final', 'display')
+
+
+def _declared_names(source: str) -> set[str]:
+    """The names a USERVARS block declares: ``int a, b[3]; double *c;`` -> a, b, c"""
+    source = re.sub(r'//[^\n]*|/\*.*?\*/', '', source, flags=re.S)
+    names = set()
+    for declaration in source.split(';'):
+        for declarator in re.sub(r'\[[^]]*]', '', declaration).split(','):
+            if found := re.search(r'([A-Za-z_]\w*)\s*$', declarator):
+                names.add(found.group(1))
+    return names
 
 
 def _join_raw_tuple(raw_tuple: tuple[RawC, ...]):
