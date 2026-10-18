@@ -165,33 +165,34 @@ class Comp(Struct):
         def _join(raw_tuple):
             return '\n'.join(str(rc) for rc in raw_tuple)
 
-        # Build the parameter type prefix for define/setting/output parameters
-        def _param_type(p):
-            from mccode_antlr.common.expression import DataType, ShapeType
+        def _param_str(p):
+            # The type and default exactly as a parameter list spells them, so that
+            # reading the text back gives the same parameter
+            from mccode_antlr.common.expression import DataType, ObjectType
+            from mccode_antlr.common.expression.sympy_classes import UNSET_SYMPY
             v = p.value
             if v.is_str:
-                return 'string '
-            if v.is_vector and getattr(v, 'data_type', None) == DataType.float and \
-                    getattr(v, '_shape', None) is not None:
-                return 'vector '
-            if hasattr(v, 'data_type') and v.data_type == DataType.int:
-                return 'int '
-            return ''
+                # an archaic `symbol` is read as a string with an identifier default
+                default = str(v)
+                s = 'string ' if default in ('None', 'NULL') or default.startswith('"') else 'symbol '
+            elif v.is_vector:
+                s = 'int *' if v.data_type == DataType.int else 'vector '
+            elif v.data_type == DataType.int:
+                s = 'int '
+            else:
+                s = ''
+            s += p.name
+            if not (v.is_singular and v._exprs[0] is UNSET_SYMPY):
+                value = str(v)
+                if v.object_type == ObjectType.initializer_list:
+                    value = '{' + value + '}'
+                s += '=' + value
+            return s
 
         def _params_str(params):
-            parts = []
-            for p in params:
-                s = _param_type(p) + p.name
-                if p.value.has_value:
-                    s += '=' + str(p.value)
-                parts.append(s)
-            return ', '.join(parts)
+            return ', '.join(_param_str(p) for p in params)
 
-        name_line = f'DEFINE COMPONENT {self.name}'
-        if self.dependency:
-            name_line += f'\nDEPENDENCY "{self.dependency}"'
-        print(name_line, file=output)
-
+        print(f'DEFINE COMPONENT {self.name}', file=output)
         if self.define:
             print(f'DEFINITION PARAMETERS ({_params_str(self.define)})', file=output)
         if self.setting:
@@ -199,25 +200,20 @@ class Comp(Struct):
         if self.output:
             print(f'OUTPUT PARAMETERS ({_params_str(self.output)})', file=output)
 
+        # The grammar fixes the order: metadata, then dependency, then NOACC
         for metadata in self.metadata:
             metadata.to_file(output=output, wrapper=wrapper)
+        if self.dependency:
+            print(f'DEPENDENCY "{self.dependency}"', file=output)
+        if not self.acc:
+            print('NOACC', file=output)
 
-        if self.share:
-            print(wrapper.block('SHARE', _join(self.share)), file=output)
-        if self.user:
-            print(wrapper.block('USERVARS', _join(self.user)), file=output)
-        if self.declare:
-            print(wrapper.block('DECLARE', _join(self.declare)), file=output)
-        if self.initialize:
-            print(wrapper.block('INITIALIZE', _join(self.initialize)), file=output)
-        if self.trace:
-            print(wrapper.block('TRACE', _join(self.trace)), file=output)
-        if self.save:
-            print(wrapper.block('SAVE', _join(self.save)), file=output)
-        if self.final:
-            print(wrapper.block('FINALLY', _join(self.final)), file=output)
-        if self.display:
-            print(wrapper.block('MCDISPLAY', _join(self.display)), file=output)
+        for name, raw in (('SHARE', self.share), ('USERVARS', self.user),
+                          ('DECLARE', self.declare), ('INITIALIZE', self.initialize),
+                          ('TRACE', self.trace), ('SAVE', self.save),
+                          ('FINALLY', self.final), ('MCDISPLAY', self.display)):
+            if raw:
+                print(wrapper.block(name, _join(raw)), file=output)
 
         print('END', file=output)
 
