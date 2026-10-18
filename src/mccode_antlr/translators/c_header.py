@@ -164,8 +164,10 @@ def header_pre_runtime(
     #endif
     #if RNG_ALG == _RNG_ALG_MT // MT 
     #define randstate_t uint32_t
+    #define RANDSTATE_LEN 1
     #elif RNG_ALG == _RNG_ALG_KISS  // KISS
     #define randstate_t uint64_t
+    #define RANDSTATE_LEN 7
     #endif
 
     #ifndef MC_NUSERVAR
@@ -186,7 +188,7 @@ def header_pre_runtime(
       double _mctmp_a; /* temp a */
       double _mctmp_b; /* temp b */
       double _mctmp_c; /* temp c */
-      randstate_t randstate[7];
+      randstate_t randstate[RANDSTATE_LEN];
       double t, p;    /* time, event weight */
       long long _uid;  /* Unique event ID */
       long _index;     /* component index where to send this event */
