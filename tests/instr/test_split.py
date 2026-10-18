@@ -117,3 +117,46 @@ class TestInstrSplit(TestCase):
             self.assertEqual(name, s_inst.name)
             self.assertTrue(s_inst.at_relative[1] is not None)
             self.assertTrue(s_inst.rotate_relative[1] is not None)
+
+
+class TestSplitUserVars(TestCase):
+    @staticmethod
+    def instr():
+        """Each user_vars call adds its own block, as a sample or readout section does."""
+        from mccode_antlr.assembler import Assembler
+        a = Assembler('test_uservars')
+        a.user_vars('double incident_speed;')
+        a.user_vars('int sample_switch; // which process scatters\ndouble weights[3], *spare;')
+        a.user_vars('int RING;')
+        a.component('origin', 'Arm', at=(0, 0, 0)).EXTEND('incident_speed = sqrt(vx*vx + vy*vy + vz*vz);')
+        a.component('split_here', 'Arm', at=(0, 0, 1))
+        a.component('sample', 'Arm', at=(0, 0, 2)).EXTEND('sample_switch = rand01() > 0.5;')
+        a.component('detector', 'Arm', at=(0, 0, 3)).WHEN('RING > 0')
+        return a.instrument
+
+    def blocks(self, instr):
+        return [' '.join(str(b).split()) for b in instr.user]
+
+    def test_split_removes_user_vars_a_part_does_not_use(self):
+        first, second = self.instr().mcpl_split('split_here', remove_unused_parameters=True)
+        self.assertEqual(self.blocks(first), ['double incident_speed;'])
+        self.assertEqual(self.blocks(second), [
+            'int sample_switch; // which process scatters double weights[3], *spare;',
+            'int RING;'])
+
+    def test_split_keeps_user_vars_the_mcpl_components_name(self):
+        from mccode_antlr.common import ComponentParameter, Expr
+        flag = (ComponentParameter('userflag', Expr.string('"RING"')),)
+        first, _ = self.instr().mcpl_split('split_here', output_parameters=flag,
+                                           remove_unused_parameters=True)
+        self.assertEqual(self.blocks(first), ['double incident_speed;', 'int RING;'])
+
+    def test_split_keeps_user_vars_unless_asked(self):
+        first, second = self.instr().mcpl_split('split_here')
+        self.assertEqual(len(first.user), 3)
+        self.assertEqual(len(second.user), 3)
+
+    def test_declared_names(self):
+        from mccode_antlr.instr.instr import _declared_names
+        self.assertEqual(_declared_names('int a, b[3]; /* c; */ double *d; // e;\nchar f[2][4];'),
+                         {'a', 'b', 'd', 'f'})
