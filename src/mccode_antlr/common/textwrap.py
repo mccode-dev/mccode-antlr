@@ -110,6 +110,20 @@ class BaseWrapper:
         raise NotImplementedError
 
 
+def _own_lines(content: str) -> str:
+    """Put block content between its `%{` and `%}` lines.
+
+    Reading a block keeps everything between the delimiters, so content that was read
+    keeps its newlines as they were, and writing must add only what is missing: adding
+    more grows every block each time it is written and read again.
+    """
+    if not content.startswith('\n'):
+        content = '\n' + content
+    if not content.endswith('\n'):
+        content += '\n'
+    return content
+
+
 class TextWrapper(BaseWrapper):
 
     def wrap(self, text: str, pad: str = None) -> list[str]:
@@ -132,7 +146,7 @@ class TextWrapper(BaseWrapper):
         return '*/'
 
     def block(self, name: str, content: str) -> str:
-        return '\n'.join([name + '\n%{\n', content + '\n%}\n'])
+        return f'{name}\n%{{{_own_lines(content)}%}}\n'
 
     def line(self, name: str, items: list[str], sep: str = ' ') -> str:
         items = [item or 'None' for item in items]
@@ -147,7 +161,7 @@ class TextWrapper(BaseWrapper):
 
     @staticmethod
     def metadata_group(name: str, mimetype: str, item: str, value: str) -> str:
-        return f'{name} "{mimetype}" {item} \n%{{\n{value}\n%}}\n'
+        return f'{name} "{mimetype}" {item}\n%{{{_own_lines(value)}%}}\n'
 
     @staticmethod
     def datatype(data_type: str) -> str:
