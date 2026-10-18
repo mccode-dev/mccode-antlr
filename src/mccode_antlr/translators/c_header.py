@@ -158,6 +158,7 @@ def header_pre_runtime(
     /* available random number generators */
     #define _RNG_ALG_MT         1
     #define _RNG_ALG_KISS       2
+    #define _RNG_ALG_TINYMT     3
     /* selection of random number generator */
     #ifndef RNG_ALG
     #  define RNG_ALG  _RNG_ALG_KISS
@@ -166,6 +167,9 @@ def header_pre_runtime(
     #define randstate_t uint32_t
     #elif RNG_ALG == _RNG_ALG_KISS  // KISS
     #define randstate_t uint64_t
+    #elif RNG_ALG == _RNG_ALG_TINYMT  // TinyMT64
+    #define randstate_t uint64_t
+    #define RANDSTATE_LEN 2
     #endif
 
     #ifndef MC_NUSERVAR
