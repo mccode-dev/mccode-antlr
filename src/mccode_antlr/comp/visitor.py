@@ -77,7 +77,7 @@ class CompVisitor(McCompVisitor):
 
     def visitCategory(self, ctx: Parser.CategoryContext):
         # Return the provided identifier or string literal, minus quotes
-        self.state.category = str(ctx.StringLiteral())[1:-1] if ctx.Identifier() is None else str(ctx.Identifer())
+        self.state.category = str(ctx.StringLiteral())[1:-1] if ctx.Identifier() is None else str(ctx.Identifier())
 
     def visitComponent_define_parameters(self, ctx: Parser.Component_define_parametersContext):
         for parameter in self.visit(ctx.component_parameters()):
