@@ -8,7 +8,7 @@ def _runtime_parameters(flavor: Flavor):
     if Flavor.MCSTAS == flavor:
         pars.extend(['vx', 'vy', 'vz', 't', 'sx', 'sy', 'sz', 'p', 'mcgravitation', 'mcMagnet', 'allow_backprop'])
     elif Flavor.MCXTRACE == flavor:
-        pars.extend(['kx', 'ky', 'kz', 'phi', 't', 'Ex', 'Ey', 'Ez', 'p'])
+        pars.extend(['kx', 'ky', 'kz', 'phi', 't', 'Ex', 'Ey', 'Ez', 'p', 'allow_backprop'])
     else:
         raise ValueError(f'Unknown flavor {flavor}')
     # Add the temporary particle parameters added sometime after v3.4.0 ... to the v3.4.0 tag
