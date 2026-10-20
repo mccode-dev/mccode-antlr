@@ -208,11 +208,18 @@ def _brep_rectangle(prim, p):
 
 def _brep_box(prim, p):
     import build123d as bd
+    from ..primitives import _y_onto
     cx, cy, cz = _eval(prim.cx,p), _eval(prim.cy,p), _eval(prim.cz,p)
     xw, yh, zd = _eval(prim.xw,p), _eval(prim.yh,p), _eval(prim.zd,p)
     nx, ny, nz = _eval(prim.nx,p), _eval(prim.ny,p), _eval(prim.nz,p)
+    t = _eval(prim.thickness,p)
     box = bd.Box(xw, yh, zd)
-    return _orient(box, cx, cy, cz, nx, ny, nz)
+    if t > 0 and min(xw, yh, zd) - 2*t > 0:  # closed inner cavity, as mcdis_box
+        box = box - bd.Box(xw - 2*t, yh - 2*t, zd - 2*t)
+    # local y onto n by the smallest rotation, as mcdis_rotated_box
+    rot = _y_onto(nx, ny, nz)
+    plane = bd.Plane(origin=(cx, cy, cz), x_dir=tuple(rot[:, 0]), z_dir=tuple(rot[:, 2]))
+    return box.locate(bd.Location(plane))
 
 
 def _brep_sphere(prim, p):
@@ -225,7 +232,10 @@ def _brep_cylinder(prim, p):
     import build123d as bd
     cx, cy, cz = _eval(prim.cx,p), _eval(prim.cy,p), _eval(prim.cz,p)
     nx, ny, nz = _eval(prim.nx,p), _eval(prim.ny,p), _eval(prim.nz,p)
-    cyl = bd.Cylinder(_eval(prim.r,p), _eval(prim.h,p))
+    r, h, t = _eval(prim.r,p), _eval(prim.h,p), _eval(prim.thickness,p)
+    cyl = bd.Cylinder(r, h)
+    if t > 0 and r - t > 0 and h - 2*t > 0:  # closed inner cavity, as mcdis_cylinder
+        cyl = cyl - bd.Cylinder(r - t, h - 2*t)
     return _orient(cyl, cx, cy, cz, nx, ny, nz)
 
 
@@ -251,10 +261,10 @@ def _brep_annulus(prim, p):
     cx, cy, cz = _eval(prim.cx,p), _eval(prim.cy,p), _eval(prim.cz,p)
     nx, ny, nz = _eval(prim.nx,p), _eval(prim.ny,p), _eval(prim.nz,p)
     r_outer = _eval(prim.r_outer, p)
-    r_inner = _eval(prim.r_inner, p)
-    outer = bd.Cylinder(r_outer, 1e-3)
-    inner = bd.Cylinder(r_inner, 1e-3)
-    ring = outer - inner
+    r_inner = r_outer - _eval(prim.thickness, p)  # thickness is the ring width
+    ring = bd.Cylinder(r_outer, 1e-3)
+    if r_inner > 0:
+        ring = ring - bd.Cylinder(r_inner, 1e-3)
     return _orient(ring, cx, cy, cz, nx, ny, nz)
 
 

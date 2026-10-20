@@ -97,6 +97,26 @@ def _circle_with_normal(cx, cy, cz, r, nx, ny, nz, n: int = 24) -> np.ndarray:
     return pts
 
 
+def _y_onto(nx, ny, nz) -> np.ndarray:
+    """Rotation matrix taking local y onto (nx,ny,nz) by the smallest rotation.
+
+    As ``mcdis_rotated_box`` in McCode's ``mccode-r.c``: a half turn about z when
+    the normal is -y, and no rotation for a zero normal.
+    """
+    n = np.array([nx, ny, nz], dtype=float)
+    norm = np.linalg.norm(n)
+    if norm < 1e-10:
+        return np.eye(3)
+    n /= norm
+    a = np.cross([0.0, 1.0, 0.0], n)
+    s = np.linalg.norm(a)
+    if s < 1e-12:
+        return np.eye(3) if n[1] > 0 else np.diag([-1.0, -1.0, 1.0])
+    a /= s
+    k = np.array([[0, -a[2], a[1]], [a[2], 0, -a[0]], [-a[1], a[0], 0]])
+    return np.eye(3) + s * k + (1 - n[1]) * (k @ k)  # Rodrigues, sin = s, cos = n[1]
+
+
 # ---------------------------------------------------------------------------
 # Base primitive
 # ---------------------------------------------------------------------------
@@ -278,10 +298,10 @@ class Box(Primitive):
     """``box(cx,cy,cz, xw,yh,zd[, thickness[, nx,ny,nz]])`` — rectangular box.
 
     The new McCode overhaul adds an optional *thickness* (hollow-wall depth) and an
-    orientation normal (*nx*, *ny*, *nz*).  When *thickness* is zero or absent the
-    box is rendered as 12 wire edges, otherwise a second inner box is also drawn.
-    The normal is currently used only by the 3-D renderer; the wire representation
-    always uses the legacy axis-aligned form.
+    orientation normal (*nx*, *ny*, *nz*), onto which the box's local y axis is
+    rotated by the smallest rotation.  A *thickness* > 0 adds a closed inner cavity
+    ``xw-2t × yh-2t × zd-2t`` with the same centre and orientation, drawn only when
+    all three are positive, as ``mcdis_box`` in McCode's ``mccode-r.c``.
     """
     cx: Expr = field(default_factory=Expr._null)
     cy: Expr = field(default_factory=Expr._null)
@@ -303,23 +323,33 @@ class Box(Primitive):
             condition=self.condition,
         )
 
-    def _corners(self, cx, cy, cz, dx, dy, dz):
-        return np.array([
+    def _corners(self, cx, cy, cz, dx, dy, dz, rot=None):
+        local = np.array([
             (cx-dx, cy-dy, cz-dz), (cx+dx, cy-dy, cz-dz),
             (cx+dx, cy+dy, cz-dz), (cx-dx, cy+dy, cz-dz),
             (cx-dx, cy-dy, cz+dz), (cx+dx, cy-dy, cz+dz),
             (cx+dx, cy+dy, cz+dz), (cx-dx, cy+dy, cz+dz),
         ])
+        if rot is None:
+            return local
+        c = np.array([cx, cy, cz])
+        return c + (local - c) @ rot.T
+
+    def _cavity(self, dx, dy, dz, t):
+        """Half-sizes of the inner cavity, or None for a solid box."""
+        inner = (dx - t, dy - t, dz - t)
+        return inner if t > 0 and min(inner) > 0 else None
 
     def to_polylines(self, params=None):
         p = params or {}
         cx, cy, cz = _eval(self.cx, p), _eval(self.cy, p), _eval(self.cz, p)
         dx, dy, dz = _eval(self.xw, p)/2, _eval(self.yh, p)/2, _eval(self.zd, p)/2
+        rot = _y_onto(_eval(self.nx, p), _eval(self.ny, p), _eval(self.nz, p))
         edges = [(0,1),(1,2),(2,3),(3,0),(4,5),(5,6),(6,7),(7,4),(0,4),(1,5),(2,6),(3,7)]
-        result = [self._corners(cx, cy, cz, dx, dy, dz)[list(e)] for e in edges]
-        t = _eval(self.thickness, p)
-        if t:
-            inner = self._corners(cx, cy, cz, max(0, dx-t/2), max(0, dy-t/2), max(0, dz-t/2))
+        result = [self._corners(cx, cy, cz, dx, dy, dz, rot)[list(e)] for e in edges]
+        cavity = self._cavity(dx, dy, dz, _eval(self.thickness, p))
+        if cavity:
+            inner = self._corners(cx, cy, cz, *cavity, rot)
             result += [inner[list(e)] for e in edges]
         return result
 
@@ -327,7 +357,8 @@ class Box(Primitive):
         p = params or {}
         cx, cy, cz = _eval(self.cx, p), _eval(self.cy, p), _eval(self.cz, p)
         dx, dy, dz = _eval(self.xw, p)/2, _eval(self.yh, p)/2, _eval(self.zd, p)/2
-        verts = self._corners(cx, cy, cz, dx, dy, dz).astype(np.float32)
+        rot = _y_onto(_eval(self.nx, p), _eval(self.ny, p), _eval(self.nz, p))
+        verts = self._corners(cx, cy, cz, dx, dy, dz, rot)
         # 6 faces, each split into 2 triangles
         faces = np.array([
             [0,1,2],[0,2,3],  # -z face
@@ -337,7 +368,11 @@ class Box(Primitive):
             [0,3,7],[0,7,4],  # -x face
             [1,5,6],[1,6,2],  # +x face
         ], dtype=np.int32)
-        return verts, faces
+        cavity = self._cavity(dx, dy, dz, _eval(self.thickness, p))
+        if cavity:  # inner shell, wound the other way round
+            verts = np.vstack([verts, self._corners(cx, cy, cz, *cavity, rot)])
+            faces = np.vstack([faces, faces[:, ::-1] + 8])
+        return verts.astype(np.float32), faces
 
 
 @dataclass
@@ -394,7 +429,9 @@ class Sphere(Primitive):
 class Cylinder(Primitive):
     """``cylinder(cx,cy,cz, r,h[, thickness[, nx,ny,nz]])`` — cylinder.
 
-    The new McCode overhaul adds an optional *thickness* for hollow cylinders.
+    The new McCode overhaul adds an optional *thickness* for hollow cylinders: a
+    closed inner cavity of radius ``r-t`` and height ``h-2t``, drawn only when both
+    are positive, as ``mcdis_cylinder`` in McCode's ``mccode-r.c``.
     The axis orientation (*nx*, *ny*, *nz*) was already supported.
     """
     cx: Expr = field(default_factory=Expr._null)
@@ -425,15 +462,24 @@ class Cylinder(Primitive):
             normal /= norm
         return normal
 
+    def _resolve(self, p):
+        """Centre, axis and the (r, h) of the outer surface plus the cavity, if any."""
+        centre = np.array([_eval(self.cx, p), _eval(self.cy, p), _eval(self.cz, p)])
+        normal = self._axis_frame(_eval(self.nx, p), _eval(self.ny, p), _eval(self.nz, p))
+        r, h, t = _eval(self.r, p), _eval(self.h, p), _eval(self.thickness, p)
+        shells = [(r, h)]
+        if t > 0 and r - t > 0 and h - 2 * t > 0:
+            shells.append((r - t, h - 2 * t))
+        return centre, normal, shells
+
     def to_polylines(self, params=None):
-        p = params or {}
-        cx, cy, cz = _eval(self.cx, p), _eval(self.cy, p), _eval(self.cz, p)
-        r, h = _eval(self.r, p), _eval(self.h, p)
-        nx, ny, nz = _eval(self.nx, p), _eval(self.ny, p), _eval(self.nz, p)
-        normal = self._axis_frame(nx, ny, nz)
+        centre, normal, shells = self._resolve(params or {})
+        return [pl for r, h in shells for pl in self._wire(centre, normal, r, h)]
+
+    def _wire(self, centre, normal, r, h):
         half = 0.5 * h * normal
-        c1 = np.array([cx, cy, cz]) - half
-        c2 = np.array([cx, cy, cz]) + half
+        c1 = centre - half
+        c2 = centre + half
         cap1 = _circle_with_normal(*c1, r, *normal)
         cap2 = _circle_with_normal(*c2, r, *normal)
         n_pts = cap1.shape[0] - 1
@@ -441,13 +487,15 @@ class Cylinder(Primitive):
         return [cap1, cap2] + lines
 
     def to_mesh(self, params=None):
-        p = params or {}
-        cx, cy, cz = _eval(self.cx, p), _eval(self.cy, p), _eval(self.cz, p)
-        r, h = _eval(self.r, p), _eval(self.h, p)
-        nx, ny, nz = _eval(self.nx, p), _eval(self.ny, p), _eval(self.nz, p)
-        normal = self._axis_frame(nx, ny, nz)
+        centre, normal, shells = self._resolve(params or {})
+        verts, faces = self._solid(centre, normal, *shells[0])
+        if len(shells) > 1:  # inner shell, wound the other way round
+            v, f = self._solid(centre, normal, *shells[1])
+            verts, faces = np.vstack([verts, v]), np.vstack([faces, f[:, ::-1] + len(verts)])
+        return verts, faces
+
+    def _solid(self, centre, normal, r, h):
         half = 0.5 * h * normal
-        centre = np.array([cx, cy, cz])
         c1, c2 = centre - half, centre + half
         slices = 32
         # Build perimeter points for both caps (without the closing duplicate)
@@ -613,16 +661,18 @@ class Disc(Primitive):
 
 @dataclass
 class Annulus(Primitive):
-    """``annulus(x,y,z,r_outer,r_inner,nx,ny,nz)`` — annular disc with arbitrary normal.
+    """``annulus(x,y,z,r_outer,thickness,nx,ny,nz)`` — annular disc with arbitrary normal.
 
-    Corresponds to ``mcdis_annulus`` in C.  Wire representation is two concentric
+    Corresponds to ``mcdis_annulus`` in C.  *thickness* is the ring width, as
+    McStas and McXtrace ``Annulus.comp`` pass it, so the inner radius is
+    ``max(0, r_outer - thickness)``.  Wire representation is two concentric
     circles; mesh representation is a ring of quads.
     """
     cx: Expr = field(default_factory=Expr._null)
     cy: Expr = field(default_factory=Expr._null)
     cz: Expr = field(default_factory=Expr._null)
     r_outer: Expr = field(default_factory=Expr._null)
-    r_inner: Expr = field(default_factory=Expr._null)
+    thickness: Expr = field(default_factory=Expr._null)
     nx: Expr = field(default_factory=lambda: Expr.float(0))
     ny: Expr = field(default_factory=lambda: Expr.float(1))
     nz: Expr = field(default_factory=lambda: Expr.float(0))
@@ -630,7 +680,7 @@ class Annulus(Primitive):
     def evaluate(self, params):
         return Annulus(
             _eval(self.cx, params), _eval(self.cy, params), _eval(self.cz, params),
-            _eval(self.r_outer, params), _eval(self.r_inner, params),
+            _eval(self.r_outer, params), _eval(self.thickness, params),
             _eval(self.nx, params), _eval(self.ny, params), _eval(self.nz, params),
             condition=self.condition,
         )
@@ -639,7 +689,7 @@ class Annulus(Primitive):
         p = params or {}
         cx, cy, cz = _eval(self.cx, p), _eval(self.cy, p), _eval(self.cz, p)
         ro = _eval(self.r_outer, p)
-        ri = _eval(self.r_inner, p)
+        ri = max(0.0, ro - _eval(self.thickness, p))
         nx, ny, nz = _eval(self.nx, p), _eval(self.ny, p), _eval(self.nz, p)
         return [
             _circle_with_normal(cx, cy, cz, ro, nx, ny, nz),
@@ -650,7 +700,7 @@ class Annulus(Primitive):
         p = params or {}
         cx, cy, cz = _eval(self.cx, p), _eval(self.cy, p), _eval(self.cz, p)
         ro = _eval(self.r_outer, p)
-        ri = _eval(self.r_inner, p)
+        ri = max(0.0, ro - _eval(self.thickness, p))
         nx, ny, nz = _eval(self.nx, p), _eval(self.ny, p), _eval(self.nz, p)
         slices = 32
         outer = _circle_with_normal(cx, cy, cz, ro, nx, ny, nz, n=slices)[:-1]
