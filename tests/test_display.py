@@ -31,6 +31,7 @@ from mccode_antlr.display import (
     Sphere,
     parse_display_source,
 )
+from mccode_antlr.display.primitives import _y_onto
 
 
 # ---------------------------------------------------------------------------
@@ -577,3 +578,66 @@ class TestSolidMesh:
         verts, faces = c.to_mesh()
         assert verts.shape[1] == 3
         assert faces.shape[1] == 3
+
+
+# ===========================================================================
+# Hollow box/cylinder, box orientation and annulus width, as McCode's mccode-r.c
+# ===========================================================================
+
+def _extent(polylines):
+    pts = np.vstack(polylines)
+    return pts.max(axis=0) - pts.min(axis=0)
+
+
+class TestHollowShapes:
+    def test_box_normal_rotates_local_y(self):
+        # local y onto +x: a quarter turn about -z, so xwidth lies along y
+        b = Box(0, 0, 0, 0.1, 0.2, 0.3, 0, 1, 0, 0)
+        np.testing.assert_allclose(_extent(b.to_polylines()), [0.2, 0.1, 0.3], atol=1e-12)
+        verts, _ = b.to_mesh()
+        np.testing.assert_allclose(verts.max(axis=0) - verts.min(axis=0), [0.2, 0.1, 0.3], atol=1e-6)
+
+    def test_box_normal_minus_y_is_half_turn_about_z(self):
+        b = Box(0, 0, 0, 0.1, 0.2, 0.3, 0, 0, -1, 0)
+        corners = b._corners(0, 0, 0, 0.05, 0.1, 0.15, _y_onto(0, -1, 0))
+        np.testing.assert_allclose(corners[0], [0.05, 0.1, -0.15])
+
+    def test_box_cavity_is_two_thicknesses_smaller(self):
+        b = Box(0, 0, 0, 0.1, 0.2, 0.3, 0.01)
+        pls = b.to_polylines()
+        assert len(pls) == 24
+        np.testing.assert_allclose(_extent(pls[12:]), [0.08, 0.18, 0.28])
+        verts, faces = b.to_mesh()
+        assert verts.shape == (16, 3) and faces.shape == (24, 3)
+
+    def test_box_too_thick_is_solid(self):
+        b = Box(0, 0, 0, 0.1, 0.2, 0.3, 0.05)  # xwidth - 2t = 0
+        assert len(b.to_polylines()) == 12
+        assert b.to_mesh()[0].shape == (8, 3)
+
+    def test_cylinder_cavity(self):
+        c = Cylinder(0, 0, 0, 0.05, 0.5, 0.01, 0, 1, 0)
+        pls = c.to_polylines()
+        assert len(pls) == 12
+        np.testing.assert_allclose(_extent(pls[6:]), [0.08, 0.48, 0.08], atol=1e-3)
+        solid = Cylinder(0, 0, 0, 0.05, 0.5, 0, 0, 1, 0).to_mesh()
+        verts, faces = c.to_mesh()
+        assert len(verts) == 2 * len(solid[0]) and len(faces) == 2 * len(solid[1])
+
+    def test_cylinder_too_thick_is_solid(self):
+        c = Cylinder(0, 0, 0, 0.05, 0.5, 0.05, 0, 1, 0)  # r - t = 0
+        assert len(c.to_polylines()) == 6
+
+    def test_annulus_thickness_is_ring_width(self):
+        # as Annulus.comp: mcdis_annulus(0,0,0, radius, thickness, 0,1,0)
+        a = Annulus(0, 0, 0, 0.06, 0.02, 0, 1, 0)
+        outer, inner = (np.linalg.norm(pl[:, [0, 2]], axis=1) for pl in a.to_polylines())
+        np.testing.assert_allclose(outer, 0.06)
+        np.testing.assert_allclose(inner, 0.04)
+        verts, _ = a.to_mesh()
+        radii = np.unique(np.round(np.linalg.norm(verts[:, [0, 2]], axis=1), 6))
+        np.testing.assert_allclose(radii, [0.04, 0.06], rtol=1e-6)
+
+    def test_annulus_wider_than_radius_is_a_disc(self):
+        a = Annulus(0, 0, 0, 0.06, 0.1, 0, 1, 0)
+        np.testing.assert_allclose(a.to_polylines()[1], 0, atol=1e-12)
