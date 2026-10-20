@@ -81,31 +81,53 @@ def _extract_var_arrays(var: list[str], data_2d, shape: tuple) -> tuple:
     return I_arr, I_err_arr, N_arr, extras
 
 
-def _combine_values(var: list[str], a, b):
-    """Two files' values, (nv, ...) each, as the values of one longer run.
-
-    Intensity and counts add and the intensity's error adds in quadrature. Every other
-    variable -- the axis column a 1-D file starts with, say ``Mean`` -- must agree,
-    since it describes the bins rather than what landed in them.
-    """
-    import numpy as np
-
+def _standard_indices(var: list[str]) -> tuple:
+    """Where ``I``, ``I_err`` and ``N`` are among a file's variables, or None."""
     def index(name, fallback):
         if name in var:
             return var.index(name)
         return fallback if fallback < len(var) else None
+    return index('I', 0), index('I_err', 1), index('N', 2)
 
-    i, e, n = index('I', 0), index('I_err', 1), index('N', 2)
+
+def _combine_values(var: list[str], a, b, rays_a: float, rays_b: float):
+    """Two runs' values, (nv, ...) each, as the values of one run of both runs' rays.
+
+    McCode normalises each run's intensity to its own ray count, so the combined
+    intensity is the ray-count-weighted mean of the two, and its error is the weighted
+    errors added in quadrature, over the total. Counts add. Every other variable -- the
+    axis column a 1-D file starts with, say ``Mean`` -- must agree, since it describes
+    the bins rather than what landed in them.
+    """
+    import numpy as np
+    i, e, n = _standard_indices(var)
+    total = rays_a + rays_b
     out = a.copy()
-    for k in (i, n):
-        if k is not None:
-            out[k] = a[k] + b[k]
+    if i is not None:
+        out[i] = (rays_a * a[i] + rays_b * b[i]) / total
     if e is not None:
-        out[e] = np.sqrt(a[e] ** 2 + b[e] ** 2)
+        out[e] = np.sqrt((rays_a * a[e]) ** 2 + (rays_b * b[e]) ** 2) / total
+    if n is not None:
+        out[n] = a[n] + b[n]
     for k, name in enumerate(var):
         if k not in (i, e, n) and not np.array_equal(a[k], b[k]):
             raise RuntimeError(f'Cannot combine files whose {name!r} values differ')
     return out
+
+
+def _g(x) -> str:
+    """A number as McCode prints one in a header."""
+    return f'{float(x):g}'
+
+
+def _moments(axis, weight) -> tuple:
+    """The weighted mean and spread of ``axis``, as McCode's ``statistics`` gives them."""
+    import numpy as np
+    total = weight.sum()
+    if not total:
+        return 0.0, 0.0
+    mean = (axis * weight).sum() / total
+    return mean, np.sqrt(max((axis ** 2 * weight).sum() / total - mean ** 2, 0.0))
 
 
 @dataclass(eq=False)
@@ -247,13 +269,45 @@ class DatFileCommon:
             return False
         return self._limits is None or self.metadata.get(self._limits) == other.metadata.get(self._limits)
 
+    def rays(self) -> int:
+        """The run's ray count, ``Ncount``, which its intensities are normalised to."""
+        if 'Ncount' not in self.metadata:
+            raise RuntimeError(f'{self.source} has no Ncount, so how much it should count '
+                               f'for in a combination is unknown')
+        return int(self.metadata['Ncount'])
+
     def __add__(self, other):
+        """The two runs as one run of both runs' rays.
+
+        Each run's intensities are normalised to its own ray count, so they are averaged,
+        weighted by those counts, not added; see `_combine_values`. The header totals --
+        ``values``, ``signal`` and ``statistics`` -- are recomputed from the result.
+        """
         if not self.safe_to_combine(other):
             raise RuntimeError(f'Cannot combine these two {type(self).__name__} instances')
-        return type(self)(self.source,
-                          combine_scan_dicts(self.metadata, other.metadata),
-                          combine_scan_dicts(self.parameters, other.parameters),
-                          _combine_values(self.variables, self.values, other.values))
+        combined = type(self)(self.source,
+                              combine_scan_dicts(self.metadata, other.metadata),
+                              combine_scan_dicts(self.parameters, other.parameters),
+                              _combine_values(self.variables, self.values, other.values,
+                                              self.rays(), other.rays()))
+        combined.metadata.update({k: v for k, v in combined.header_totals().items()
+                                  if k in combined.metadata})
+        return combined
+
+    def header_totals(self) -> dict:
+        """The header's ``values`` line -- total intensity, its error and total counts --
+        and, where the file has bins, ``signal``, from these values."""
+        import numpy as np
+        i, e, n = _standard_indices(self.variables)
+        intensity = self.values[i] if i is not None else np.zeros(self.values.shape[1:])
+        error = self.values[e] if e is not None else np.zeros_like(intensity)
+        counts = self.values[n] if n is not None else np.zeros_like(intensity)
+        totals = {'values': f'{_g(intensity.sum())} {_g(np.sqrt((error ** 2).sum()))} '
+                            f'{_g(counts.sum())}'}
+        if intensity.ndim:
+            totals['signal'] = (f'Min={_g(intensity.min())}; Max={_g(intensity.max())}; '
+                                f'Mean={_g(intensity.mean())};')
+        return totals
 
     # ------------------------------------------------------------------
     # Misc
@@ -379,6 +433,17 @@ class DatFile1D(DatFileCommon):
         lower_limit, upper_limit = [float(x) for x in self['xlimits'].split()]
         return [dim_metadata(self.values.shape[1], self['xlabel'], lower_limit, upper_limit)]
 
+    def header_totals(self) -> dict:
+        """As for every file, plus ``statistics``: the intensity-weighted mean and spread of
+        the axis column, ``X0`` and ``dX``."""
+        totals = super().header_totals()
+        i, e, n = _standard_indices(self.variables)
+        axes = [k for k in range(len(self.variables)) if k not in (i, e, n)]
+        if axes and i is not None:
+            mean, spread = _moments(self.values[axes[0]], self.values[i])
+            totals['statistics'] = f'X0={_g(mean)}; dX={_g(spread)};'
+        return totals
+
     def print_data(self, file):
         # one line per bin
         for row in self.values.T:
@@ -449,6 +514,24 @@ class DatFile2D(DatFileCommon):
         ny, nx = self.values.shape[1:]
         return [dim_metadata(nx, self['xlabel'], lower_x, upper_x),
                 dim_metadata(ny, self['ylabel'], lower_y, upper_y)]
+
+    def header_totals(self) -> dict:
+        """As for every file, plus ``statistics``: the intensity-weighted mean and spread of
+        each axis, ``X0``, ``dX``, ``Y0`` and ``dY``, at the bin centres McCode uses."""
+        import numpy as np
+        totals = super().header_totals()
+        i, _, _ = _standard_indices(self.variables)
+        if i is None or 'xylimits' not in self.metadata:
+            return totals
+        lower_x, upper_x, lower_y, upper_y = [float(x) for x in self['xylimits'].split()]
+        intensity = self.values[i]
+        ny, nx = intensity.shape
+        x = lower_x + (np.arange(nx) + 0.5) * (upper_x - lower_x) / nx
+        y = lower_y + (np.arange(ny) + 0.5) * (upper_y - lower_y) / ny
+        x0, dx = _moments(x, intensity.sum(axis=0))
+        y0, dy = _moments(y, intensity.sum(axis=1))
+        totals['statistics'] = f'X0={_g(x0)}; dX={_g(dx)}; Y0={_g(y0)}; dY={_g(dy)};'
+        return totals
 
     def print_data(self, file):
         labels = 'Data', 'Errors', 'Events'
