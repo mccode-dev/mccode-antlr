@@ -128,7 +128,7 @@ class TestSolidPrimitives:
 
     def test_annulus(self):
         prim = Annulus(cx=E(0), cy=E(0), cz=E(0),
-                       r_outer=E(0.1), r_inner=E(0.05),
+                       r_outer=E(0.1), thickness=E(0.05),
                        nx=E(0), ny=E(1), nz=E(0))
         shape = primitive_to_brep(prim)
         _check_shape(shape)
@@ -315,3 +315,36 @@ END
         from mccode_antlr.cli.step import main
         rc = main([str(tmp_path / "nonexistent.instr")])
         assert rc != 0
+
+
+# ---------------------------------------------------------------------------
+# Hollow box/cylinder, box orientation and annulus width, as McCode's mccode-r.c
+# ---------------------------------------------------------------------------
+
+def _size(shape):
+    bb = shape.bounding_box()
+    return np.array([bb.size.X, bb.size.Y, bb.size.Z])
+
+
+class TestHollowShapes:
+    def test_box_default_normal_keeps_axes(self):
+        shape = primitive_to_brep(Box(E(0), E(0), E(0), E(0.1), E(0.2), E(0.3)))
+        np.testing.assert_allclose(_size(shape), [0.1, 0.2, 0.3], atol=1e-6)
+
+    def test_box_normal_rotates_local_y(self):
+        shape = primitive_to_brep(Box(E(0), E(0), E(0), E(0.1), E(0.2), E(0.3),
+                                      E(0), E(1), E(0), E(0)))
+        np.testing.assert_allclose(_size(shape), [0.2, 0.1, 0.3], atol=1e-6)
+
+    def test_box_cavity(self):
+        shape = primitive_to_brep(Box(E(0), E(0), E(0), E(0.1), E(0.2), E(0.3), E(0.01)))
+        assert shape.volume == pytest.approx(0.1*0.2*0.3 - 0.08*0.18*0.28, rel=1e-6)
+
+    def test_cylinder_cavity(self):
+        shape = primitive_to_brep(Cylinder(E(0), E(0), E(0), E(0.05), E(0.5), E(0.01),
+                                           E(0), E(1), E(0)))
+        assert shape.volume == pytest.approx(np.pi*(0.05**2*0.5 - 0.04**2*0.48), rel=1e-4)
+
+    def test_annulus_thickness_is_ring_width(self):
+        shape = primitive_to_brep(Annulus(E(0), E(0), E(0), E(0.06), E(0.02), E(0), E(1), E(0)))
+        assert shape.volume == pytest.approx(np.pi*(0.06**2 - 0.04**2)*1e-3, rel=1e-4)
