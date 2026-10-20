@@ -91,17 +91,49 @@ def test_the_scipp_view_says_what_it_needs(no_scipp, tmp_path):
 
 
 def test_runs_combine_without_scipp(no_scipp, tmp_path):
-    """Intensity and counts add, errors add in quadrature, and the axis column stays."""
+    """Two runs of the same instrument combine as one run of all their rays.
+
+    McCode normalises each run's intensity to its own ray count, so intensities are
+    averaged, weighted by Ncount; errors are the weighted errors in quadrature over the
+    total; counts add; the axis column stays.
+    """
     from mccode_antlr.loader.datfile import read_mccode_dat, write_combined_mccode_dats
     one = _write(tmp_path / 'one.dat', ncount=1000, seed=1, directory='one')
     two = _write(tmp_path / 'two.dat', ncount=3000, seed=2, directory='two')
     write_combined_mccode_dats([one, two], tmp_path / 'both.dat')
     both = read_mccode_dat(tmp_path / 'both.dat')
     np.testing.assert_allclose(both['L'], [1, 2, 3])
-    np.testing.assert_allclose(both['I'], [2, 4, 6])
-    np.testing.assert_allclose(both['I_err'], np.sqrt(2) * np.array([0.3, 0.4, 0.5]))
+    np.testing.assert_allclose(both['I'], [1, 2, 3])
+    np.testing.assert_allclose(both['I_err'], np.sqrt(10) / 4 * np.array([0.3, 0.4, 0.5]))
     np.testing.assert_allclose(both['N'], [20, 40, 60])
     assert both['Ncount'] == '4000'
+
+
+def test_runs_are_weighted_by_their_ray_counts(no_scipp, tmp_path):
+    """A run of three times the rays counts three times as much, and the header's
+    totals describe the combined histogram, not the first run's."""
+    from mccode_antlr.loader.datfile import read_mccode_dat
+    one = read_mccode_dat(_write(tmp_path / 'one.dat', ncount=1000))
+    two = read_mccode_dat(_write(tmp_path / 'two.dat', ncount=3000, seed=2, directory='two'))
+    two.values[1] = [5.0, 6.0, 7.0]          # a different intensity in each bin
+    both = one + two
+    np.testing.assert_allclose(both['I'], [(1 + 3 * 5) / 4, (2 + 3 * 6) / 4, (3 + 3 * 7) / 4])
+    total, error, events = (float(x) for x in both['values'].split())
+    assert total == pytest.approx(both['I'].sum(), rel=1e-5)
+    assert error == pytest.approx(np.sqrt((both['I_err'] ** 2).sum()), rel=1e-5)
+    assert events == pytest.approx(120)
+    mean = (both['L'] * both['I']).sum() / both['I'].sum()
+    assert both['statistics'].startswith(f'X0={mean:g};')
+    assert both['signal'] == f"Min={both['I'].min():g}; Max={both['I'].max():g}; Mean={both['I'].mean():g};"
+
+
+def test_a_run_without_a_ray_count_is_not_combined(no_scipp, tmp_path):
+    from mccode_antlr.loader.datfile import read_mccode_dat
+    one = read_mccode_dat(_write(tmp_path / 'one.dat'))
+    two = read_mccode_dat(_write(tmp_path / 'two.dat', seed=2, directory='two'))
+    del two.metadata['Ncount']
+    with pytest.raises(RuntimeError, match='Ncount'):
+        one + two
 
 
 def test_files_with_different_bins_do_not_combine(no_scipp, tmp_path):

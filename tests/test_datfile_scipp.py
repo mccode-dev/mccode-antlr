@@ -193,9 +193,10 @@ class TestDatFile0D(unittest.TestCase):
         dat1 = self._load()
         dat2 = self._load()  # independent load
         combined = dat1 + dat2
-        self.assertAlmostEqual(float(combined.dataset['I'].value), 2 * 1234.5, places=3)
-        # Independent measurements: variances add
-        expected_var = 2 * (6.78 ** 2)
+        # Two runs of the same ray count, each normalised to it: the intensity is their
+        # mean, and the variance of a mean of two independent runs is half of one
+        self.assertAlmostEqual(float(combined.dataset['I'].value), 1234.5, places=3)
+        expected_var = (6.78 ** 2) / 2
         self.assertAlmostEqual(float(combined.dataset['I'].variance), expected_var, places=3)
 
 
@@ -274,11 +275,12 @@ class TestDatFile1D(unittest.TestCase):
         dat1 = self._load()
         dat2 = self._load()  # independent load
         combined = dat1 + dat2
-        expected_var = 2 * np.array([0.1, 0.2, 0.3, 0.4, 0.5]) ** 2
+        # equal ray counts: the mean intensity, with half the variance of one run
+        expected_var = np.array([0.1, 0.2, 0.3, 0.4, 0.5]) ** 2 / 2
         np.testing.assert_allclose(
             combined.dataset['I'].variances, expected_var, rtol=1e-5
         )
-        np.testing.assert_allclose(combined.dataset['I'].values, [2, 4, 6, 8, 10])
+        np.testing.assert_allclose(combined.dataset['I'].values, [1, 2, 3, 4, 5])
 
 
 class TestDatFile2D(unittest.TestCase):
@@ -326,9 +328,10 @@ class TestDatFile2D(unittest.TestCase):
         dat1 = self._load()
         dat2 = self._load()  # independent load
         combined = dat1 + dat2
-        expected_I = 2 * np.array([[10, 20, 30], [40, 50, 60]], dtype=float)
+        # equal ray counts: the mean intensity, with half the variance of one run
+        expected_I = np.array([[10, 20, 30], [40, 50, 60]], dtype=float)
         np.testing.assert_allclose(combined.dataset['I'].values, expected_I)
-        expected_var = 2 * np.array([[1, 2, 3], [4, 5, 6]], dtype=float) ** 2
+        expected_var = np.array([[1, 2, 3], [4, 5, 6]], dtype=float) ** 2 / 2
         np.testing.assert_allclose(combined.dataset['I'].variances, expected_var)
 
 
