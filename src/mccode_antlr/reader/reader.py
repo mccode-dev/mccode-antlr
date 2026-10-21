@@ -1,8 +1,11 @@
 from __future__ import annotations
+import os
 import re
+from contextlib import contextmanager
 from functools import lru_cache
 from pathlib import Path
-from msgspec import Struct, field
+import msgspec
+from msgspec import Raw, Struct, field
 
 from .registry import (Registry, registries_match, registry_from_specification,
                        resolve_from_registries, origin_label)
@@ -29,7 +32,9 @@ logger = logging.getLogger(__name__)
 #    sidecars parsed on e.g. a cp1252 Windows system may hold garbled text.
 # 4: that decoding also kept CRLF line endings, so sidecars parsed from a CRLF
 #    checkout hold carriage returns in their C blocks.
-_COMPONENT_CACHE_FORMAT = 4
+# 5: sidecars record the mtime of every source file the Comp was built from
+#    (INHERIT/COPY parents included), as {"sources": {...}, "ir": <Comp>}.
+_COMPONENT_CACHE_FORMAT = 5
 
 
 @lru_cache(maxsize=1)
@@ -39,20 +44,96 @@ def _component_cache_salt() -> str:
     return sha1(f'{_COMPONENT_CACHE_FORMAT}:{version()}'.encode()).hexdigest()[:12]
 
 
+# Sources (path -> mtime_ns) of the components resolved while each in-progress
+# parse runs; innermost parse last.  A `DEFINE COMPONENT b INHERIT a` reaches
+# `a` through Reader.get_component, which records it here, so b's cache entry
+# goes stale when a's file changes, not only when b's does.
+# ponytail: process-global, so concurrent parses in threads would mix their
+# dependencies; make it a ContextVar if Readers ever parse in parallel threads.
+_dependency_frames: list[dict[str, int]] = []
+
+
+@contextmanager
+def recording_dependencies():
+    """Collect the sources of every component resolved inside the block."""
+    frame: dict[str, int] = {}
+    _dependency_frames.append(frame)
+    try:
+        yield frame
+    finally:
+        _dependency_frames.pop()
+
+
+def _note_dependency(path: Path) -> None:
+    if not _dependency_frames:
+        return
+    sources = component_cache.sources(path)
+    if sources is None:  # in-memory level flushed since it was parsed
+        try:
+            sources = {str(path): path.stat().st_mtime_ns}
+        except OSError:
+            return
+    _dependency_frames[-1].update(sources)
+
+
+def _sources_are_current(sources: dict[str, int]) -> bool:
+    try:
+        return all(Path(p).stat().st_mtime_ns == m for p, m in sources.items())
+    except OSError:
+        return False
+
+
+class _Sidecar(Struct):
+    sources: dict[str, int]  # relative to the sidecar's directory where possible
+    ir: Raw
+
+
+def _read_sidecar(json_path: Path) -> tuple[dict[str, int], Raw] | None:
+    """The sidecar's sources (made absolute) and raw Comp JSON, if it is current."""
+    try:
+        sidecar = msgspec.json.decode(json_path.read_bytes(), type=_Sidecar)
+    except Exception:
+        return None  # missing, corrupt, or an older layout
+    sources = {str(json_path.parent / p): m for p, m in sidecar.sources.items()}
+    return (sources, sidecar.ir) if _sources_are_current(sources) else None
+
+
+def _relative_sources(sources: dict[str, int], directory: Path) -> dict[str, int]:
+    """Relative paths keep a sidecar valid when its whole tree is copied (cp -a)."""
+    def rel(p):
+        try:
+            return os.path.relpath(p, directory)
+        except ValueError:  # different drive on Windows
+            return p
+    return {rel(p): m for p, m in sources.items()}
+
+
+def component_ir_enabled() -> bool:
+    """Whether component IR sidecars are read and written (``cache.component_ir``)."""
+    from mccode_antlr.config import config
+    value = config['cache']['component_ir'].get()
+    if isinstance(value, str):  # `mccode-antlr config set` stores the text it is given
+        return value.strip().lower() in ('1', 'true', 'yes', 'on')
+    return bool(value)
+
+
 class _ComponentCache:
     """Singleton two-level cache for parsed :class:`~mccode_antlr.comp.Comp` objects.
 
     **Level 1 – in-memory dict** (per process):
-    Maps absolute ``.comp`` path → ``(mtime_ns, Comp)``.  Hits cost nothing
-    beyond a dict lookup and a ``stat()`` call.
+    Maps absolute ``.comp`` path → ``(sources, Comp)``, where *sources* maps
+    every file the Comp was built from -- itself and any INHERIT/COPY parents,
+    transitively -- to its mtime.  A hit costs a dict lookup and one ``stat()``
+    per source.
 
-    **Level 2 – disk JSON cache** (persists across process restarts):
+    **Level 2 – disk JSON cache** (persists across process restarts; only when
+    the ``cache.component_ir`` configuration value is true):
     A ``{name}.comp.<salt>.json`` file is written alongside every ``.comp`` file
     the first time it is parsed.  On subsequent loads the JSON is decoded by
     :func:`mccode_antlr.io.json.from_json` in ~0.1 ms instead of running the
-    ANTLR parser (~10–25 ms per component).  The JSON file's mtime is compared
-    to the ``.comp`` file's mtime; a stale JSON is discarded and the component
-    is re-parsed.  The ``<salt>`` encodes the mccode-antlr version and an
+    ANTLR parser (~10–25 ms per component).  The JSON records the same
+    *sources* mtimes; if any differs the JSON is ignored and the component is
+    re-parsed.  The ``<salt>`` encodes the mccode-antlr version and an
     internal cache-format number (:data:`_COMPONENT_CACHE_FORMAT`), so sidecars
     written by a different build are ignored and pruned rather than trusted.
     If the cache directory is not writable the disk level is silently skipped.
@@ -65,7 +146,7 @@ class _ComponentCache:
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
-            cls._instance._store: dict[str, tuple[int, Comp]] = {}
+            cls._instance._store: dict[str, tuple[dict[str, int], Comp]] = {}
             cls._instance._source_overrides: dict[str, str] = {}
         return cls._instance
 
@@ -93,43 +174,51 @@ class _ComponentCache:
 
     def get(self, path: Path) -> Comp | None:
         key = str(path)
-        try:
-            comp_mtime = path.stat().st_mtime_ns
-        except OSError:
-            return None
 
         # Level 1: in-memory
         if key in self._store:
-            cached_mtime, comp = self._store[key]
-            if cached_mtime == comp_mtime:
+            sources, comp = self._store[key]
+            if _sources_are_current(sources):
                 return comp
             del self._store[key]
 
         # Level 2: disk JSON
-        json_path = self._json_path(path)
-        try:
-            if json_path.exists() and json_path.stat().st_mtime_ns >= comp_mtime:
+        if component_ir_enabled() and (found := _read_sidecar(self._json_path(path))) is not None:
+            sources, ir = found
+            try:
                 from mccode_antlr.io.json import from_json
-                comp = from_json(json_path.read_bytes())
-                if isinstance(comp, Comp):
-                    self._store[key] = (comp_mtime, comp)
-                    return comp
-        except Exception:
-            pass  # corrupt or unreadable JSON — fall through to ANTLR parse
+                comp = from_json(bytes(ir))
+            except Exception:
+                return None  # corrupt JSON — fall through to ANTLR parse
+            if isinstance(comp, Comp):
+                self._store[key] = (sources, comp)
+                return comp
 
         return None
 
-    def put(self, path: Path, comp: Comp) -> None:
+    def sources(self, path: Path) -> dict[str, int] | None:
+        """The files (path -> mtime_ns) the in-memory entry for *path* was built from."""
+        entry = self._store.get(str(path))
+        return None if entry is None else entry[0]
+
+    def put(self, path: Path, comp: Comp, depends: dict[str, int] | None = None) -> None:
+        """Cache *comp*, parsed from *path* using the components in *depends*
+        (as collected by :func:`recording_dependencies`)."""
         try:
-            mtime = path.stat().st_mtime_ns
-            self._store[str(path)] = (mtime, comp)
+            sources = {str(path): path.stat().st_mtime_ns, **(depends or {})}
+            self._store[str(path)] = (sources, comp)
         except OSError:
+            return
+        if not component_ir_enabled():
             return
         # Write disk JSON cache alongside the .comp file (best-effort)
         json_path = self._json_path(path)
         try:
             from mccode_antlr.io.json import to_json
-            json_path.write_bytes(to_json(comp))
+            json_path.write_bytes(msgspec.json.encode(_Sidecar(
+                sources=_relative_sources(sources, json_path.parent),
+                ir=Raw(to_json(comp)),
+            )))
             for stale in self._foreign_json_paths(path):
                 stale.unlink(missing_ok=True)
         except Exception:
@@ -202,6 +291,11 @@ def iter_component_ir_paths(root: Path):
             yield path
 
 
+def component_ir_is_fresh(json_path: Path) -> bool:
+    """True when this build wrote *json_path* and none of its sources has changed."""
+    return component_ir_is_current(json_path) and _read_sidecar(json_path) is not None
+
+
 def component_ir_is_current(json_path: Path) -> bool:
     """True when *json_path* is the sidecar name this build would write (right salt)."""
     return json_path.name == component_ir_path(component_ir_comp_path(json_path)).name
@@ -252,6 +346,8 @@ class Reader(Struct):
     registries: list[Registry] = field(default_factory=list)
     components: dict[str, Comp] = field(default_factory=dict)
     flavor: Flavor | None = None
+    # The resolved .comp file of each component in `components` read from disk.
+    component_paths: dict[str, Path] = field(default_factory=dict)
 
     def __hash__(self):
         return hash((tuple(self.registries), tuple(self.components.items()), self.flavor))
@@ -336,10 +432,12 @@ class Reader(Struct):
             error_listener = make_reader_error_listener(
                 McComp_ErrorListener,'Component', name, source
             )
-            res = Comp.from_source(
-                self, error_listener, source, filename, fullname
-            )
-            component_cache.put(abs_path, res)
+            with recording_dependencies() as depends:
+                res = Comp.from_source(
+                    self, error_listener, source, filename, fullname
+                )
+            component_cache.put(abs_path, res, depends)
+        self.component_paths[name] = abs_path
         # Reflect *this* resolution's registry even on a cache hit -- the cache
         # is keyed by filesystem path, not by registry, so in principle a
         # different registry could resolve the same abs_path for another Reader.
@@ -350,6 +448,8 @@ class Reader(Struct):
     def get_component(self, name: str, current_instance_name=None):
         if name not in self.components:
             self.add_component(name, current_instance_name=current_instance_name)
+        if name in self.component_paths:  # not for an inject_source'd component
+            _note_dependency(self.component_paths[name])
         return self.components[name]
 
     def inject_source(self, name: str, source: str, filename: str | None = None) -> None:
@@ -374,6 +474,7 @@ class Reader(Struct):
             return
         component_cache.override_source(name, source)
         self.components[name] = res
+        self.component_paths.pop(name, None)
 
     def evict(self, name: str) -> None:
         """Remove *name* from ``self.components`` and the source-override dict.
@@ -382,6 +483,7 @@ class Reader(Struct):
         (which uses mtime) or re-parse from disk — useful after a file save.
         """
         self.components.pop(name, None)
+        self.component_paths.pop(name, None)
         component_cache.clear_override(name)
 
     def get_instrument(self, name: str | None | Path, destination=None):

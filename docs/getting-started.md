@@ -54,7 +54,7 @@ The `mccode-antlr` management command controls caches and configuration:
 
 ```bash
 mccode-antlr cache list          # list cached component registries
-mccode-antlr cache ir-build      # pre-build component intermediate representations
+mccode-antlr cache build         # pre-build the translation caches
 mccode-antlr config list         # display active configuration
 ```
 

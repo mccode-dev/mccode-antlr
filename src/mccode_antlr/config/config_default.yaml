@@ -23,3 +23,9 @@ serialization:
   trust_local_registries: false
   embed_local_files: true
   embed_size_limit_mb: 32
+cache:
+  # Persist parsed components as `{name}.comp.<build>.json` sidecars beside each
+  # .comp file, for later processes to reuse. Saves roughly 0.3 s per translation;
+  # worth it for a prebuilt, read-only cache (`mccode-antlr cache build`), e.g.
+  # with MCCODEANTLR_CACHE__COMPONENT_IR=true.
+  component_ir: false

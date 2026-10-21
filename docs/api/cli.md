@@ -265,7 +265,8 @@ mccode-antlr SUBCOMMAND [OPTIONS]
 | `register` | Mint a pooch registry file (path + sha256 hash per line) from a local directory tree |
 | `ir-list` | List component IR cache files (`*.comp.<build>.json`) (`-l` for paths, sizes, stale status) |
 | `ir-clean` | Delete component IR cache files (`--stale` for stale-only; `-f` to skip confirmation) |
-| `ir-build` | Pre-build component IR cache files for all known registries |
+| `build` | Pre-build the C typedef cache, and component IR cache files when enabled, for all known registries |
+| `ir-build` | Deprecated spelling of `build` |
 
 **`cache populate` options:**
 
@@ -289,14 +290,16 @@ mccode-antlr SUBCOMMAND [OPTIONS]
 | `--ext SUFFIX` | Only include files whose name ends with this suffix (repeatable); default includes every file |
 | `--recursive` / `--no-recursive` | Recurse into subdirectories of each `DIR` (default) |
 
-**`cache ir-build` options:**
+**`cache build` options:**
+
+`cache build` parses only files already on disk; run `cache populate` first. It always warms the C typedef cache. It writes component IR sidecars (`*.comp.<build>.json`) only when the `cache.component_ir` configuration value is true, e.g. `MCCODEANTLR_CACHE__COMPONENT_IR=true`. They are off by default; turn them on for a prebuilt, shared or read-only cache.
 
 | Flag | Description |
 |---|---|
-| `--flavor {mcstas,mcxtrace,both}` | Which flavor's registries to build IR for (default: `both`) |
+| `--tag TAG` | McCode version whose cached components to build (default: the configured version) |
+| `--flavor {mcstas,mcxtrace,both,none}` | Which flavor's registries to build (default: `both`); `none` builds only `--registry` ones |
 | `-j N`, `--jobs N` | Number of parallel workers (default: `os.cpu_count()`) |
 | `--force` | Rebuild even if the IR sidecar is already up-to-date |
-| `--download` | Bulk-populate the pooch cache via git clone before building (faster than individual fetches) |
 | `-R SPEC`, `--registry SPEC` | Extra registry to include (repeatable); same `SPEC` formats as `registry_from_specification` |
 
 ---
