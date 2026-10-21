@@ -555,13 +555,41 @@ def _ir_worker_init(registries, flavor, tag=None) -> None:
     _IR_READER = Reader(registries=list(registries), flavor=flavor)
 
 
-def _build_one_ir(comp_path_str: str, force: bool) -> tuple[str, str]:
-    """Parse one ``.comp`` file and write its ``.comp.json``.
+def _warm_typedefs(comp) -> str | None:
+    """Fill the C typedef cache for *comp*; return an error message on failure.
+
+    Constructing the C translator for a one-instance instrument parses exactly
+    what a real translation would for this component -- its SHARE, DECLARE and
+    USERVARS blocks and every library they ``%include`` -- and the cache is keyed
+    by the hash of that text, so any instrument using the component then hits.
+    Only an instrument's own USERVARS are left to parse at translation time.
+    """
+    if _IR_READER is None:
+        return None
+    from mccode_antlr import Flavor
+    from mccode_antlr.assembler import Assembler
+    from mccode_antlr.translators.c import CTargetVisitor
+    flavor = _IR_READER.flavor or Flavor.MCSTAS
+    try:
+        assembler = Assembler('typedefs', registries=list(_IR_READER.registries), flavor=flavor)
+        # this exact Comp, not whichever same-named one the registries rank first
+        assembler.reader.components[comp.name] = comp
+        assembler.component('c', comp.name)
+        CTargetVisitor(assembler.instrument, flavor=flavor)
+    except Exception as exc:
+        return f'{type(exc).__name__}: {exc}'.split('\n')[0]
+    return None
+
+
+def _build_one_ir(comp_path_str: str, force: bool) -> tuple[str, str, str | None]:
+    """Parse one ``.comp`` file, write its ``.comp.json``, and warm the C
+    typedef cache for it (see :func:`_warm_typedefs`).
 
     Module-level so it is picklable by ``ProcessPoolExecutor``.
 
-    Returns ``(comp_path_str, status)`` where *status* is one of
-    ``'hit'``, ``'built'``, or ``'error: <message>'``.
+    Returns ``(comp_path_str, status, typedef_error)`` where *status* is one of
+    ``'hit'``, ``'built'``, or ``'error: <message>'``, and *typedef_error* is
+    None unless warming the typedef cache failed.
     """
     from pathlib import Path
     from mccode_antlr.reader.reader import (
@@ -574,7 +602,9 @@ def _build_one_ir(comp_path_str: str, force: bool) -> tuple[str, str]:
     comp_path = Path(comp_path_str)
 
     if not force and component_ir_is_fresh(component_ir_path(comp_path)):
-        return (comp_path_str, 'hit')
+        comp = component_cache.get(comp_path)
+        if comp is not None:
+            return (comp_path_str, 'hit', _warm_typedefs(comp))
 
     try:
         from mccode_antlr.common.encoding import read_source_text
@@ -585,9 +615,9 @@ def _build_one_ir(comp_path_str: str, force: bool) -> tuple[str, str]:
         with recording_dependencies() as depends:
             comp = Comp.from_source(_IR_READER, error_listener, source, str(comp_path), str(comp_path))
         component_cache.put(comp_path, comp, depends)
-        return (comp_path_str, 'built')
     except Exception as exc:
-        return (comp_path_str, f'error: {exc}')
+        return (comp_path_str, f'error: {exc}', None)
+    return (comp_path_str, 'built', _warm_typedefs(comp))
 
 
 _REGISTRY_SPEC_FORMS = (
@@ -708,7 +738,8 @@ def _registries_for_flavors(flavor: str, registry: list[str] | None) -> tuple[li
 
 def cache_ir_build(flavor: str, jobs: int, force: bool, registry: list[str] | None,
                    tag: str | None = None):
-    """Pre-build component IR (``.comp.json``) files for all known registries.
+    """Pre-build component IR (``.comp.json``) files for all known registries,
+    and warm the C typedef cache with each component's C blocks and libraries.
 
     Builds IR from files already on disk and downloads nothing: ``cache populate``
     is the command that fills the caches, including any ``--registry`` extras.
@@ -752,6 +783,19 @@ def cache_ir_build(flavor: str, jobs: int, force: bool, registry: list[str] | No
 
     worker = partial(_build_one_ir, force=force)
     built = hits = errors = 0
+    typedef_errors = []
+
+    def tally(path, status, typedef_error):
+        nonlocal built, hits, errors
+        if status == 'built':
+            built += 1
+        elif status == 'hit':
+            hits += 1
+        else:
+            errors += 1
+            print(f'  {path.name}: {status}', flush=True)
+        if typedef_error is not None:
+            typedef_errors.append(f'  {path.name}: {typedef_error}')
 
     # The Reader that resolves INHERIT/COPY parents is built per process: once
     # here for the serial path, once per worker via the pool's initializer.
@@ -776,33 +820,23 @@ def cache_ir_build(flavor: str, jobs: int, force: bool, registry: list[str] | No
     if jobs == 1:
         _ir_worker_init(*reader_args)
         for path in comp_paths:
-            _, status = worker(str(path))
-            if status == 'built':
-                built += 1
-            elif status == 'hit':
-                hits += 1
-            else:
-                errors += 1
-                print(f'  {path.name}: {status}', flush=True)
+            tally(path, *worker(str(path))[1:])
     else:
         with ProcessPoolExecutor(
             max_workers=jobs, initializer=_ir_worker_init, initargs=reader_args,
         ) as pool:
             futures = {pool.submit(_build_one_ir, str(p), force): p for p in comp_paths}
             for future in as_completed(futures):
-                _, status = future.result()
-                if status == 'built':
-                    built += 1
-                elif status == 'hit':
-                    hits += 1
-                else:
-                    errors += 1
-                    print(f'  {futures[future].name}: {status}', flush=True)
+                tally(futures[future], *future.result()[1:])
 
     print(
         f'\nDone. {built} built, {hits} already up-to-date, {errors} error(s).',
         flush=True,
     )
+    if typedef_errors:
+        print(f'{len(typedef_errors)} component(s) could not warm the C typedef cache '
+              '(their instruments will parse those blocks at translation time):', flush=True)
+        print('\n'.join(typedef_errors), flush=True)
 
 
 def add_cache_management_parser(modes):
@@ -908,7 +942,7 @@ def add_cache_management_parser(modes):
     ib = actions.add_parser(
         name='ir-build',
         help=(
-            'Pre-build component IR cache sidecars from the .comp files already on '
+            'Pre-build component IR cache sidecars, and warm the C typedef cache, from the .comp files already on '
             'disk (downloads nothing — see `cache populate`)'
         ),
     )

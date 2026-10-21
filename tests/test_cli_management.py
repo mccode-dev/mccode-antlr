@@ -746,3 +746,40 @@ class TestCacheIR:
 
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
+
+
+def test_ir_build_warms_the_c_typedef_cache(tmp_path, monkeypatch):
+    """A translation after ir-build re-parses none of the component's C blocks."""
+    from mccode_antlr import Flavor
+    from mccode_antlr.cli.cache import _build_one_ir, _ir_worker_init
+    from mccode_antlr.reader.registry import LocalRegistry, default_registries
+    from mccode_antlr.translators import c_listener
+
+    comps = tmp_path / 'comps'
+    comps.mkdir()
+    (comps / 'TypedefProbe.comp').write_text(
+        'DEFINE COMPONENT TypedefProbe\n'
+        'SHARE %{\n%include "read_table-lib"\ntypedef struct { double x; } probe_t;\n%}\n'
+        'DECLARE %{\nprobe_t probe;\n%}\n'
+        'TRACE %{ %}\nEND\n'
+    )
+    cache = c_listener._TypedefsCache()
+    cache._disk_dir = tmp_path / 'typedefs'
+    cache._disk_dir.mkdir()
+    monkeypatch.setattr(c_listener, '_typedefs_cache', cache)
+
+    registries = [LocalRegistry('probe', str(comps)), *default_registries(Flavor.MCSTAS)]
+    _ir_worker_init(registries, Flavor.MCSTAS)
+    _, status, typedef_error = _build_one_ir(str(comps / 'TypedefProbe.comp'), force=True)
+    assert status == 'built' and typedef_error is None
+    warmed = set(cache._memory)
+    assert warmed and {p.stem for p in cache._disk_dir.glob('*.json')} == warmed
+
+    # A real translation of an instrument using the component adds nothing.
+    from mccode_antlr.assembler import Assembler
+    from mccode_antlr.translators.c import CTargetVisitor
+    assembler = Assembler('uses_probe', registries=registries, flavor=Flavor.MCSTAS)
+    assembler.component('p', 'TypedefProbe')
+    CTargetVisitor(assembler.instrument, flavor=Flavor.MCSTAS)
+    assert set(cache._memory) == warmed
+    assert any('t_Table' in types for _, types in cache._memory.values())  # from read_table-lib

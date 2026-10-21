@@ -265,7 +265,7 @@ mccode-antlr SUBCOMMAND [OPTIONS]
 | `register` | Mint a pooch registry file (path + sha256 hash per line) from a local directory tree |
 | `ir-list` | List component IR cache files (`*.comp.<build>.json`) (`-l` for paths, sizes, stale status) |
 | `ir-clean` | Delete component IR cache files (`--stale` for stale-only; `-f` to skip confirmation) |
-| `ir-build` | Pre-build component IR cache files for all known registries |
+| `ir-build` | Pre-build component IR cache files, and warm the C typedef cache, for all known registries |
 
 **`cache populate` options:**
 
