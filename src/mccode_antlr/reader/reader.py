@@ -108,6 +108,15 @@ def _relative_sources(sources: dict[str, int], directory: Path) -> dict[str, int
     return {rel(p): m for p, m in sources.items()}
 
 
+def component_ir_enabled() -> bool:
+    """Whether component IR sidecars are read and written (``cache.component_ir``)."""
+    from mccode_antlr.config import config
+    value = config['cache']['component_ir'].get()
+    if isinstance(value, str):  # `mccode-antlr config set` stores the text it is given
+        return value.strip().lower() in ('1', 'true', 'yes', 'on')
+    return bool(value)
+
+
 class _ComponentCache:
     """Singleton two-level cache for parsed :class:`~mccode_antlr.comp.Comp` objects.
 
@@ -117,7 +126,8 @@ class _ComponentCache:
     transitively -- to its mtime.  A hit costs a dict lookup and one ``stat()``
     per source.
 
-    **Level 2 – disk JSON cache** (persists across process restarts):
+    **Level 2 – disk JSON cache** (persists across process restarts; only when
+    the ``cache.component_ir`` configuration value is true):
     A ``{name}.comp.<salt>.json`` file is written alongside every ``.comp`` file
     the first time it is parsed.  On subsequent loads the JSON is decoded by
     :func:`mccode_antlr.io.json.from_json` in ~0.1 ms instead of running the
@@ -173,7 +183,7 @@ class _ComponentCache:
             del self._store[key]
 
         # Level 2: disk JSON
-        if (found := _read_sidecar(self._json_path(path))) is not None:
+        if component_ir_enabled() and (found := _read_sidecar(self._json_path(path))) is not None:
             sources, ir = found
             try:
                 from mccode_antlr.io.json import from_json
@@ -198,6 +208,8 @@ class _ComponentCache:
             sources = {str(path): path.stat().st_mtime_ns, **(depends or {})}
             self._store[str(path)] = (sources, comp)
         except OSError:
+            return
+        if not component_ir_enabled():
             return
         # Write disk JSON cache alongside the .comp file (best-effort)
         json_path = self._json_path(path)

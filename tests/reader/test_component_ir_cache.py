@@ -20,6 +20,12 @@ from mccode_antlr.reader.reader import (
 MINIMAL = "DEFINE COMPONENT IrCacheProbe\nTRACE %{ %}\nEND\n"
 
 
+@pytest.fixture(autouse=True)
+def sidecars_enabled(monkeypatch):
+    """The disk level is opt-in (cache.component_ir); these tests exercise it."""
+    monkeypatch.setattr('mccode_antlr.reader.reader.component_ir_enabled', lambda: True)
+
+
 @pytest.fixture
 def comp_file(tmp_path) -> Path:
     p = tmp_path / "IrCacheProbe.comp"
@@ -141,3 +147,41 @@ def test_a_copied_tree_keeps_its_sidecars(inherit_dir, tmp_path_factory):
     copy = tmp_path_factory.mktemp("copy") / "tree"
     shutil.copytree(inherit_dir, copy)  # copy2: mtimes preserved, like cp -a
     assert component_cache.get(copy / "Ch.comp") is not None  # sidecar hit, no parse
+
+
+def test_sidecars_are_off_by_default():
+    from mccode_antlr.config import config
+    assert not config['cache']['component_ir'].get()
+
+
+@pytest.mark.parametrize('value, enabled', [
+    (True, True), (False, False), (1, True), (0, False), (None, False),
+    ('true', True), ('false', False), ('1', True), ('0', False), ('no', False),
+])
+def test_component_ir_enabled_reads_the_config(value, enabled, monkeypatch):
+    from mccode_antlr.config import config
+    from mccode_antlr.reader import reader
+    monkeypatch.undo()  # drop the autouse override; read the real configuration
+    config.resolve()  # a LazyConfig loads its sources on first use
+    monkeypatch.setattr(config, 'sources', list(config.sources))  # restored afterwards
+    config.set({'cache': {'component_ir': value}})
+    assert reader.component_ir_enabled() is enabled
+
+
+def test_disabled_sidecars_are_neither_written_nor_read(comp_file, monkeypatch):
+    monkeypatch.setattr('mccode_antlr.reader.reader.component_ir_enabled', lambda: False)
+    sidecar = component_ir_path(comp_file)
+    component_cache.put(comp_file, _parse(comp_file))
+    assert not sidecar.exists()
+    assert component_cache.get(comp_file) is not None  # the in-memory level still works
+
+    # A sidecar left by an enabled run is not trusted while disabled.
+    import msgspec
+    from mccode_antlr.io.json import to_json
+    from mccode_antlr.reader.reader import _Sidecar
+    sidecar.write_bytes(msgspec.json.encode(_Sidecar(
+        sources={comp_file.name: comp_file.stat().st_mtime_ns},
+        ir=msgspec.Raw(to_json(_parse(comp_file))),
+    )))
+    component_cache.clear()
+    assert component_cache.get(comp_file) is None

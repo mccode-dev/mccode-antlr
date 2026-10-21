@@ -9,12 +9,16 @@ Pooch-registered file caches
 - ``register`` – mint a pooch registry file (path + sha256 hash per line)
                  from a local directory tree.
 
-Component intermediate-representation (IR) cache
--------------------------------------------------
-The reader writes a ``{name}.comp.<salt>.json`` file alongside every ``.comp``
-file it parses (the ``<salt>`` binds the sidecar to the mccode-antlr build that
-wrote it).  These files persist across process restarts (acting as a fast disk
-cache), but they accumulate and users may wish to inspect or clean them up.
+Translation caches
+------------------
+- ``build``    – pre-build the C typedef cache and, when enabled, the component
+                 IR sidecars (``ir-build`` is its deprecated spelling).
+
+When the ``cache.component_ir`` configuration value is true, the reader writes a
+``{name}.comp.<salt>.json`` file alongside every ``.comp`` file it parses (the
+``<salt>`` binds the sidecar to the mccode-antlr build that wrote it).  These
+files persist across process restarts (acting as a fast disk cache), but they
+accumulate and users may wish to inspect or clean them up.
 
 - ``ir-list``  – find and list all component IR sidecars under the cache root.
 - ``ir-clean`` – delete all (or only stale) component IR sidecars; a sidecar
@@ -348,7 +352,7 @@ def cache_populate(
 
     Registries named with ``--registry`` are populated too, file by file through
     pooch — they have no git-clone shortcut. This is the only command that
-    downloads; ``cache ir-build`` parses whatever is already on disk.
+    downloads; ``cache build`` parses whatever is already on disk.
 
     ``flavor='none'`` skips the McCode side entirely — no tag resolution, no
     clone, no checkout — so populating only ``--registry`` extras costs nothing
@@ -593,7 +597,7 @@ def _build_one_ir(comp_path_str: str, force: bool) -> tuple[str, str, str | None
     """
     from pathlib import Path
     from mccode_antlr.reader.reader import (
-        component_cache, component_ir_is_fresh, component_ir_path,
+        component_cache, component_ir_enabled, component_ir_is_fresh, component_ir_path,
         make_reader_error_listener, recording_dependencies,
     )
     from mccode_antlr.comp import Comp
@@ -601,7 +605,7 @@ def _build_one_ir(comp_path_str: str, force: bool) -> tuple[str, str, str | None
 
     comp_path = Path(comp_path_str)
 
-    if not force and component_ir_is_fresh(component_ir_path(comp_path)):
+    if not force and component_ir_enabled() and component_ir_is_fresh(component_ir_path(comp_path)):
         comp = component_cache.get(comp_path)
         if comp is not None:
             return (comp_path_str, 'hit', _warm_typedefs(comp))
@@ -708,10 +712,19 @@ def _collect_comp_paths(registries) -> tuple[list[Path], int]:
     return paths, missing
 
 
+def cache_ir_build(**kwargs):
+    """Deprecated spelling of :func:`cache_build`."""
+    import warnings
+    from mccode_antlr.utils import McCodeAntlrDeprecationWarning
+    warnings.warn('`mccode-antlr cache ir-build` is deprecated since 0.36.0; '
+                  'use `mccode-antlr cache build`', McCodeAntlrDeprecationWarning, stacklevel=2)
+    cache_build(**kwargs)
+
+
 def _registries_for_flavors(flavor: str, registry: list[str] | None) -> tuple[list, list]:
     """Default registries for *flavor* plus any ``--registry`` extras.
 
-    Returns ``(flavors, registries)``; both ``populate`` and ``ir-build`` need the
+    Returns ``(flavors, registries)``; both ``populate`` and ``build`` need the
     same set, so they resolve it the same way.
     """
     from mccode_antlr import Flavor
@@ -736,8 +749,8 @@ def _registries_for_flavors(flavor: str, registry: list[str] | None) -> tuple[li
     return flavors, registries
 
 
-def cache_ir_build(flavor: str, jobs: int, force: bool, registry: list[str] | None,
-                   tag: str | None = None):
+def cache_build(flavor: str, jobs: int, force: bool, registry: list[str] | None,
+                tag: str | None = None):
     """Pre-build component IR (``.comp.json``) files for all known registries,
     and warm the C typedef cache with each component's C blocks and libraries.
 
@@ -777,6 +790,11 @@ def cache_ir_build(flavor: str, jobs: int, force: bool, registry: list[str] | No
 
     n = len(comp_paths)
     print(f'Found {n} .comp file(s). Building IR cache …', flush=True)
+    from mccode_antlr.reader.reader import component_ir_enabled
+    if not component_ir_enabled():
+        print('  Component IR sidecars are disabled (set cache.component_ir, e.g. '
+              'MCCODEANTLR_CACHE__COMPONENT_IR=true, to write them); warming the C '
+              'typedef cache only.', flush=True)
 
     if jobs is None:
         jobs = os.cpu_count() or 1
@@ -837,6 +855,43 @@ def cache_ir_build(flavor: str, jobs: int, force: bool, registry: list[str] | No
         print(f'{len(typedef_errors)} component(s) could not warm the C typedef cache '
               '(their instruments will parse those blocks at translation time):', flush=True)
         print('\n'.join(typedef_errors), flush=True)
+
+
+def _add_build_parser(actions, name, action, help_text):
+    ib = actions.add_parser(name=name, help=help_text)
+    ib.add_argument(
+        '--tag', default=None,
+        help=(
+            'McCode version tag whose cached components to build IR for '
+            '(e.g. v3.5.31, latest); defaults to the currently-configured version. '
+            'The pooch caches are per version, so this picks between them when '
+            'several have been populated.'
+        ),
+    )
+    ib.add_argument(
+        '--flavor', default='both', choices=['mcstas', 'mcxtrace', 'both', 'none'],
+        help=(
+            "Which flavor's registries to build IR for (default: both). Use 'none' "
+            "to build only the registries given with --registry."
+        ),
+    )
+    ib.add_argument(
+        '-j', '--jobs', type=int, nargs='?', default=None, const=None, metavar='N',
+        help='Number of parallel workers; bare -j or omitted means os.cpu_count()',
+    )
+    ib.add_argument(
+        '--force', action='store_true',
+        help='Rebuild even if the IR sidecar is already up-to-date',
+    )
+    ib.add_argument(
+        '-R', '--registry', action='append', default=None, metavar='SPEC',
+        help=(
+            'Extra registry to build IR for (repeatable). Only files already on disk '
+            'are built: pass the same specification to `cache populate` first to '
+            'download them. ' + _REGISTRY_SPEC_FORMS.replace('\n', ' ')
+        ),
+    )
+    ib.set_defaults(action=action)
 
 
 def add_cache_management_parser(modes):
@@ -938,47 +993,16 @@ def add_cache_management_parser(modes):
                     help='Skip confirmation prompt')
     ic.set_defaults(action=cache_ir_clean)
 
-    # -- ir-build --
-    ib = actions.add_parser(
-        name='ir-build',
-        help=(
-            'Pre-build component IR cache sidecars, and warm the C typedef cache, from the .comp files already on '
-            'disk (downloads nothing — see `cache populate`)'
-        ),
-    )
-    ib.add_argument(
-        '--tag', default=None,
-        help=(
-            'McCode version tag whose cached components to build IR for '
-            '(e.g. v3.5.31, latest); defaults to the currently-configured version. '
-            'The pooch caches are per version, so this picks between them when '
-            'several have been populated.'
-        ),
-    )
-    ib.add_argument(
-        '--flavor', default='both', choices=['mcstas', 'mcxtrace', 'both', 'none'],
-        help=(
-            "Which flavor's registries to build IR for (default: both). Use 'none' "
-            "to build only the registries given with --registry."
-        ),
-    )
-    ib.add_argument(
-        '-j', '--jobs', type=int, nargs='?', default=None, const=None, metavar='N',
-        help='Number of parallel workers; bare -j or omitted means os.cpu_count()',
-    )
-    ib.add_argument(
-        '--force', action='store_true',
-        help='Rebuild even if the IR sidecar is already up-to-date',
-    )
-    ib.add_argument(
-        '-R', '--registry', action='append', default=None, metavar='SPEC',
-        help=(
-            'Extra registry to build IR for (repeatable). Only files already on disk '
-            'are built: pass the same specification to `cache populate` first to '
-            'download them. ' + _REGISTRY_SPEC_FORMS.replace('\n', ' ')
-        ),
-    )
-    ib.set_defaults(action=cache_ir_build)
+    # -- build (and its deprecated spelling, ir-build) --
+    for name, action, help_text in (
+        ('build', cache_build,
+         'Pre-build the translation caches -- the C typedef cache, and component IR '
+         'sidecars when cache.component_ir is enabled -- from the .comp files already '
+         'on disk (downloads nothing — see `cache populate`)'),
+        ('ir-build', cache_ir_build, 'Deprecated spelling of `cache build`'),
+    ):
+        _add_build_parser(actions, name, action, help_text)
+
 
     # -- register --
     reg = actions.add_parser(

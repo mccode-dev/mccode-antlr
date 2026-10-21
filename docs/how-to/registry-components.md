@@ -104,6 +104,6 @@ automatically so the component definitions are available.
 ```bash
 mccode-antlr cache list          # show all cached registries
 mccode-antlr cache populate      # download default McStas + McXtrace registries
-mccode-antlr cache ir-build      # pre-build component IR (speeds up first parse)
+mccode-antlr cache build         # pre-build translation caches (speeds up first translation)
 mccode-antlr cache ir-clean      # remove stale IR cache entries
 ```
