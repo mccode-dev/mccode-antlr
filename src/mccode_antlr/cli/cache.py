@@ -472,16 +472,10 @@ def _iter_ir_files(root: Path):
 
 
 def _is_stale(json_path: Path) -> bool:
-    """True if *json_path* is unusable: sibling ``.comp`` newer, or it was
-    written by a different mccode-antlr build."""
-    from mccode_antlr.reader.reader import component_ir_comp_path, component_ir_is_current
-    if not component_ir_is_current(json_path):
-        return True
-    comp_path = component_ir_comp_path(json_path)
-    try:
-        return comp_path.stat().st_mtime_ns > json_path.stat().st_mtime_ns
-    except OSError:
-        return False
+    """True if *json_path* is unusable: its ``.comp`` (or an INHERIT/COPY parent)
+    changed, or it was written by a different mccode-antlr build."""
+    from mccode_antlr.reader.reader import component_ir_is_fresh
+    return not component_ir_is_fresh(json_path)
 
 
 def cache_ir_list(long: bool):
@@ -570,21 +564,17 @@ def _build_one_ir(comp_path_str: str, force: bool) -> tuple[str, str]:
     ``'hit'``, ``'built'``, or ``'error: <message>'``.
     """
     from pathlib import Path
-    from mccode_antlr.reader.reader import component_cache, make_reader_error_listener
+    from mccode_antlr.reader.reader import (
+        component_cache, component_ir_is_fresh, component_ir_path,
+        make_reader_error_listener, recording_dependencies,
+    )
     from mccode_antlr.comp import Comp
     from mccode_antlr.grammar import McComp_ErrorListener
 
-    from mccode_antlr.reader.reader import component_ir_path
-
     comp_path = Path(comp_path_str)
-    json_path = component_ir_path(comp_path)
 
-    if not force:
-        try:
-            if json_path.exists() and json_path.stat().st_mtime_ns >= comp_path.stat().st_mtime_ns:
-                return (comp_path_str, 'hit')
-        except OSError:
-            pass
+    if not force and component_ir_is_fresh(component_ir_path(comp_path)):
+        return (comp_path_str, 'hit')
 
     try:
         from mccode_antlr.common.encoding import read_source_text
@@ -592,8 +582,9 @@ def _build_one_ir(comp_path_str: str, force: bool) -> tuple[str, str]:
         error_listener = make_reader_error_listener(
             McComp_ErrorListener, 'Component', comp_path.stem, source
         )
-        comp = Comp.from_source(_IR_READER, error_listener, source, str(comp_path), str(comp_path))
-        component_cache.put(comp_path, comp)
+        with recording_dependencies() as depends:
+            comp = Comp.from_source(_IR_READER, error_listener, source, str(comp_path), str(comp_path))
+        component_cache.put(comp_path, comp, depends)
         return (comp_path_str, 'built')
     except Exception as exc:
         return (comp_path_str, f'error: {exc}')
@@ -907,7 +898,7 @@ def add_cache_management_parser(modes):
     )
     ic.add_argument(
         '--stale', action='store_true',
-        help='Only remove sidecars whose sibling .comp is newer, or that a different build wrote',
+        help='Only remove sidecars whose .comp (or an INHERIT/COPY parent) changed, or that a different build wrote',
     )
     ic.add_argument('-f', '--force', action='store_true',
                     help='Skip confirmation prompt')

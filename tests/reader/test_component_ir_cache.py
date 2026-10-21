@@ -87,3 +87,57 @@ def test_iter_component_ir_paths_finds_every_scheme(tmp_path):
     (tmp_path / "notes.json").write_text("{}")  # unrelated
 
     assert set(iter_component_ir_paths(tmp_path)) == made
+
+
+PARENT = "DEFINE COMPONENT Pa\nSETTING PARAMETERS (width=1.0)\nTRACE %{ %}\nEND\n"
+CHILD = "DEFINE COMPONENT Ch INHERIT Pa\nEND\n"
+
+
+@pytest.fixture
+def inherit_dir(tmp_path) -> Path:
+    (tmp_path / "Pa.comp").write_text(PARENT)
+    (tmp_path / "Ch.comp").write_text(CHILD)
+    component_cache.clear()
+    return tmp_path
+
+
+def _child_width(directory: Path, *load_first: str) -> str:
+    from mccode_antlr.reader.reader import Reader
+    from mccode_antlr.reader.registry import LocalRegistry
+    reader = Reader(registries=[LocalRegistry("t", str(directory))])
+    for name in load_first:
+        reader.get_component(name)
+    return str(reader.get_component("Ch").setting[0].value)
+
+
+def _edit_parent(directory: Path):
+    import os
+    parent = directory / "Pa.comp"
+    stat = parent.stat()
+    parent.write_text(PARENT.replace("1.0", "2.0"))
+    # a distinct mtime even on filesystems with coarse timestamps
+    os.utime(parent, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000_000))
+
+
+@pytest.mark.parametrize("load_first", [(), ("Pa",)])
+def test_editing_an_inherit_parent_invalidates_the_child_in_memory(inherit_dir, load_first):
+    assert _child_width(inherit_dir, *load_first) == "1.0"
+    _edit_parent(inherit_dir)
+    assert _child_width(inherit_dir, *load_first) == "2.0"
+
+
+@pytest.mark.parametrize("load_first", [(), ("Pa",)])
+def test_editing_an_inherit_parent_invalidates_the_child_sidecar(inherit_dir, load_first):
+    assert _child_width(inherit_dir, *load_first) == "1.0"
+    assert component_ir_path(inherit_dir / "Ch.comp").is_file()
+    _edit_parent(inherit_dir)
+    component_cache.clear()  # as a new process would start
+    assert _child_width(inherit_dir, *load_first) == "2.0"
+
+
+def test_a_copied_tree_keeps_its_sidecars(inherit_dir, tmp_path_factory):
+    import shutil
+    _child_width(inherit_dir)
+    copy = tmp_path_factory.mktemp("copy") / "tree"
+    shutil.copytree(inherit_dir, copy)  # copy2: mtimes preserved, like cp -a
+    assert component_cache.get(copy / "Ch.comp") is not None  # sidecar hit, no parse
