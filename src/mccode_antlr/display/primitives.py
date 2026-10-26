@@ -519,7 +519,7 @@ class Cylinder(Primitive):
 
 @dataclass
 class Cone(Primitive):
-    """``cone(cx,cy,cz, r,h[, nx,ny,nz])`` — cone."""
+    """``cone(cx,cy,cz, r,h[, nx,ny,nz])`` — cone centred on (cx,cy,cz): base at -h/2, apex at +h/2 along n."""
     cx: Expr = field(default_factory=Expr._null)
     cy: Expr = field(default_factory=Expr._null)
     cz: Expr = field(default_factory=Expr._null)
@@ -548,7 +548,8 @@ class Cone(Primitive):
             normal = np.array([0.0, 1.0, 0.0])
         else:
             normal /= norm
-        base = np.array([cx, cy, cz])
+        # (cx,cy,cz) is the cone centre, as mcdis_cone and the --trace=2 frontends
+        base = np.array([cx, cy, cz]) - 0.5 * h * normal
         apex = base + h * normal
         base_ring = _circle_with_normal(*base, r, *normal)
         n_pts = base_ring.shape[0] - 1
@@ -567,7 +568,8 @@ class Cone(Primitive):
         else:
             normal /= norm
         slices = 32
-        base = np.array([cx, cy, cz])
+        # (cx,cy,cz) is the cone centre, as mcdis_cone and the --trace=2 frontends
+        base = np.array([cx, cy, cz]) - 0.5 * h * normal
         apex = base + h * normal
         ring = _circle_with_normal(*base, r, *normal, n=slices)[:-1]
         verts = np.vstack([ring, [apex], [base]]).astype(np.float32)
