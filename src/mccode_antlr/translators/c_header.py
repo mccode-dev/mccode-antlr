@@ -140,7 +140,7 @@ def header_pre_runtime(
     #pragma warning(disable: 4068)
     #endif
      
-    #define MCCODE_STRING "{flavor}"
+    #define MCCODE_STRING "{flavor} {mccode_registry_version()} (mccode-antlr {version()})"
     #define FLAVOR "{str(flavor).lower()}"
     #define FLAVOR_UPPER "{str(flavor).upper()}"
     {'#define MC_USE_DEFAULT_MAIN' if config.get('default_main') else ''}
