@@ -579,6 +579,16 @@ class TestSolidMesh:
         assert verts.shape[1] == 3
         assert faces.shape[1] == 3
 
+    def test_cone_centred(self):
+        # centred on (cx,cy,cz) along n, as mcdis_cone and the --trace=2 frontends
+        from mccode_antlr.display import Cone
+        c = Cone(0, 0, 0, 0.5, 1.0, 0, 1, 0)
+        verts, _ = c.to_mesh()
+        lines = np.vstack(c.to_polylines())
+        for pts in (verts, lines):
+            np.testing.assert_allclose([pts[:, 1].min(), pts[:, 1].max()], [-0.5, 0.5], atol=1e-6)
+        np.testing.assert_allclose(verts[np.argmax(verts[:, 1])], [0, 0.5, 0], atol=1e-6)  # apex
+
 
 # ===========================================================================
 # Hollow box/cylinder, box orientation and annulus width, as McCode's mccode-r.c
