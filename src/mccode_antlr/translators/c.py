@@ -333,7 +333,9 @@ class CTargetVisitor(TargetVisitor, target_language='c'):
             self.embed_file("mccode-r.c")
             self.embed_file(f'{name}-r.c')
             if self.verbose:
-                logger.info("Compile with flags '-DUSE_NEXUS -lNeXus' to enable NeXus support")
+                # libNeXus (-lNeXus) for runtimes before mccode-dev/McCode#2895, HDF5 (-lhdf5) after; see #405
+                logger.info("Compile with flags '-DUSE_NEXUS' and the NeXus library flags "
+                            "(config flags.nexus) to enable NeXus support")
         else:
             # This only works if the module is *not* a compressed archive
             # If it is, we would need to do some trickery to ... write out the
