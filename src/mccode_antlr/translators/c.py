@@ -248,23 +248,32 @@ class CTargetVisitor(TargetVisitor, target_language='c'):
         self.instrument_uservars = declares
         self.component_uservars = comp_declares
 
+    def _libc_registry(self):
+        candidates = [reg for reg in self.source.registries if 'libc' == reg.name]
+        return next(iter(candidates), None)
+
+    def _libc_before(self, version: str) -> bool:
+        from packaging.version import Version
+        libc_registry = self._libc_registry()
+        if libc_registry is None:
+            return False
+        return Version(libc_registry.version) < Version(version)
+
     def __post_init__(self):
         """Before doing *anything* else. We need to search through all raw C code for %include statements.
         This could not be done earlier if the goal is to have a clear separation between the parsing and target
         languages. (A different target language would not include the same libraries in its raw blocks)
         """
         # Make sure the registry list contains the C library registry, so that we can find and include files
-        from packaging.version import Version
         from ..reader.registry import ordered_registries, ensure_registries
         # make sure that the libc registry is present before sorting:
         self.source.registries = tuple(ordered_registries(ensure_registries(Flavor.BASE, list(self.source.registries))))
 
         # Check that the LIBC registry is not too old for current translation
-        for reg in self.source.registries:
-            # NeXus interface changed in v3.5.20 release of McStas/McXtrace == McCode
-            if 'libc' == reg.name and Version(reg.version) < Version("3.5.20"):
-                logger.warning(f"Requested McCode libc version {reg.version} may"
-                               " cause errors since it is less than v3.5.20")
+        # NeXus interface changed in v3.5.20 release of McStas/McXtrace == McCode
+        if self._libc_before('3.5.20'):
+            logger.warning(f"Requested McCode libc version {self._libc_registry().version} may"
+                            " cause errors since it is less than v3.5.20")
 
         includes = []
         inst = self.source
@@ -311,6 +320,7 @@ class CTargetVisitor(TargetVisitor, target_language='c'):
         return uuv
 
     def visit_header(self):
+        from mccode_antlr.config import config
         from .c_header import header_pre_runtime, header_post_runtime
         # Get the unique list of USERVAR declarations:
         # logger.debug(f'Instrument uservars = {self.instrument_uservars}')
@@ -333,7 +343,17 @@ class CTargetVisitor(TargetVisitor, target_language='c'):
             self.embed_file("mccode-r.c")
             self.embed_file(f'{name}-r.c')
             if self.verbose:
-                logger.info("Compile with flags '-DUSE_NEXUS -lNeXus' to enable NeXus support")
+                flags = config['flags']['nexus'].as_str_expanded()
+                # libNeXus for runtimes before mccode-dev/McCode#2895, HDF5 after; see #405.
+                # Match on the library name only (not e.g. '-lhdf5' or 'hdf5.lib') since the
+                # linker-flag syntax differs per platform/compiler (gcc/clang vs MSVC).
+                expect_hdf5 = not self._libc_before('3.10.1')
+                library = 'hdf5' if expect_hdf5 else 'nexus'
+                if library not in flags.lower():
+                    required = 'HDF5' if expect_hdf5 else 'NeXus'
+                    logger.warning(f"McCode library code changed after v3.10.0 to require linking against "
+                                   f"{required}, but configured NeXus flags ('{flags}') do not mention it")
+                logger.info(f"Compile with flags '{flags}' to enable NeXus support")
         else:
             # This only works if the module is *not* a compressed archive
             # If it is, we would need to do some trickery to ... write out the
