@@ -154,6 +154,8 @@ def test_to_files_reconstructs_hierarchy(tmp_path):
     assert 'c_first' not in parent_text
     assert 'c_second' not in parent_text
     assert 'dvar' not in parent_text
+    # child parameters stay declared in the parent, which may use them before the %include
+    assert 'dpar' in parent_text.split('TRACE')[0]
     child_path = tmp_path / 'child.instr'
     assert child_path.exists()
     child_text = child_path.read_text()
