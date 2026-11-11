@@ -202,6 +202,10 @@ class Instr(Struct):
         warn = {'declare', 'user', 'initialize', 'save', 'final'}
         for child in self.included:
             for key in sections:
+                if key == 'parameters':
+                    # kept in the parent too: McCode resolves identifiers while
+                    # parsing, so one used before the %include must be declared here
+                    continue
                 sections[key] = _subtract_tuple(sections[key], getattr(child, key), key in warn)
         owners = {}
         for child in self.included:
