@@ -101,7 +101,32 @@ class ExtractMember:
     default_included: bool
 
 
-def _instr_members(instr) -> list[ExtractMember]:
+def _without_metadata(instr):
+    """A copy of *instr* with no instrument or component-instance METADATA.
+
+    Classic McStas cannot parse instrument-level METADATA at all, and instance
+    METADATA written for another tool (e.g. a model's provenance) is noise to a
+    McStas user and is compiled into the binary. Component-definition METADATA
+    lives in the .comp files and is left alone. After `Instr.copy` every node
+    of the %include tree shares the top-level instance pool, so clearing the
+    pool clears every node's instances.
+    """
+    instr = instr.copy()
+    for instance in instr.components:
+        instance.metadata = ()
+
+    def clear(node):
+        node.metadata = ()
+        for child in node.included:
+            clear(child)
+
+    clear(instr)
+    return instr
+
+
+def _instr_members(instr, strip_metadata: bool = False) -> list[ExtractMember]:
+    if strip_metadata:
+        instr = _without_metadata(instr)
     return [
         ExtractMember(name, 'instr', 'generated', 'generated', 'generated', content.encode('utf-8'), True)
         for name, content in instr.to_strings().items()
@@ -200,7 +225,7 @@ def _dedupe_embedded_duplicates(members: list[ExtractMember]) -> list[ExtractMem
     return [m for m in members if not (m.source == 'embedded' and m.name in resolved_names)]
 
 
-def build_manifest(instr, include_remote: bool = False) -> list[ExtractMember]:
+def build_manifest(instr, include_remote: bool = False, strip_metadata: bool = False) -> list[ExtractMember]:
     """Every file `extract_to_directory` could write for *instr*, local and remote.
 
     With include_remote=False (default) only the .instr hierarchy, embedded
@@ -212,10 +237,13 @@ def build_manifest(instr, include_remote: bool = False) -> list[ExtractMember]:
     A name embedded at save time that a currently active registry can also
     resolve appears once, attributed to that registry -- see
     `_dedupe_embedded_duplicates`.
+
+    With strip_metadata=True the .instr hierarchy is written without
+    instrument or component-instance METADATA -- see `_without_metadata`.
     """
     registries = _non_embedded_registries(instr)
     members = (
-        _instr_members(instr) + _embedded_members(instr)
+        _instr_members(instr, strip_metadata) + _embedded_members(instr)
         + _dependency_members(instr, registries) + _component_members(instr, registries)
     )
     members = _dedupe_embedded_duplicates(members)
@@ -268,6 +296,7 @@ def extract_to_directory(
         select: list[str] | None = None, exclude: list[str] | None = None,
         repository: list[str] | None = None,
         exclude_repository: list[str] | None = None,
+        strip_metadata: bool = False,
 ) -> Path:
     """Reconstitute *instr* into *directory*: .instr hierarchy, stashed files,
     and component definitions, all flat.
@@ -279,7 +308,7 @@ def extract_to_directory(
     """
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
-    manifest = build_manifest(instr, include_remote)
+    manifest = build_manifest(instr, include_remote, strip_metadata)
     for member in select_members(manifest, select, exclude, repository=repository,
                                  exclude_repository=exclude_repository):
         _write_flat(instr, directory, member.name, member.payload)
