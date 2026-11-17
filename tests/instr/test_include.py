@@ -185,6 +185,11 @@ def test_flat_output_unchanged():
     assert text.count('%include') == 1
 
 
+def test_header_names_the_writer():
+    from mccode_antlr import __version__
+    assert f'Writer: mccode-antlr {__version__}' in str(_parse_parent())
+
+
 def test_assembler_context_manager():
     a = Assembler('demo', registries=[_registry()])
     origin = a.component('origin', 'Thing', at=(0, 0, 0))
