@@ -43,6 +43,7 @@ def extract(
         exclude: list[str] | None = None,
         repository: list[str] | None = None,
         exclude_repository: list[str] | None = None,
+        strip_metadata: bool = False,
         list_only: bool = False,
 ):
     from types import SimpleNamespace
@@ -55,7 +56,7 @@ def extract(
     instr = load_instr(source, flavor, search_dir)
 
     if list_only:
-        manifest = build_manifest(instr, include_remote=include_remote)
+        manifest = build_manifest(instr, include_remote=include_remote, strip_metadata=strip_metadata)
         _print_manifest(select_members(manifest, members or None, exclude, repository=repository,
                                        exclude_repository=exclude_repository))
         return
@@ -63,7 +64,7 @@ def extract(
     destination = Path(output).resolve() if output is not None else _default_output_directory(source)
     extract_to_directory(
         instr, destination, include_remote=include_remote, select=members or None, exclude=exclude,
-        repository=repository, exclude_repository=exclude_repository,
+        repository=repository, exclude_repository=exclude_repository, strip_metadata=strip_metadata,
     )
 
     print(destination)
@@ -140,6 +141,13 @@ def add_extract_management_parser(modes):
         help="Glob pattern of source repositories to omit (repeatable), matched like "
              "-r/--repository. E.g. --include-remote -X '*/mccode-dev/McCode' bundles "
              "everything a stock McStas installation does not already provide.",
+    )
+    parser.add_argument(
+        '--strip-metadata',
+        action='store_true',
+        help='Write the .instr files without instrument or component-instance METADATA. '
+             'Classic McStas cannot parse instrument-level METADATA; instance METADATA '
+             'is compiled into the binary. Component-definition METADATA is kept.',
     )
     parser.add_argument(
         '-l', '--list',

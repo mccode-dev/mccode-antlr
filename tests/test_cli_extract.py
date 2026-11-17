@@ -211,6 +211,35 @@ def test_extract_exclude_repository_drops_matching_files(tmp_path):
     assert {p.name for p in destination.iterdir()} == {'u.instr', 'UsesLib.comp'}
 
 
+def test_extract_strip_metadata(tmp_path):
+    """--strip-metadata drops instrument and instance METADATA, keeps the rest."""
+    from mccode_antlr.cli.extract import extract
+
+    instr_path = tmp_path / 'm.instr'
+    instr_path.write_text(
+        'DEFINE INSTRUMENT m(x=1)\n'
+        'METADATA "text/plain" about %{ instrument note %}\n'
+        'TRACE\n'
+        'COMPONENT o = Arm() AT (0,0,0) ABSOLUTE\n'
+        'METADATA "application/json" provenance %{ {"made_by": "a model"} %}\n'
+        'END\n'
+    )
+    kept, stripped = tmp_path / 'kept', tmp_path / 'stripped'
+    extract(filename=str(instr_path), output=str(kept))
+    extract(filename=str(instr_path), output=str(stripped), strip_metadata=True)
+
+    assert (kept / 'm.instr').read_text().count('METADATA') == 2
+    text = (stripped / 'm.instr').read_text()
+    assert 'METADATA' not in text
+    assert 'COMPONENT o = Arm()' in text
+
+    from mccode_antlr.loader import parse_mcstas_instr
+    from mccode_antlr.io.extract import build_manifest
+    instr = parse_mcstas_instr(instr_path.read_text())
+    build_manifest(instr, strip_metadata=True)
+    assert instr.metadata and instr.components[0].metadata, 'the caller keeps its METADATA'
+
+
 def test_trust_local_registries_does_not_duplicate_embedded_listing(tmp_path, capsys, monkeypatch):
     """--trust-local-registries can make a file both embedded (from the JSON)
     and locally resolvable (from the restored registry) -- it must be listed
