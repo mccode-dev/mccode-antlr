@@ -240,6 +240,31 @@ def test_extract_strip_metadata(tmp_path):
     assert instr.metadata and instr.components[0].metadata, 'the caller keeps its METADATA'
 
 
+def test_extracted_header_names_no_local_registry(tmp_path):
+    """No path on this machine reaches the bundle's headers; remote registries stay."""
+    from mccode_antlr.cli.extract import extract
+
+    lib = tmp_path / 'private-lib'
+    lib.mkdir()
+    (lib / 'UsesLib.comp').write_text(
+        'DEFINE COMPONENT UsesLib\nSETTING PARAMETERS (thing=1)\nTRACE %{ SCATTER; %}\nEND\n'
+    )
+    instr_path = tmp_path / 'u.instr'
+    instr_path.write_text(
+        'DEFINE INSTRUMENT u()\nTRACE\n'
+        'COMPONENT o = Progress_bar() AT (0,0,0) ABSOLUTE\n'
+        'COMPONENT m = UsesLib(thing=3) AT (0,0,1) ABSOLUTE\nEND\n'
+    )
+    destination = tmp_path / 'bundle'
+    extract(filename=str(instr_path), output=str(destination), search_dir=[lib])
+
+    text = (destination / 'u.instr').read_text()
+    assert str(tmp_path) not in text
+    assert 'Source: u.instr' in text
+    assert 'Registry: mcstas ' in text
+    assert (destination / 'UsesLib.comp').exists()
+
+
 def test_trust_local_registries_does_not_duplicate_embedded_listing(tmp_path, capsys, monkeypatch):
     """--trust-local-registries can make a file both embedded (from the JSON)
     and locally resolvable (from the restored registry) -- it must be listed
