@@ -42,6 +42,7 @@ def extract(
         members: list[str] | None = None,
         exclude: list[str] | None = None,
         repository: list[str] | None = None,
+        exclude_repository: list[str] | None = None,
         list_only: bool = False,
 ):
     from types import SimpleNamespace
@@ -55,13 +56,14 @@ def extract(
 
     if list_only:
         manifest = build_manifest(instr, include_remote=include_remote)
-        _print_manifest(select_members(manifest, members or None, exclude, repository=repository))
+        _print_manifest(select_members(manifest, members or None, exclude, repository=repository,
+                                       exclude_repository=exclude_repository))
         return
 
     destination = Path(output).resolve() if output is not None else _default_output_directory(source)
     extract_to_directory(
         instr, destination, include_remote=include_remote, select=members or None, exclude=exclude,
-        repository=repository,
+        repository=repository, exclude_repository=exclude_repository,
     )
 
     print(destination)
@@ -130,6 +132,14 @@ def add_extract_management_parser(modes):
              "https://github.com/mcdotstar/...), a local registry's root path, or "
              "an embedded registry's name. Naming a repository extracts/lists its "
              "files even without --include-remote, like positional members.",
+    )
+    parser.add_argument(
+        '-X', '--exclude-repository',
+        action='append',
+        default=None,
+        help="Glob pattern of source repositories to omit (repeatable), matched like "
+             "-r/--repository. E.g. --include-remote -X '*/mccode-dev/McCode' bundles "
+             "everything a stock McStas installation does not already provide.",
     )
     parser.add_argument(
         '-l', '--list',

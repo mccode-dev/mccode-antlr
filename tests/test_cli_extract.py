@@ -186,6 +186,31 @@ def test_extract_repository_filter_selects_only_matching_files(tmp_path):
     assert {p.name for p in destination.iterdir()} == {'Progress_bar.comp'}
 
 
+def test_extract_exclude_repository_drops_matching_files(tmp_path):
+    """--include-remote -X '*/mccode-dev/*' bundles everything but the stock library."""
+    from mccode_antlr.cli.extract import extract
+
+    lib = tmp_path / 'lib'
+    lib.mkdir()
+    (lib / 'UsesLib.comp').write_text(
+        'DEFINE COMPONENT UsesLib\nSETTING PARAMETERS (thing=1)\nTRACE %{ SCATTER; %}\nEND\n'
+    )
+    instr_path = tmp_path / 'u.instr'
+    instr_path.write_text(
+        'DEFINE INSTRUMENT u()\nTRACE\n'
+        'COMPONENT o = Progress_bar() AT (0,0,0) ABSOLUTE\n'
+        'COMPONENT m = UsesLib(thing=3) AT (0,0,1) ABSOLUTE\nEND\n'
+    )
+
+    destination = tmp_path / 'bundle'
+    extract(
+        filename=str(instr_path), output=str(destination), search_dir=[lib],
+        include_remote=True, exclude_repository=['*/mccode-dev/*'],
+    )
+
+    assert {p.name for p in destination.iterdir()} == {'u.instr', 'UsesLib.comp'}
+
+
 def test_trust_local_registries_does_not_duplicate_embedded_listing(tmp_path, capsys, monkeypatch):
     """--trust-local-registries can make a file both embedded (from the JSON)
     and locally resolvable (from the restored registry) -- it must be listed
