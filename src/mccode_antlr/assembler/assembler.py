@@ -248,9 +248,11 @@ class Assembler:
             uv_variables = parse(user_vars.source)
             if any(x.dtype == dtype and x.name == name for x in uv_variables):
                 return
-            if any(x.name == name for x in uv_variables):
-                logger.warning(f'A USERVARS variable with name {name} but type different than {dtype} has already been defined')
-                return
+            if conflict := next((x for x in uv_variables if x.name == name), None):
+                # particle_setvar_void copies sizeof(the declared type): keeping the
+                # other declaration would make every write through *name* the wrong size
+                raise ValueError(f'USERVARS variable {name} is already declared as '
+                                 f'{conflict.dtype}, not {dtype}')
         return self.user_vars(string, source=source, line=line)
 
     def initialize(self, string, source=None, line=-1):
