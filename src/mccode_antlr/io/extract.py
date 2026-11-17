@@ -229,6 +229,7 @@ def select_members(
     select: list[str] | None = None,
     exclude: list[str] | None = None,
     repository: list[str] | None = None,
+    exclude_repository: list[str] | None = None,
 ) -> list[ExtractMember]:
     """The subset of *manifest* a given extract/list invocation would produce.
 
@@ -241,7 +242,10 @@ def select_members(
     explicitly is unambiguous. When both `select` and `repository` are given
     they AND together: a member must match a `select` pattern (by name) *and*
     a `repository` pattern (against `repository_match`). `exclude` globs are
-    then dropped from whichever set results, same as `unzip -x`.
+    then dropped from whichever set results, same as `unzip -x`, and so are
+    members whose `repository_match` matches an `exclude_repository` glob --
+    e.g. '*/mccode-dev/McCode' keeps a stock McStas's own library out of an
+    --include-remote bundle.
     """
     if select or repository:
         chosen = manifest
@@ -253,6 +257,9 @@ def select_members(
         chosen = [m for m in manifest if m.default_included]
     if exclude:
         chosen = [m for m in chosen if not any(fnmatch(m.name, pattern) for pattern in exclude)]
+    if exclude_repository:
+        chosen = [m for m in chosen
+                  if not any(fnmatch(m.repository_match, pattern) for pattern in exclude_repository)]
     return chosen
 
 
@@ -260,6 +267,7 @@ def extract_to_directory(
         instr, directory, include_remote: bool = False,
         select: list[str] | None = None, exclude: list[str] | None = None,
         repository: list[str] | None = None,
+        exclude_repository: list[str] | None = None,
 ) -> Path:
     """Reconstitute *instr* into *directory*: .instr hierarchy, stashed files,
     and component definitions, all flat.
@@ -267,11 +275,12 @@ def extract_to_directory(
     With include_remote=False (default) and no select/exclude/repository,
     only files not otherwise available from a remote registry are written --
     what a consumer could not get any other way. See `select_members` for how
-    include_remote, select, exclude, and repository interact.
+    include_remote, select, exclude, repository and exclude_repository interact.
     """
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
     manifest = build_manifest(instr, include_remote)
-    for member in select_members(manifest, select, exclude, repository=repository):
+    for member in select_members(manifest, select, exclude, repository=repository,
+                                 exclude_repository=exclude_repository):
         _write_flat(instr, directory, member.name, member.payload)
     return directory
