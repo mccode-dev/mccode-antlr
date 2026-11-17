@@ -132,6 +132,8 @@ class Instr(Struct):
         print(wrapper.start_block_comment(f"Instrument {self.name or 'None'}"), file=output)
         print(wrapper.line('Instrument:', [self.name or 'None']), file=output)
         print(wrapper.line('Source:', [self.source or 'None']), file=output)
+        from mccode_antlr import __version__
+        print(wrapper.line('Writer:', [f'mccode-antlr {__version__}']), file=output)
         print(wrapper.line('Contains:', [f'"%include {include.name}"' for include in self.included]), file=output)
         print(wrapper.line('Registries:', [registry.name for registry in self.registries]), file=output)
         for registry in self.registries:
