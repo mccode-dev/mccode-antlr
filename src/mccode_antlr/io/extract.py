@@ -124,7 +124,32 @@ def _without_metadata(instr):
     return instr
 
 
+def _without_local_paths(instr):
+    """A copy of *instr* whose %include tree names no path on this machine.
+
+    A written .instr's header comment names its Source -- the absolute path of
+    a parsed file -- and every registry, a local one by its absolute path.
+    Both mean nothing to anyone else and leak this machine's layout. In an
+    extracted bundle the local and embedded files sit in the bundle directory
+    itself, which a reader finds without a header entry, so only the remote
+    registries (each with its version) are kept, and an absolute Source is cut
+    to its file name. A Source that is not an absolute path is kept as is.
+    """
+    instr = instr.copy()
+
+    def scrub(node):
+        node.registries = tuple(r for r in node.registries if _is_remote(r))
+        if node.source and Path(node.source).is_absolute():
+            node.source = Path(node.source).name
+        for child in node.included:
+            scrub(child)
+
+    scrub(instr)
+    return instr
+
+
 def _instr_members(instr, strip_metadata: bool = False) -> list[ExtractMember]:
+    instr = _without_local_paths(instr)
     if strip_metadata:
         instr = _without_metadata(instr)
     return [
