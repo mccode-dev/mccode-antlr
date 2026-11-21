@@ -56,6 +56,8 @@ def cogen_raytrace(source, ok_to_skip):
                 f'    for (int Split_{comp.name}_randstate_idx = 0; Split_{comp.name}_randstate_idx < RANDSTATE_LEN; Split_{comp.name}_randstate_idx++) {{',
                 f'      randbackup[Split_{comp.name}_randstate_idx] = _particle->randstate[Split_{comp.name}_randstate_idx];',
                 '    }',
+                # new mcdisplay ray per SPLIT branch, no return line to the SPLIT point
+                f'    if (SplitN_{comp.name} > 0) {{ DEBUG_LEAVE(); DEBUG_STATE(); DEBUG_ENTER(); DEBUG_STATE(); }}',
                 f'    *_particle=Split_{comp.name}_particle;',
                 f'    for (int Split_{comp.name}_randstate_idx = 0; Split_{comp.name}_randstate_idx < RANDSTATE_LEN; Split_{comp.name}_randstate_idx++) {{',
                 f'      _particle->randstate[Split_{comp.name}_randstate_idx] = randbackup[Split_{comp.name}_randstate_idx];',
