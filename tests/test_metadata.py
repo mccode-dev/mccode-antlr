@@ -70,6 +70,16 @@ class MetadataTestCase(unittest.TestCase):
         text = remove_newlines_whitespace(text)
         self.assertEqual(text, test)
 
+    def test_quoted_name_is_escaped_in_c(self):
+        """A name with spaces keeps its quotes, which must be escaped in the C table."""
+        from mccode_antlr import Flavor
+        from mccode_antlr.loader import parse_mcstas_instr
+        from mccode_antlr.translators.c import CTargetVisitor
+        config = dict(default_main=True, enable_trace=False, portable=False,
+                      include_runtime=False, embed_instrument_file=False, verbose=False)
+        text = CTargetVisitor(parse_mcstas_instr(TEST_INSTR), flavor=Flavor.MCSTAS, config=config).contents()
+        self.assertIn(' {"point", "\\"names with spaces keep their quotes\\"", "application/text", ', text)
+
 
 
 if __name__ == '__main__':

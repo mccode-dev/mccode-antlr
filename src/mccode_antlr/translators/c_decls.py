@@ -91,7 +91,8 @@ def declarations_pre_libraries(source, typedefs: list, component_declared_parame
     def metadata_table():
         def one_line(defined_by, name, mimetype, value):
             from ..common.utilities import escape_str_for_c
-            return f' {{"{defined_by}", "{name}", "{mimetype}", "{escape_str_for_c(value)}"}}, '
+            fields = (defined_by, name, mimetype, value)
+            return ' {' + ', '.join(f'"{escape_str_for_c(f)}"' for f in fields) + '}, '
 
         from ..build_info import BUILD_INFO_NAME
         collected = source.collect_metadata()

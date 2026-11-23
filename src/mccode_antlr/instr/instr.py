@@ -575,7 +575,7 @@ class Instr(Struct):
         """Merge an already-parsed Instr into this one, keeping provenance.
 
         Implements TRACE `%include` semantics: parameters merge first-wins,
-        metadata merges by name (child replaces), C blocks concatenate,
+        metadata merges by (source, name), keeping the child as source, C blocks concatenate,
         DEPENDENCY flags merge de-duplicated, and non-removable child
         component instances are appended, tagged with `source=child.name`
         unless already tagged by a deeper include. The child is absorbed:
@@ -657,9 +657,9 @@ class Instr(Struct):
         self.final += blocks_to_raw_c(*blocks)
 
     def add_metadata(self, m: MetaData):
-        if any([x.name == m.name for x in self.metadata]):
-            self.metadata = tuple([x for x in self.metadata if x.name != m.name])
-        self.metadata += (m,)
+        # the C metadata table is keyed by source and name, so only an entry with both replaces
+        key = (m.source.name, m.name)
+        self.metadata = tuple(x for x in self.metadata if (x.source.name, x.name) != key) + (m,)
 
     @property
     def groups(self):

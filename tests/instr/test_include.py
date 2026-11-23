@@ -391,3 +391,31 @@ def test_merged_assembler_guard():
     s2.component('fine', 'Thing', at=(0, 0, 3))
     assert s2.instrument.has_component_named('fine')
     assert not a.instrument.has_component_named('fine')
+
+
+META_A = ('DEFINE INSTRUMENT m_a()\nMETADATA text dup %{\nm_a dup\n%}\nMETADATA text m_a_only %{\nm_a only\n%}\n'
+          'TRACE\nCOMPONENT ma1 = Thing() AT (0, 0, 0) ABSOLUTE\n%include "m_c"\nEND\n')
+META_B = ('DEFINE INSTRUMENT m_b()\nMETADATA text dup %{\nm_b dup\n%}\n'
+          'TRACE\nCOMPONENT mb1 = Thing() AT (0, 0, 0) ABSOLUTE\nEND\n')
+META_C = ('DEFINE INSTRUMENT m_c()\nMETADATA text dup %{\nm_c dup\n%}\n'
+          'TRACE\nCOMPONENT mc1 = Thing() AT (0, 0, 0) ABSOLUTE\nEND\n')
+META_PARENT = ('DEFINE INSTRUMENT m_parent()\nMETADATA text dup %{\nfirst\n%}\nMETADATA text dup %{\nm_parent dup\n%}\n'
+               'TRACE\nCOMPONENT base = Thing() AT (0, 0, 0) ABSOLUTE\n%include "m_a"\n%include "m_b"\nEND\n')
+
+
+def test_included_metadata_keyed_by_source_and_name():
+    """Instrument METADATA keeps the defining instrument as its source; a repeated
+    name replaces only an entry with the same source, as the C table is keyed by both."""
+    reg = InMemoryRegistry('include_metadata_test')
+    reg.add_comp('Thing', THING)
+    for name, text in (('m_a', META_A), ('m_b', META_B), ('m_c', META_C)):
+        reg.add_instr(name, text)
+    instr = parse_mccode_instr(META_PARENT, [reg])
+    table = {(m.source.name, m.name): m.value.strip() for m in instr.collect_metadata()}
+    assert table == {
+        ('m_parent', 'dup'): 'm_parent dup',
+        ('m_a', 'dup'): 'm_a dup',
+        ('m_a', 'm_a_only'): 'm_a only',
+        ('m_b', 'dup'): 'm_b dup',
+        ('m_c', 'dup'): 'm_c dup',
+    }
