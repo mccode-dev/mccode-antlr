@@ -600,6 +600,8 @@ def combine_scan_dicts(a: dict, b: dict):
     for k, v in b.items():
         if k in REPEATED_KEYS:
             c[k] = c.get(k, []) + [x for x in v if x not in c.get(k, [])]
+        elif k == 'Nodes':
+            pass  # resolved after the loop
         elif any(s in k for s in special_add):
             c[k] = int(c[k]) + int(v)
         elif any(s in k for s in special_concatenate):
@@ -612,6 +614,9 @@ def combine_scan_dicts(a: dict, b: dict):
                 raise RuntimeError(f'Incompatible values for "{k}": {c[k]} and {v}')
         else:
             raise RuntimeError(f'Unexpected key {k} in {b}')
+    if a.get('Nodes') != b.get('Nodes'):
+        # runs on different MPI node counts (absent is one node) have no single count, as in mcmerge
+        c.pop('Nodes', None)
     return c
 
 

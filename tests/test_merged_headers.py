@@ -99,3 +99,26 @@ def test_dat_keeps_every_merged_from_line(tmp_path):
     assert text.count('# Merged_from: ') == 2
     assert text.index('# Directory:') < text.index('# Merged_from:') < text.index('# Param:')
     assert read_mccode_dat(tmp_path / 'both.dat')['Merged_from'] == _MERGED_LINES
+
+
+def test_combining_differing_node_counts_drops_nodes(tmp_path):
+    """As mcmerge does: runs on different MPI node counts (absent is one) have no single count."""
+    from mccode_antlr.loader.simfile import SimFile, combine_mccode_sims
+    from mccode_antlr.loader.datfile import read_mccode_dat, write_combined_mccode_dats
+
+    def sim(nodes):
+        return SimFile.parse(_SIM.format(extra=f'  Nodes: {nodes}\n' if nodes else ''))
+
+    assert combine_mccode_sims([sim(2), sim(2)]).simulation.extra == {'Nodes': ['2']}
+    assert combine_mccode_sims([sim(2), sim(4)]).simulation.extra == {}
+    assert combine_mccode_sims([sim(2), sim(None)]).simulation.extra == {}
+
+    def dat(name, nodes):
+        (tmp_path / name).write_text(_DAT.format(extra=f'# Nodes: {nodes}\n' if nodes else ''))
+        return tmp_path / name
+
+    write_combined_mccode_dats([dat('a.dat', 2), dat('b.dat', 2)], tmp_path / 'same.dat')
+    assert read_mccode_dat(tmp_path / 'same.dat')['Nodes'] == '2'
+    for i, (x, y) in enumerate([(2, 4), (2, None), (None, 2)]):
+        write_combined_mccode_dats([dat('a.dat', x), dat('b.dat', y)], tmp_path / f'{i}.dat')
+        assert '# Nodes:' not in (tmp_path / f'{i}.dat').read_text()

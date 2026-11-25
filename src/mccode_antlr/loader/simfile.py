@@ -229,10 +229,13 @@ class SimFileSimulation:
 
 
 def _combine_extra(a: dict[str, list[str]], b: dict[str, list[str]]) -> dict[str, list[str]]:
-    """Per key, the values of a then those of b not already present"""
+    """Per key, the values of a then those of b not already present; Nodes only if equal"""
     out = {k: list(v) for k, v in a.items()}
     for k, v in b.items():
         out.setdefault(k, []).extend(x for x in v if x not in out[k])
+    if a.get('Nodes') != b.get('Nodes'):
+        # runs on different MPI node counts (absent is one node) have no single count, as in mcmerge
+        out.pop('Nodes', None)
     return out
 
 
