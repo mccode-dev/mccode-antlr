@@ -29,6 +29,10 @@ def _require_scipp():
         ) from None
 
 
+# Header keys which may appear more than once, kept as a list of values in file order
+REPEATED_KEYS = ('Merged_from',)
+
+
 def _parse_file(filename: str | Path) -> tuple:
     """Parse a McCode .dat text file and return raw components.
 
@@ -45,8 +49,13 @@ def _parse_file(filename: str | Path) -> tuple:
     with source.open('r', encoding='utf-8', errors='replace') as file:
         lines = file.readlines()
     header = [x.strip(' #\n') for x in filter(lambda x: x[0] == '#', lines)]
-    meta = {k.strip(): v.strip() for k, v in
-            [x.split(':', 1) for x in filter(lambda x: not x.startswith('Param'), header)]}
+    meta = {}
+    for k, v in [x.split(':', 1) for x in filter(lambda x: not x.startswith('Param'), header)]:
+        k, v = k.strip(), v.strip()
+        if k in REPEATED_KEYS:
+            meta.setdefault(k, []).append(v)
+        else:
+            meta[k] = v
     parm = {k.strip(): v.strip() for k, v in
             [x.split(':', 1)[1].split('=', 1) for x in filter(lambda x: x.startswith('Param'), header)]}
     var = meta.get('variables', '').split()
@@ -225,7 +234,9 @@ class DatFileCommon:
         first, second = self.parts()
         with sink.open('w', encoding='utf-8') as file:
             for item in first:
-                print(f'# {item}: {self.metadata[item]}', file=file)
+                value = self.metadata.get(item)
+                for v in (value if isinstance(value, list) else [] if value is None else [value]):
+                    print(f'# {item}: {v}', file=file)
             for param in self.parameters:
                 print(f'# Param: {param}={self.parameters[param]}', file=file)
             for item in second:
@@ -375,7 +386,8 @@ class DatFile0D(DatFileCommon):
 
     @staticmethod
     def parts():
-        first = ('Format', 'URL', 'Creator', 'Instrument', 'Ncount', 'Trace', 'Gravitation', 'Seed', 'Directory')
+        first = ('Format', 'URL', 'Creator', 'Instrument', 'Ncount', 'Trace', 'Gravitation', 'Seed', 'Directory',
+                 'Nodes', 'Merged_from')
         second = ('Date', 'type', 'Source', 'component', 'position', 'title', 'Ncount', 'filename', 'statistics',
                   'signal', 'values', 'yvar', 'ylabel', 'xlimits', 'variables')
         return first, second
@@ -451,7 +463,8 @@ class DatFile1D(DatFileCommon):
 
     @staticmethod
     def parts():
-        first = ('Format', 'URL', 'Creator', 'Instrument', 'Ncount', 'Trace', 'Gravitation', 'Seed', 'Directory')
+        first = ('Format', 'URL', 'Creator', 'Instrument', 'Ncount', 'Trace', 'Gravitation', 'Seed', 'Directory',
+                 'Nodes', 'Merged_from')
         second = ('Date', 'type', 'Source', 'component', 'position', 'title', 'Ncount', 'filename', 'statistics',
                   'signal', 'values', 'xvar', 'yvar', 'xlabel', 'ylabel', 'xlimits', 'variables')
         return first, second
@@ -543,7 +556,8 @@ class DatFile2D(DatFileCommon):
 
     @staticmethod
     def parts():
-        first = ('Format', 'URL', 'Creator', 'Instrument', 'Ncount', 'Trace', 'Gravitation', 'Seed', 'Directory')
+        first = ('Format', 'URL', 'Creator', 'Instrument', 'Ncount', 'Trace', 'Gravitation', 'Seed', 'Directory',
+                 'Nodes', 'Merged_from')
         second = ('Date', 'type', 'Source', 'component', 'position', 'title', 'Ncount', 'filename', 'statistics',
                   'signal', 'values', 'xvar', 'yvar', 'xlabel', 'ylabel', 'zvar', 'zlabel', 'xylimits', 'variables')
         return first, second
@@ -584,7 +598,9 @@ def combine_scan_dicts(a: dict, b: dict):
     special_concatenate = ('Directory', 'filename', 'Date', 'Seed')
     special_ignore = ('signal', 'statistics', 'values')
     for k, v in b.items():
-        if any(s in k for s in special_add):
+        if k in REPEATED_KEYS:
+            c[k] = c.get(k, []) + [x for x in v if x not in c.get(k, [])]
+        elif any(s in k for s in special_add):
             c[k] = int(c[k]) + int(v)
         elif any(s in k for s in special_concatenate):
             if v not in c[k]:

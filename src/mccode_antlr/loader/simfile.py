@@ -132,6 +132,8 @@ class SimFileSimulation:
     Seed: int
     Directory: str
     Params: list[str] = field(default_factory=list)
+    # Other `key: value` lines after Directory, e.g., Nodes (MPI) or Merged_from (mcmerge), in file order
+    extra: dict[str, list[str]] = field(default_factory=dict)
 
     @staticmethod
     def parse(contents: str):
@@ -143,17 +145,20 @@ class SimFileSimulation:
         keywords = ['Format', 'URL', 'Creator', 'Instrument', 'Ncount', 'Trace', 'Gravitation', 'Seed', 'Directory']
         format, url, creator, instrument, ncount, trace, gravitation, seed, directory = read_keywords(lines[1:10],
                                                                                                       keywords)
-        params = []
+        params, extra = [], {}
         for line in lines[10:]:
-            _, _, param = line.partition(':')
-            params.append(param.strip())
+            key, _, value = line.partition(':')
+            if key.strip() == 'Param':
+                params.append(value.strip())
+            else:
+                extra.setdefault(key.strip(), []).append(value.strip())
         ncount = int(ncount)
         trace = trace == 'yes'
         gravitation = gravitation == 'yes'
         seed = int(seed)
         return SimFileSimulation(name=name, Format=format, URL=url, Creator=creator, Instrument=instrument,
                                  Ncount=ncount, Trace=trace, Gravitation=gravitation, Seed=seed, Directory=directory,
-                                 Params=params)
+                                 Params=params, extra=extra)
 
     def to_file(self, file):
         print(f'begin simulation: {self.name}', file=file)
@@ -166,6 +171,9 @@ class SimFileSimulation:
         print(f"  Gravitation: {'yes' if self.Gravitation else 'no'}", file=file)
         print(f"  Seed: {self.Seed}", file=file)
         print(f"  Directory: {self.Directory}", file=file)
+        for key, values in self.extra.items():
+            for value in values:
+                print(f"  {key}: {value}", file=file)
         for param in self.Params:
             print(f"  Param: {param}", file=file)
         print(f'end simulation', file=file)
@@ -192,6 +200,7 @@ class SimFileSimulation:
             # combining a repeat which was done to improve statistics
             out = deepcopy(self)
             out.Ncount += other.Ncount
+            out.extra = _combine_extra(self.extra, other.extra)
             if other.Seed == self.Seed:
                 logger.warning('combining two simulations with the same seed is not statistically valid')
             return out
@@ -216,7 +225,15 @@ class SimFileSimulation:
         params = list(params.keys())
         return SimFileSimulation(name=name, Format=format, URL=url, Creator=creator, Instrument=instrument,
                                  Ncount=ncount, Trace=trace, Gravitation=gravitation, Seed=seed, Directory=directory,
-                                 Params=params)
+                                 Params=params, extra=_combine_extra(self.extra, other.extra))
+
+
+def _combine_extra(a: dict[str, list[str]], b: dict[str, list[str]]) -> dict[str, list[str]]:
+    """Per key, the values of a then those of b not already present"""
+    out = {k: list(v) for k, v in a.items()}
+    for k, v in b.items():
+        out.setdefault(k, []).extend(x for x in v if x not in out[k])
+    return out
 
 
 @dataclass
