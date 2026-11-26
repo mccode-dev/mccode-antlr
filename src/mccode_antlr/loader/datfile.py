@@ -99,12 +99,30 @@ def _standard_indices(var: list[str]) -> tuple:
     return index('I', 0), index('I_err', 1), index('N', 2)
 
 
-def _combine_values(var: list[str], a, b, rays_a: float, rays_b: float):
+def _pool_mean(counts, means, errors):
+    """Means with errors, of ``counts`` rays each, pooled over the first axis as one mean.
+
+    For data with ``mean: yes``, e.g. polarisation: each mean is weighted with its number
+    of rays, as McCode's mcmerge does. The error is that of the pooled rays, assuming
+    the McCode error of a mean, which is the mean itself for a single ray.
+    """
+    import numpy as np
+    n, i, e = (np.asarray(x, float) for x in (counts, means, errors))
+    total = n.sum(0)
+    d = np.where(total > 0, total, 1)
+    mean = (n * i).sum(0) / d
+    q = (n * (e ** 2 * np.maximum(n - 1, 0) + i ** 2)).sum(0)
+    error = np.sqrt(np.maximum(q / d - mean ** 2, 0) / np.maximum(total - 1, 1))
+    return mean, np.where(total <= 1, mean, error)
+
+
+def _combine_values(var: list[str], a, b, rays_a: float, rays_b: float, mean: bool = False):
     """Two runs' values, (nv, ...) each, as the values of one run of both runs' rays.
 
     McCode normalises each run's intensity to its own ray count, so the combined
     intensity is the ray-count-weighted mean of the two, and its error is the weighted
-    errors added in quadrature, over the total. Counts add. Every other variable -- the
+    errors added in quadrature, over the total. A mean (``mean: yes``) is instead pooled
+    with the counts as weights, see `_pool_mean`. Counts add. Every other variable -- the
     axis column a 1-D file starts with, say ``Mean`` -- must agree, since it describes
     the bins rather than what landed in them.
     """
@@ -112,10 +130,15 @@ def _combine_values(var: list[str], a, b, rays_a: float, rays_b: float):
     i, e, n = _standard_indices(var)
     total = rays_a + rays_b
     out = a.copy()
-    if i is not None:
-        out[i] = (rays_a * a[i] + rays_b * b[i]) / total
-    if e is not None:
-        out[e] = np.sqrt((rays_a * a[e]) ** 2 + (rays_b * b[e]) ** 2) / total
+    if mean:
+        if None in (i, e, n):
+            raise RuntimeError('Cannot combine means without their errors and counts')
+        out[i], out[e] = _pool_mean([a[n], b[n]], [a[i], b[i]], [a[e], b[e]])
+    else:
+        if i is not None:
+            out[i] = (rays_a * a[i] + rays_b * b[i]) / total
+        if e is not None:
+            out[e] = np.sqrt((rays_a * a[e]) ** 2 + (rays_b * b[e]) ** 2) / total
     if n is not None:
         out[n] = a[n] + b[n]
     for k, name in enumerate(var):
@@ -287,6 +310,10 @@ class DatFileCommon:
                                f'for in a combination is unknown')
         return int(self.metadata['Ncount'])
 
+    def is_mean(self) -> bool:
+        """Whether the values are means (``mean: yes``, e.g. polarisation), not intensities."""
+        return self.metadata.get('mean') == 'yes'
+
     def __add__(self, other):
         """The two runs as one run of both runs' rays.
 
@@ -300,7 +327,7 @@ class DatFileCommon:
                               combine_scan_dicts(self.metadata, other.metadata),
                               combine_scan_dicts(self.parameters, other.parameters),
                               _combine_values(self.variables, self.values, other.values,
-                                              self.rays(), other.rays()))
+                                              self.rays(), other.rays(), self.is_mean()))
         combined.metadata.update({k: v for k, v in combined.header_totals().items()
                                   if k in combined.metadata})
         return combined
@@ -315,6 +342,9 @@ class DatFileCommon:
         counts = self.values[n] if n is not None else np.zeros_like(intensity)
         totals = {'values': f'{_g(intensity.sum())} {_g(np.sqrt((error ** 2).sum()))} '
                             f'{_g(counts.sum())}'}
+        if self.is_mean():
+            mean, err = _pool_mean(counts.ravel(), intensity.ravel(), error.ravel())
+            totals['values'] = f'{_g(mean)} {_g(err)} {_g(counts.sum())}'
         if intensity.ndim:
             totals['signal'] = (f'Min={_g(intensity.min())}; Max={_g(intensity.max())}; '
                                 f'Mean={_g(intensity.mean())};')

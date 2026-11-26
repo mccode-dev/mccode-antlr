@@ -252,6 +252,7 @@ class SimFileData:
     statistics: str
     signal: str
     values: str
+    mean: str = None  # 'yes' for a mean (e.g. polarisation), 'no' for an intensity; not in older files
     filename: str = None  # Not defined for 0-D data entries
     xvar: str = None  # Not defined for 0-D data entries
     yvar: str = None  # Not defined for 0-D data entries
@@ -269,25 +270,28 @@ class SimFileData:
         lines = contents.split('\n')
         first_keywords = ['Date', 'type', 'Source', 'component', 'position', 'title', 'Ncount']
         second_keywords = ['statistics', 'signal', 'values']
+        # newer McCode writes 'mean: yes' or 'mean: no' after Ncount
+        mean_keyword = ['mean'] if len(lines) > 7 and lines[7].partition(':')[0].strip() == 'mean' else []
+        count = len(lines) - len(mean_keyword)
         file_keyword = []
-        if len(lines) == 12:
+        if count == 12:
             # 0-D -- old style
             last_keywords = ['xylimits', 'variables']
-        elif len(lines) == 13:
+        elif count == 13:
             # 0-D -- new style (as of when?)
             file_keyword = ['filename']
             last_keywords = ['xylimits', 'variables']
-        elif len(lines) == 17:
+        elif count == 17:
             # 1-D
             file_keyword = ['filename']
             last_keywords = ['xvar', 'yvar', 'xlabel', 'ylabel', 'xlimits', 'variables']
-        elif len(lines) == 19:
+        elif count == 19:
             # 2-D
             file_keyword = ['filename']
             last_keywords = ['xvar', 'yvar', 'xlabel', 'ylabel', 'zvar', 'zlabel', 'xylimits', 'variables']
         else:
-            raise RuntimeError(f"Expected 12, 13, 17 or 19 lines in data, got {len(lines)}")
-        keywords = first_keywords + file_keyword + second_keywords + last_keywords
+            raise RuntimeError(f"Expected 12, 13, 17 or 19 lines in data, and one more with mean, got {len(lines)}")
+        keywords = first_keywords + mean_keyword + file_keyword + second_keywords + last_keywords
         values = list(read_keywords(lines, keywords))
         collected = {k: v for k, v in zip(keywords, values)}
         collected['Ncount'] = int(collected['Ncount'])
@@ -336,7 +340,13 @@ class SimFileData:
         # The values line is always "{float} {float} {int}" which _I think_ is <intensity>, <error>, and event count
         s_intensity, s_error, s_counts = split_values(self.values)
         o_intensity, o_error, o_counts = split_values(other.values)
-        out.values = f"{s_intensity + o_intensity} {sqrt(s_error * s_error + o_error + o_error)} {s_counts + o_counts}"
+        if self.mean == 'yes':
+            # a mean, e.g. polarisation, is pooled with the counts as weights
+            from .datfile import _pool_mean
+            mean, error = _pool_mean([s_counts, o_counts], [s_intensity, o_intensity], [s_error, o_error])
+            out.values = f"{float(mean)} {float(error)} {s_counts + o_counts}"
+        else:
+            out.values = f"{s_intensity + o_intensity} {sqrt(s_error * s_error + o_error + o_error)} {s_counts + o_counts}"
 
         # The signal line is always? "None" or "Min={float}; Max={float}; Mean={float};"
         # we can combine min and max, but not mean (without knowing the number of points)
