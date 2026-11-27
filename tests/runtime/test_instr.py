@@ -89,7 +89,7 @@ class TestCompiledInstr(TestCase):
         COMPONENT cEH = Conics_EH(R0=0.99, alpha=6.07, W=0.003, m=3, nshells=4, focal_length_u=10, focal_length_d=10,
                                   radii={0.05236, 0.03, 0.01, 0.0031416}, le=0.25, lh=0.25, disk=1)
         AT (0,0,0) ABSOLUTE
-        COMPONENT cEH2 = Conics_EH(R0=0.99, alpha=6.07, W=0.003, m=3, nshells=0, focal_length_u=10, focal_length_d=10,
+        COMPONENT cEH2 = Conics_EH(R0=0.99, alpha=6.07, W=0.003, m=3, nshells=1, focal_length_u=10, focal_length_d=10,
                                    le=0.25, lh=0.25, disk=0)
         AT (0,0,1) ABSOLUTE
         END
